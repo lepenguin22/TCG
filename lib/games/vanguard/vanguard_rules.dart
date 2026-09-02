@@ -55,6 +55,18 @@ const _seriesNames = <String, String>{
   'p': 'a pre-D-series set',
 };
 
+/// Renders card names for a message, naming a few and counting the rest.
+String _nameList(List<String> names) {
+  final quoted = [for (final name in names) '"$name"'];
+  if (quoted.length == 1) return quoted.single;
+  if (quoted.length == 2) return '${quoted[0]} and ${quoted[1]}';
+  if (quoted.length == 3) {
+    return '${quoted[0]}, ${quoted[1]} and ${quoted[2]}';
+  }
+  final rest = quoted.length - 2;
+  return '${quoted[0]}, ${quoted[1]} and $rest others';
+}
+
 /// Names the eras a card was printed in, for the rules message.
 String _seriesSentence(String series) {
   final names = [
@@ -145,11 +157,11 @@ List<ValidationIssue> validateVanguard(DeckView view) {
   // the current pool counts.
   final allowedSeries = formatSeries[formatId];
   if (allowedSeries != null) {
-    var undated = 0;
+    final undated = <DeckItem>[];
     for (final item in [...ride, ...main, ...gZone]) {
       final series = item.card.attribute('series');
       if (series == null) {
-        undated += 1;
+        undated.add(item);
         continue;
       }
       if (!series.split('').any(allowedSeries.contains)) {
@@ -161,16 +173,20 @@ List<ValidationIssue> validateVanguard(DeckView view) {
         );
       }
     }
-    if (undated > 0) {
+    if (undated.isNotEmpty) {
+      // Naming them matters: a count alone leaves the user with no way to tell
+      // which cards are unchecked, and the two reasons a card lands here have
+      // different fixes -- one is the app's problem, the other is a blank the
+      // user can fill in.
+      final names = _nameList([for (final item in undated) item.card.name]);
+      final plural = undated.length == 1;
       issues.add(
         ValidationIssue.warning(
-          undated == 1
-              ? 'One card could not be checked against the '
-                    '${view.format.name} card pool, because the database does '
-                    'not know which era it is from.'
-              : '$undated cards could not be checked against the '
-                    '${view.format.name} card pool, because the database does '
-                    'not know which era they are from.',
+          '$names could not be checked against the ${view.format.name} card '
+          'pool, because the app does not know which era '
+          '${plural ? 'it is' : 'they are'} from. '
+          '${plural ? 'It is' : 'They are'} either missing from the card '
+          'database, or one of a couple of hundred old promos it cannot date.',
         ),
       );
     }

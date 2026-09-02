@@ -54,8 +54,11 @@ a real release key first if you ever go that way.
   and Premium is everything from before the D-series. Every card is stamped with
   the eras it has been printed in, so a card reprinted forward into the current
   pool stays legal, while a V-series card in a Standard deck is flagged. Where
-  an era cannot be established — a couple of hundred promos — the app says so
+  an era cannot be established the app names the cards it could not check
   rather than guessing, and never reports an error it cannot stand behind.
+  That happens for a card missing from the database — an import the database
+  did not recognise, or one you typed in yourself — and for 196 old `PR/`
+  promos whose numbers carry no era and whose clans do not settle one.
 - **Zones** that match how the game is actually laid out — Ride Deck, Main Deck
   and G Zone — with cards grouped by grade and a quantity stepper on each row.
   The ride deck takes four units, one of each grade 0-3, plus the optional ride

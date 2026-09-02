@@ -679,6 +679,69 @@ void main() {
       expect(errorsOf(viewOf(formatCasual, slots)), isEmpty);
     });
 
+    /// The legal deck with [count] of its main deck cards stripped of an era,
+    /// as a card missing from the database or an undatable promo arrives.
+    List<Slot> withUndated(int count) {
+      final slots = legalStandardDeck();
+      // In deck order, so the message lists them in the order the deck
+      // screen shows them.
+      const names = ['Grade 1 A', 'Grade 1 B', 'Grade 2 A', 'Grade 2 B'];
+      for (var i = 0; i < count; i += 1) {
+        named(slots, names[i]).card = CardDefinition(
+          id: 'undated-$i',
+          gameId: 'vanguard',
+          name: 'Undated ${i + 1}',
+          attributes: const {'grade': '2', 'cardType': 'normal'},
+          createdAt: DateTime(2024),
+          updatedAt: DateTime(2024),
+        );
+      }
+      return slots;
+    }
+
+    test('an unchecked card is named, not just counted', () {
+      // A bare count left no way to tell which cards were unchecked.
+      expect(
+        warningsOf(viewOf(formatStandard, withUndated(1))),
+        contains(allOf(contains('"Undated 1"'), contains('it is from'))),
+      );
+    });
+
+    test('two unchecked cards are both named', () {
+      expect(
+        warningsOf(viewOf(formatStandard, withUndated(2))),
+        contains(
+          allOf(
+            contains('"Undated 1" and "Undated 2"'),
+            contains('they are from'),
+          ),
+        ),
+      );
+    });
+
+    test('three are named in a list', () {
+      expect(
+        warningsOf(viewOf(formatStandard, withUndated(3))),
+        contains(contains('"Undated 1", "Undated 2" and "Undated 3"')),
+      );
+    });
+
+    test('more than three name a few and count the rest', () {
+      expect(
+        warningsOf(viewOf(formatStandard, withUndated(4))),
+        contains(contains('"Undated 1", "Undated 2" and 2 others')),
+      );
+    });
+
+    test('the warning says why a card could not be dated', () {
+      expect(
+        warningsOf(viewOf(formatStandard, withUndated(1))),
+        contains(
+          allOf(contains('missing from the card database'), contains('promos')),
+        ),
+      );
+    });
+
     test('a card of unknown era is a warning, never an error', () {
       final slots = legalStandardDeck();
       named(slots, 'Grade 2 A').card = CardDefinition(
