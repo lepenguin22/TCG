@@ -81,7 +81,8 @@ a real release key first if you ever go that way.
 - **Import from Deck Log.** Paste a share link or deck code from Bushiroad's
   Deck Log, the site behind Fighter Navigator, and the deck comes across with
   its cards matched to the database, sorted into the right zones and ready to
-  be checked against the rules.
+  be checked against the rules. Paste several links, one per line, to import a
+  whole collection at once.
 - **Copy as text** to paste a list into a chat, and a JSON backup you can copy to
   the clipboard and import on another device.
 
@@ -141,12 +142,16 @@ site, reached through Fighter Navigator. A shared deck lives at
 JSON endpoint that takes the same code, and that endpoint is what the app reads
 — one request per import, with the same headers the site's own page sends.
 
-Paste a link, a link with text around it, or the bare code. Cards are matched to
-the bundled database by card number first and name second, so an imported deck
-arrives with grades, triggers, abilities and images filled in. A card the
-database does not know is still imported, with the name and count Deck Log gave,
-and the import screen lists what it could not match rather than quietly leaving
-the deck short.
+Paste a link, a link with text around it, or the bare code. Paste several, one
+per line, and they all come across in one go — fetched one at a time, in order,
+with the same deck pasted twice imported once. One bad code does not cost the
+rest: it is reported on its own and the other decks still land.
+
+Cards are matched to the bundled database by card number first and name second,
+so an imported deck arrives with grades, triggers, abilities and images filled
+in. A card the database does not know is still imported, with the name and count
+Deck Log gave, and the import screen lists what it could not match rather than
+quietly leaving the deck short.
 
 Zones are worked out from the cards, not from what Deck Log calls its sections.
 It serves every game it hosts through one endpoint, so the sections are named

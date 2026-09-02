@@ -78,23 +78,52 @@ class DecklogException implements Exception {
   String toString() => message;
 }
 
-/// Pulls a deck code out of whatever the user pasted: a full URL, a URL with
-/// tracking junk on the end, or the bare code from the share dialog.
+final _decklogUrl = RegExp(
+  r'decklog(?:-en)?\.bushiroad\.com/(?:[a-z-]+/)*view/([A-Za-z0-9]+)',
+  caseSensitive: false,
+);
+
+/// Deck Log codes are short and alphanumeric.
+final _decklogBareCode = RegExp(r'^[A-Za-z0-9]{3,16}$');
+
+/// Pulls every deck code out of whatever the user pasted, in the order they
+/// appear: a share link, several links, a link with text around it, or bare
+/// codes one per line.
+///
+/// Duplicates are dropped, so pasting the same deck twice imports it once.
+List<String> decklogCodesFrom(String input) {
+  final codes = <String>[];
+  final seen = <String>{};
+  void add(String code) {
+    if (seen.add(code.toUpperCase())) codes.add(code);
+  }
+
+  // Links first. What they matched is then blanked out, so a link's own path
+  // can never be read a second time as a bare code.
+  final remainder = input.replaceAllMapped(_decklogUrl, (match) {
+    add(match.group(1)!);
+    return ' ';
+  });
+
+  // A bare code has to stand alone on its line, or in a comma separated list
+  // of them. Splitting on spaces as well would read "hello there" as two deck
+  // codes -- ordinary words match the shape of a code, so only the lack of a
+  // space around them tells the two apart.
+  for (final line in remainder.split('\n')) {
+    final parts = [
+      for (final part in line.split(RegExp(r'[,;]')))
+        if (part.trim().isNotEmpty) part.trim(),
+    ];
+    if (parts.isEmpty) continue;
+    if (parts.every(_decklogBareCode.hasMatch)) parts.forEach(add);
+  }
+  return codes;
+}
+
+/// The first deck code in what the user pasted, or null if there is none.
 String? decklogCodeFrom(String input) {
-  final text = input.trim();
-  if (text.isEmpty) return null;
-
-  final url = RegExp(
-    r'decklog(?:-en)?\.bushiroad\.com/(?:[a-z-]+/)*view/([A-Za-z0-9]+)',
-    caseSensitive: false,
-  ).firstMatch(text);
-  if (url != null) return url.group(1);
-
-  // A bare code. Deck Log codes are short and alphanumeric; anything with a
-  // slash or a space is something else the user pasted by mistake.
-  if (RegExp(r'^[A-Za-z0-9]{3,16}$').hasMatch(text)) return text;
-
-  return null;
+  final codes = decklogCodesFrom(input);
+  return codes.isEmpty ? null : codes.first;
 }
 
 /// Reads a Deck Log API payload.
@@ -216,6 +245,25 @@ Future<String> fetchDecklogPayload(String code) async {
   }
 }
 
+const _notADeckLogInput = DecklogException(
+  'That is not a Deck Log link or code. Paste a link like '
+  'decklog-en.bushiroad.com/view/ABC123, or just the code. Several links, one '
+  'per line, import several decks.',
+);
+
+/// One deck's outcome in a batch: the deck, or why it could not be loaded.
+///
+/// A batch reports per deck rather than failing whole, so one dead code out of
+/// six does not cost the other five.
+class DecklogLoad {
+  const DecklogLoad.loaded(this.deck) : code = null, error = null;
+  const DecklogLoad.failed(this.code, this.error) : deck = null;
+
+  final DecklogDeck? deck;
+  final String? code;
+  final String? error;
+}
+
 /// Loads a deck by code, URL, or a payload the user pasted themselves.
 ///
 /// Pasting the payload is the escape hatch for when the request is refused:
@@ -230,11 +278,37 @@ Future<DecklogDeck> loadDecklog(
   }
 
   final code = decklogCodeFrom(text);
-  if (code == null) {
-    throw const DecklogException(
-      'That is not a Deck Log link or code. Paste a link like '
-      'decklog-en.bushiroad.com/view/ABC123, or just the code.',
-    );
-  }
+  if (code == null) throw _notADeckLogInput;
   return parseDecklogPayload(await fetch(code), code: code);
+}
+
+/// Loads every deck named in what the user pasted, in order.
+///
+/// Decks are fetched one at a time rather than at once: Deck Log is somebody
+/// else's server, and a paste of twenty links should not arrive as twenty
+/// simultaneous requests.
+Future<List<DecklogLoad>> loadDecklogBatch(
+  String input, {
+  DecklogFetcher fetch = fetchDecklogPayload,
+}) async {
+  final text = input.trim();
+  if (text.startsWith('{')) {
+    // A pasted payload is one deck by definition.
+    return [DecklogLoad.loaded(parseDecklogPayload(text, code: 'pasted'))];
+  }
+
+  final codes = decklogCodesFrom(text);
+  if (codes.isEmpty) throw _notADeckLogInput;
+
+  final loads = <DecklogLoad>[];
+  for (final code in codes) {
+    try {
+      loads.add(
+        DecklogLoad.loaded(parseDecklogPayload(await fetch(code), code: code)),
+      );
+    } on DecklogException catch (error) {
+      loads.add(DecklogLoad.failed(code, error.message));
+    }
+  }
+  return loads;
 }

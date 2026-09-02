@@ -29,8 +29,13 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
   final _controller = TextEditingController();
   String _formatId = formatStandard;
   bool _busy = false;
+  String _progress = '';
   String? _error;
-  DecklogImportResult? _result;
+
+  /// The decks brought across, and the codes that could not be, from the last
+  /// run. Both are kept: a batch that half worked has to say so.
+  List<DecklogImportResult> _results = const [];
+  List<({String code, String message})> _failures = const [];
 
   @override
   void dispose() {
@@ -41,20 +46,25 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
   @override
   Widget build(BuildContext context) {
     final game = gameById('vanguard');
-    final result = _result;
+    final done = _results.isNotEmpty || _failures.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Import from Deck Log')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          if (result != null)
-            _Summary(result: result)
+          if (done)
+            _Summary(
+              results: _results,
+              failures: _failures,
+              onImportMore: _reset,
+            )
           else ...[
             const Text(
               'Deck Log is Bushiroad\'s official deck site, reached through '
               'Fighter Navigator. Open your deck there, share it, and paste '
-              'the link or the deck code here.',
+              'the link or the deck code here. Paste several, one per line, to '
+              'import them all at once.',
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 14,
@@ -63,15 +73,15 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
             ),
             const SizedBox(height: 20),
             LabeledField(
-              label: 'Deck Log link or code',
+              label: 'Deck Log links or codes',
               helper:
                   'For example decklog-en.bushiroad.com/view/ABC123, or just '
-                  'ABC123.',
+                  'ABC123. One per line for several decks.',
               child: TextField(
                 controller: _controller,
                 autofocus: true,
-                minLines: 1,
-                maxLines: 4,
+                minLines: 2,
+                maxLines: 8,
                 textInputAction: TextInputAction.done,
                 onChanged: (_) => setState(() => _error = null),
                 decoration: InputDecoration(
@@ -143,7 +153,11 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.download_outlined),
-              label: Text(_busy ? 'Importing…' : 'Import deck'),
+              label: Text(
+                _busy
+                    ? (_progress.isEmpty ? 'Importing…' : _progress)
+                    : 'Import decks',
+              ),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -162,43 +176,80 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim() ?? '';
     if (text.isEmpty) return;
-    _controller.text = text;
+    // Appended, not replaced: pasting a second link should add a deck to the
+    // batch rather than throw away the first.
+    final existing = _controller.text.trimRight();
+    _controller.text = existing.isEmpty ? text : '$existing\n$text';
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
     setState(() => _error = null);
+  }
+
+  void _reset() {
+    setState(() {
+      _controller.clear();
+      _results = const [];
+      _failures = const [];
+      _error = null;
+    });
   }
 
   Future<void> _import() async {
     setState(() {
       _busy = true;
+      _progress = '';
       _error = null;
     });
 
     final store = context.read<DeckStore>();
     final catalog = context.read<CardCatalog>();
 
+    final results = <DecklogImportResult>[];
+    final failures = <({String code, String message})>[];
+
     try {
-      final source = await loadDecklog(_controller.text, fetch: widget.fetch);
-      if (!source.isVanguard && source.gameTitleId.isNotEmpty) {
-        throw const DecklogException(
-          'That Deck Log entry is for one of Bushiroad\'s other games, not '
-          'Cardfight!! Vanguard.',
+      final loads = await loadDecklogBatch(
+        _controller.text,
+        fetch: (code) async {
+          if (mounted) setState(() => _progress = 'Fetching $code…');
+          return widget.fetch(code);
+        },
+      );
+
+      for (final load in loads) {
+        final source = load.deck;
+        if (source == null) {
+          failures.add((code: load.code!, message: load.error!));
+          continue;
+        }
+        // One deck for another game does not spoil the rest of the batch.
+        if (!source.isVanguard && source.gameTitleId.isNotEmpty) {
+          failures.add((
+            code: source.code,
+            message:
+                'This is for one of Bushiroad\'s other games, not '
+                'Cardfight!! Vanguard.',
+          ));
+          continue;
+        }
+        results.add(
+          await importDecklogDeck(store, catalog, source, formatId: _formatId),
         );
       }
 
-      final result = await importDecklogDeck(
-        store,
-        catalog,
-        source,
-        formatId: _formatId,
-      );
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _result = result;
+        _progress = '';
+        _results = results;
+        _failures = failures;
       });
     } on DecklogException catch (error) {
       if (!mounted) return;
       setState(() {
         _busy = false;
+        _progress = '';
         _error = error.message;
       });
     }
@@ -206,22 +257,35 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({required this.result});
+  const _Summary({
+    required this.results,
+    required this.failures,
+    required this.onImportMore,
+  });
 
-  final DecklogImportResult result;
+  final List<DecklogImportResult> results;
+  final List<({String code, String message})> failures;
+  final VoidCallback onImportMore;
 
   @override
   Widget build(BuildContext context) {
+    final cards = results.fold<int>(0, (sum, r) => sum + r.cardsAdded);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            const Icon(Icons.check_circle, color: AppColors.success),
+            Icon(
+              results.isEmpty ? Icons.error_outline : Icons.check_circle,
+              color: results.isEmpty ? AppColors.danger : AppColors.success,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                result.deck.name,
+                results.isEmpty
+                    ? 'Nothing imported'
+                    : '${results.length} deck${results.length == 1 ? '' : 's'} '
+                          'imported, $cards cards',
                 style: const TextStyle(
                   color: AppColors.text,
                   fontSize: 18,
@@ -231,87 +295,44 @@ class _Summary extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          '${result.cardsAdded} cards imported, '
-          '${result.matched} matched to the card database.',
-          style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-        ),
-        const SizedBox(height: 14),
-        // Where the cards landed, so a zone that came out wrong is visible
-        // here rather than being discovered later on the deck screen.
-        for (final zone in gameById(result.deck.gameId).zones)
-          if ((result.zoneCounts[zone.id] ?? 0) > 0)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                '${result.zoneCounts[zone.id]} in the ${zone.name}',
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13.5,
-                ),
-              ),
-            ),
-        if (!result.rideDeckFound &&
-            (result.zoneCounts[zoneRide] ?? 0) == 0 &&
-            gameById(result.deck.gameId)
-                .format(result.deck.formatId)
-                .zoneIds
-                .contains(zoneRide)) ...[
-          const SizedBox(height: 14),
-          const Text(
-            'Deck Log sent this deck as a single list, so there was no ride '
-            'deck to separate out. Move the ride deck\'s four units across on '
-            'the deck screen.',
-            style: TextStyle(
-              color: AppColors.warning,
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
+        for (final result in results) ...[
+          const SizedBox(height: 20),
+          _DeckSummary(result: result),
         ],
-        if (result.unmatched.isNotEmpty) ...[
+        if (failures.isNotEmpty) ...[
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.07),
+              color: AppColors.danger.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: AppColors.warning.withValues(alpha: 0.35),
+                color: AppColors.danger.withValues(alpha: 0.35),
               ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${result.unmatched.length} card'
-                  '${result.unmatched.length == 1 ? '' : 's'} not in the '
-                  'database',
+                  '${failures.length} deck${failures.length == 1 ? '' : 's'} '
+                  'could not be imported',
                   style: const TextStyle(
-                    color: AppColors.warning,
+                    color: AppColors.danger,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'They were added with the name and count Deck Log gave, so '
-                  'the deck is complete, but their details are blank until you '
-                  'fill them in.',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final name in result.unmatched)
-                  Text(
-                    '· $name',
-                    style: const TextStyle(
-                      color: AppColors.textFaint,
-                      fontSize: 13,
+                for (final failure in failures)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '${failure.code} — ${failure.message}',
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
                     ),
                   ),
               ],
@@ -319,12 +340,110 @@ class _Summary extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        FilledButton.icon(
-          onPressed: () => Navigator.of(context).pop(result.deck.id),
-          icon: const Icon(Icons.arrow_forward),
-          label: const Text('Open the deck'),
+        if (results.length == 1)
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(results.single.deck.id),
+            icon: const Icon(Icons.arrow_forward),
+            label: const Text('Open the deck'),
+          )
+        else if (results.isNotEmpty)
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.check),
+            label: Text('Done — ${results.length} decks added'),
+          ),
+        const SizedBox(height: 10),
+        TextButton.icon(
+          onPressed: onImportMore,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Import more'),
         ),
       ],
+    );
+  }
+}
+
+/// One imported deck: what came across, where it went, and what could not be
+/// matched to the card database.
+class _DeckSummary extends StatelessWidget {
+  const _DeckSummary({required this.result});
+
+  final DecklogImportResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final game = gameById(result.deck.gameId);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            result.deck.name,
+            style: const TextStyle(
+              color: AppColors.text,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${result.cardsAdded} cards, '
+            '${result.matched} matched to the card database.',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          // Where the cards landed, so a zone that came out wrong is visible
+          // here rather than being discovered later on the deck screen.
+          for (final zone in game.zones)
+            if ((result.zoneCounts[zone.id] ?? 0) > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  '${result.zoneCounts[zone.id]} in the ${zone.name}',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+          if (!result.rideDeckFound &&
+              (result.zoneCounts[zoneRide] ?? 0) == 0 &&
+              game.format(result.deck.formatId).zoneIds.contains(zoneRide)) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Deck Log sent this deck as a single list, so there was no ride '
+              'deck to separate out. Move the ride deck\'s four units across '
+              'on the deck screen.',
+              style: TextStyle(
+                color: AppColors.warning,
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
+          ],
+          if (result.unmatched.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${result.unmatched.length} card'
+              '${result.unmatched.length == 1 ? '' : 's'} not in the database: '
+              '${result.unmatched.join(', ')}. '
+              'Added with the name and count Deck Log gave, so the deck is '
+              'complete, but their details are blank until you fill them in.',
+              style: const TextStyle(
+                color: AppColors.warning,
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

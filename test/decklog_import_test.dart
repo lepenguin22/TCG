@@ -151,6 +151,114 @@ void main() {
     });
   });
 
+  group('reading several deck codes at once', () {
+    test('one link per line', () {
+      expect(
+        decklogCodesFrom(
+          'https://decklog-en.bushiroad.com/view/AAA1\n'
+          'https://decklog-en.bushiroad.com/view/BBB2',
+        ),
+        ['AAA1', 'BBB2'],
+      );
+    });
+
+    test('links and bare codes mixed together', () {
+      expect(
+        decklogCodesFrom(
+          'https://decklog-en.bushiroad.com/view/AAA1\nBBB2\nCCC3',
+        ),
+        ['AAA1', 'BBB2', 'CCC3'],
+      );
+    });
+
+    test('several links run together in one message', () {
+      expect(
+        decklogCodesFrom(
+          'my decks: https://decklog-en.bushiroad.com/view/AAA1 and '
+          'https://decklog-en.bushiroad.com/view/BBB2 enjoy',
+        ),
+        ['AAA1', 'BBB2'],
+      );
+    });
+
+    test('a comma separated list of codes', () {
+      expect(decklogCodesFrom('AAA1, BBB2, CCC3'), ['AAA1', 'BBB2', 'CCC3']);
+    });
+
+    test('duplicates are dropped so a deck imports once', () {
+      expect(
+        decklogCodesFrom(
+          'https://decklog-en.bushiroad.com/view/AAA1\n'
+          'https://decklog-en.bushiroad.com/view/AAA1\n'
+          'aaa1',
+        ),
+        ['AAA1'],
+      );
+    });
+
+    test('prose is not read as a list of codes', () {
+      // Ordinary words have the same shape as a code; only standing alone on
+      // a line separates the two.
+      expect(decklogCodesFrom('hello there'), isEmpty);
+      expect(decklogCodesFrom('check out my new deck'), isEmpty);
+      expect(decklogCodesFrom(''), isEmpty);
+    });
+
+    test('a link and the text around it yields only the code', () {
+      expect(
+        decklogCodesFrom(
+          'Check my deck! https://decklog-en.bushiroad.com/view/7RD6E',
+        ),
+        ['7RD6E'],
+      );
+    });
+  });
+
+  group('loading a batch', () {
+    test('every code is fetched, in order', () async {
+      final requested = <String>[];
+      final loads = await loadDecklogBatch(
+        'AAA1\nBBB2',
+        fetch: (code) async {
+          requested.add(code);
+          return payload(list: [entry('Dragonic Overlord', 4)]);
+        },
+      );
+      expect(requested, ['AAA1', 'BBB2']);
+      expect(loads.map((load) => load.deck?.code), ['AAA1', 'BBB2']);
+    });
+
+    test('a failure is reported against its code, not thrown', () async {
+      final loads = await loadDecklogBatch(
+        'AAA1\nBAD2',
+        fetch: (code) async {
+          if (code == 'BAD2') throw const DecklogException('Nope.');
+          return payload(list: [entry('Dragonic Overlord', 4)]);
+        },
+      );
+      expect(loads.first.deck, isNotNull);
+      expect(loads.last.deck, isNull);
+      expect(loads.last.code, 'BAD2');
+      expect(loads.last.error, 'Nope.');
+    });
+
+    test('input with no codes in it is still rejected outright', () async {
+      await expectLater(
+        loadDecklogBatch('hello there', fetch: (_) async => fail('no request')),
+        throwsA(isA<DecklogException>()),
+      );
+    });
+
+    test('a pasted payload is one deck', () async {
+      final loads = await loadDecklogBatch(
+        payload(list: [entry('Dragonic Overlord', 4)]),
+        fetch: (_) async => fail('should not have been called'),
+      );
+      expect(loads, hasLength(1));
+      expect(loads.single.deck?.code, 'pasted');
+    });
+  });
+
   group('reading the payload', () {
     test('cards come back with names, counts and numbers', () {
       final deck = parseDecklogPayload(

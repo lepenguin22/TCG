@@ -72,6 +72,24 @@ void main() {
     return store;
   }
 
+  /// The button sits below the fold once several links, or a pasted payload,
+  /// fill the field -- and the list is lazy, so it is not built until scrolled
+  /// to.
+  Future<void> tapImport(WidgetTester tester) async {
+    final button = find.widgetWithText(FilledButton, 'Import decks');
+    if (button.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        button,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+    }
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('pasting a link imports the deck', (tester) async {
     final store = await pumpScreen(
       tester,
@@ -86,8 +104,7 @@ void main() {
       'https://decklog-en.bushiroad.com/view/7K3X',
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Import deck'));
-    await tester.pumpAndSettle();
+    await tapImport(tester);
 
     // The deck exists, with its cards in the right zones.
     expect(store.decks, hasLength(1));
@@ -98,12 +115,127 @@ void main() {
 
     // And the screen says what happened, including what it could not match.
     expect(find.text('Overlord Turbo'), findsOneWidget);
-    expect(find.textContaining('7 cards imported'), findsOneWidget);
+    expect(find.textContaining('1 deck imported, 7 cards'), findsOneWidget);
     expect(find.textContaining('1 card not in the database'), findsOneWidget);
     expect(find.textContaining('Card From Next Week'), findsOneWidget);
     // The breakdown makes a zone that came out wrong visible straight away.
     expect(find.textContaining('6 in the Main Deck'), findsOneWidget);
     expect(find.textContaining('1 in the Ride Deck'), findsOneWidget);
+  });
+
+  testWidgets('several links import several decks in one go', (tester) async {
+    final requested = <String>[];
+    final store = await pumpScreen(
+      tester,
+      fetch: (code) async {
+        requested.add(code);
+        return _payload(deckName: 'Deck $code');
+      },
+    );
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'https://decklog-en.bushiroad.com/view/AAA1\n'
+      'https://decklog-en.bushiroad.com/view/BBB2\n'
+      'CCC3',
+    );
+    await tester.pumpAndSettle();
+    await tapImport(tester);
+
+    expect(requested, ['AAA1', 'BBB2', 'CCC3']);
+    expect(store.decks, hasLength(3));
+    expect(
+      store.decks.map((deck) => deck.name),
+      containsAll(['Deck AAA1', 'Deck BBB2', 'Deck CCC3']),
+    );
+    expect(find.textContaining('3 decks imported, 21 cards'), findsOneWidget);
+    // Each deck is accounted for on its own, not just totalled.
+    expect(find.text('Deck AAA1'), findsOneWidget);
+    expect(find.text('Deck CCC3'), findsOneWidget);
+  });
+
+  testWidgets('the same deck pasted twice is imported once', (tester) async {
+    final store = await pumpScreen(tester, fetch: (_) async => _payload());
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'https://decklog-en.bushiroad.com/view/7K3X\n'
+      'https://decklog-en.bushiroad.com/view/7K3X',
+    );
+    await tester.pumpAndSettle();
+    await tapImport(tester);
+
+    expect(store.decks, hasLength(1));
+  });
+
+  testWidgets('one bad code does not cost the others', (tester) async {
+    final store = await pumpScreen(
+      tester,
+      fetch: (code) async {
+        if (code == 'BAD2') {
+          throw const DecklogException('That deck is not shared publicly.');
+        }
+        return _payload(deckName: 'Deck $code');
+      },
+    );
+
+    await tester.enterText(find.byType(TextField).first, 'AAA1\nBAD2\nCCC3');
+    await tester.pumpAndSettle();
+    await tapImport(tester);
+
+    expect(store.decks, hasLength(2), reason: 'the two good ones still land');
+    expect(find.textContaining('2 decks imported'), findsOneWidget);
+    expect(find.textContaining('1 deck could not be imported'), findsOneWidget);
+    expect(find.textContaining('BAD2'), findsOneWidget);
+    expect(find.textContaining('not shared publicly'), findsOneWidget);
+  });
+
+  testWidgets('a batch of only bad codes imports nothing and says so', (
+    tester,
+  ) async {
+    final store = await pumpScreen(
+      tester,
+      fetch: (_) async => throw const DecklogException('Could not reach it.'),
+    );
+
+    await tester.enterText(find.byType(TextField).first, 'AAA1\nBBB2');
+    await tester.pumpAndSettle();
+    await tapImport(tester);
+
+    expect(store.decks, isEmpty);
+    expect(find.text('Nothing imported'), findsOneWidget);
+    expect(
+      find.textContaining('2 decks could not be imported'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('importing more resets the form for another batch', (
+    tester,
+  ) async {
+    final store = await pumpScreen(
+      tester,
+      fetch: (code) async => _payload(deckName: 'Deck $code'),
+    );
+
+    await tester.enterText(find.byType(TextField).first, 'AAA1');
+    await tester.pumpAndSettle();
+    await tapImport(tester);
+    expect(store.decks, hasLength(1));
+
+    await tester.tap(find.widgetWithText(TextButton, 'Import more'));
+    await tester.pumpAndSettle();
+
+    // Back to an empty form, and the next batch adds rather than replaces.
+    expect(find.byType(TextField), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      '',
+    );
+    await tester.enterText(find.byType(TextField).first, 'BBB2');
+    await tester.pumpAndSettle();
+    await tapImport(tester);
+    expect(store.decks, hasLength(2));
   });
 
   testWidgets('a deck for another Bushiroad game is refused', (tester) async {
@@ -114,10 +246,10 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, '7K3X');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Import deck'));
-    await tester.pumpAndSettle();
+    await tapImport(tester);
 
     expect(find.textContaining('other games'), findsOneWidget);
+    expect(find.textContaining('could not be imported'), findsOneWidget);
     expect(store.decks, isEmpty, reason: 'nothing half-imported');
   });
 
@@ -132,8 +264,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, '7K3X');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Import deck'));
-    await tester.pumpAndSettle();
+    await tapImport(tester);
 
     expect(find.textContaining('Could not reach Deck Log'), findsOneWidget);
     expect(store.decks, isEmpty);
@@ -147,8 +278,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, 'hello there');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Import deck'));
-    await tester.pumpAndSettle();
+    await tapImport(tester);
 
     expect(find.textContaining('not a Deck Log link'), findsOneWidget);
     expect(store.decks, isEmpty);
@@ -172,8 +302,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, '7K3X');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Import deck'));
-    await tester.pumpAndSettle();
+    await tapImport(tester);
 
     expect(find.textContaining('single list'), findsOneWidget);
     expect(store.viewOf(store.decks.single).zoneCount(zoneMain), 5);
@@ -190,8 +319,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, _payload());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Import deck'));
-    await tester.pumpAndSettle();
+    await tapImport(tester);
 
     expect(store.decks, hasLength(1));
     expect(store.viewOf(store.decks.single).totalCount, 7);
