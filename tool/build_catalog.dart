@@ -40,6 +40,75 @@ const _nations = <String, String>{
   'Lyrical Monasterio': 'lyrical-monasterio',
 };
 
+/// Which era of the game a card was printed in, worked out from its card
+/// number. This is what decides format legality: Standard takes D-series cards
+/// only, V Premium takes V-series, and Premium takes everything older.
+///
+///   d  D-series and Divinez  (D-BT01, DZ-BT01)
+///   v  V-series              (V-BT01)
+///   g  G-series              (G-BT01)
+///   o  the original series   (BT01, EB01, TD01)
+///   p  a promo that is known to be pre-D-series but not which era
+///
+/// Returns null when the number says nothing, which is the case for most
+/// promos. Those are usually resolved by another printing of the same card.
+///
+/// [setName] matters because the D- prefix is a printing era, not a format:
+/// Bushiroad has published several D-branded collections of older cards for
+/// V Premium and Premium. Their product names say so, and the card numbers
+/// do not.
+String? _seriesOf(String number, [String setName = '', String? nation]) {
+  // These D-branded products are collections of older cards, and every card in
+  // them carries a clan rather than one of the D-series nations. Note that the
+  // Stride Decksets are NOT among them: those are D-series products that bring
+  // stride into Standard, and their cards do carry nations.
+  final product = setName.toLowerCase();
+  if (product.contains('v clan collection')) return 'v';
+  if (product.contains('p clan collection') ||
+      product.contains('premium deckset') ||
+      product.contains('history collection')) {
+    return 'p';
+  }
+
+  final no = number.toUpperCase();
+  if (RegExp(r'^DZ?-').hasMatch(no)) return 'd';
+  if (no.startsWith('V-')) return 'v';
+  if (no.startsWith('G-')) return 'g';
+  if (RegExp(r'^(BT|EB|TD|FC|MT|SP)\d').hasMatch(no)) return 'o';
+
+  // Event promos carry the format they were printed for in their number:
+  // VGD is D-series, VGV is V Premium and VGP is Premium. VGS is "Standard",
+  // which only came to mean D-series in 2021; before that it meant V-series.
+  final promo = RegExp(r'^[A-Z]+(\d{4})\D*/VG([SVPD])').firstMatch(no);
+  if (promo != null) {
+    final year = int.tryParse(promo.group(1)!) ?? 0;
+    switch (promo.group(2)) {
+      case 'D':
+        return 'd';
+      case 'S':
+        return year >= 2021 ? 'd' : 'v';
+      case 'V':
+        return 'v';
+      case 'P':
+        return 'p';
+    }
+  }
+
+  // Last resort for a promo whose number says nothing: these four nations were
+  // introduced with the D-series and have never appeared anywhere else, so a
+  // card in one is a D-series card. Dragon Empire and Brandt Gate are left out
+  // on purpose -- the V-series used those names too.
+  const dSeriesOnlyNations = {
+    'dark-states',
+    'keter-sanctuary',
+    'stoicheia',
+    'lyrical-monasterio',
+  };
+  if (dSeriesOnlyNations.contains(nation)) return 'd';
+
+  return null;
+}
+
 /// Source card type -> the app's `cardType` attribute.
 const _cardTypes = <String, String>{
   'Normal Unit': 'normal',
@@ -78,9 +147,20 @@ void main() async {
       .toList();
   stdout.writeln('${sets.length} sets');
 
-  // Keep one entry per card name. Later sets win, so a card carries its most
-  // recent printing's number.
+  // Keep one entry per card name, since the four-copy rule counts names.
   final byName = <String, Map<String, Object?>>{};
+
+  // Every era a name has ever been printed in, gathered across all its
+  // printings. A card is legal in a format if ANY of its printings is, so a
+  // V-series card later reprinted into the D-series is Standard legal, and
+  // collecting the eras this way also settles most promos: the promo itself
+  // says nothing, but another printing of the same card does.
+  final seriesByName = <String, Set<String>>{};
+
+  /// The era of the printing currently held in [byName], used only to stop an
+  /// older printing displacing a Standard legal one.
+  final chosenSeries = <String, String?>{};
+
   var printings = 0;
   var skipped = 0;
 
@@ -88,6 +168,7 @@ void main() async {
     final set = sets[i];
     final cardsUrl = set['cardsUrl'] as String?;
     if (cardsUrl == null) continue;
+    final setName = set['name'] as String? ?? '';
 
     final List<dynamic> cards;
     try {
@@ -107,6 +188,15 @@ void main() async {
         continue;
       }
 
+      final key = name.toLowerCase();
+      final number = raw['number'] as String? ?? '';
+      final source = (raw['clan'] as String? ?? '').trim();
+      final nation = _nations[source];
+      final series = _seriesOf(number, setName, nation);
+      if (series != null) {
+        seriesByName.putIfAbsent(key, () => <String>{}).add(series);
+      }
+
       final shield = _asInt(raw['shield']);
       final effect = (raw['effect'] as String? ?? '').trim();
       final image = raw['image_url'] as String? ?? '';
@@ -117,9 +207,6 @@ void main() async {
       final isSentinel = effect.contains('[CONT]:Sentinel');
       final isOver = effect.contains('[Over] trigger') || shield == 50000;
 
-      final source = (raw['clan'] as String? ?? '').trim();
-      final nation = _nations[source];
-
       final entry = <String, Object?>{
         'n': name,
         'g': _asInt(raw['grade']) ?? 0,
@@ -129,13 +216,22 @@ void main() async {
         if (nation == null && source.isNotEmpty && source != '-') 'c': source,
         'p': ?_asInt(raw['power']),
         's': ?shield,
-        if ((raw['number'] as String? ?? '').isNotEmpty) 'no': raw['number'],
+        if (number.isNotEmpty) 'no': number,
         if (effect.isNotEmpty) 'e': effect,
         if (image.startsWith(_imageBase))
           'i': image.substring(_imageBase.length),
       };
 
-      byName[name.toLowerCase()] = entry;
+      // Later printings win, except that a D-series printing is never replaced
+      // by an older one: it is the printing a Standard player owns, so it is
+      // the number and artwork worth showing.
+      // Later printings win, except that a D-series printing is never replaced
+      // by an older one: that is the printing a Standard player owns, so it is
+      // the number and the artwork worth showing.
+      if (byName[key] == null || chosenSeries[key] != 'd') {
+        byName[key] = entry;
+        chosenSeries[key] = series;
+      }
     }
 
     if ((i + 1) % 40 == 0) {
@@ -144,6 +240,17 @@ void main() async {
   }
 
   client.close();
+
+  // Stamp each card with every era it has been printed in.
+  var unknownSeries = 0;
+  for (final entry in byName.entries) {
+    final eras = seriesByName[entry.key];
+    if (eras == null || eras.isEmpty) {
+      unknownSeries += 1;
+      continue;
+    }
+    entry.value['sr'] = (eras.toList()..sort()).join();
+  }
 
   final catalog = byName.values.toList()
     ..sort(
@@ -161,7 +268,9 @@ void main() async {
     'imageBase': _imageBase,
     'fields':
         'n=name g=grade t=cardType tr=trigger na=nation c=clan p=power '
-        's=shield no=cardNo e=effect i=image (relative to imageBase)',
+        's=shield no=cardNo e=effect i=image (relative to imageBase) '
+        'sr=series (d=D-series v=V-series g=G-series o=original p=old promo; '
+        'one letter per era the card was printed in, absent when unknown)',
     'cards': catalog,
   };
 
@@ -175,5 +284,6 @@ void main() async {
       '$printings printings read, $skipped skipped (tokens, crests, untyped)',
     )
     ..writeln('${catalog.length} distinct cards written to $_outputPath')
+    ..writeln('$unknownSeries of them could not be dated to an era')
     ..writeln('${(await file.length() / 1024 / 1024).toStringAsFixed(2)} MB');
 }

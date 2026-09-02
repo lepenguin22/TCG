@@ -9,13 +9,16 @@ const game = VanguardGame();
 
 var _seq = 0;
 
+/// Fixture cards default to a card printed in both the D-series and the
+/// V-series, which every format accepts, so that tests about deck size and
+/// triggers are not also testing the card pool. Pass `series` to change it.
 CardDefinition card(String name, Map<String, String> attributes) {
   _seq += 1;
   return CardDefinition(
     id: 'card-$_seq',
     gameId: 'vanguard',
     name: name,
-    attributes: attributes,
+    attributes: {'series': 'dv', ...attributes},
     createdAt: DateTime(2024),
     updatedAt: DateTime(2024),
   );
@@ -238,7 +241,7 @@ void main() {
       );
     });
 
-    test('G units are rejected', () {
+    test('a G unit in the main deck belongs in the G zone', () {
       final slots = legalStandardDeck()
         ..add(
           Slot(
@@ -249,7 +252,51 @@ void main() {
         );
       expect(
         errorsOf(viewOf(formatStandard, slots)),
-        contains(contains('Premium only')),
+        contains(contains('belongs in the G zone')),
+      );
+    });
+
+    test('a G zone is allowed, because stride came to Standard', () {
+      // The Stride Decksets are D-series products, so a Standard deck can
+      // stride and carry a G zone of its own.
+      final slots = legalStandardDeck();
+      for (var i = 0; i < 4; i += 1) {
+        slots.add(
+          Slot(
+            card('G Unit $i', {'grade': '4', 'cardType': 'g-unit'}),
+            zoneG,
+            4,
+          ),
+        );
+      }
+      expect(errorsOf(viewOf(formatStandard, slots)), isEmpty);
+    });
+
+    test('a deck with no G zone is still fine', () {
+      expect(errorsOf(viewOf(formatStandard, legalStandardDeck())), isEmpty);
+    });
+
+    test('the G zone is still capped at sixteen', () {
+      final slots = legalStandardDeck();
+      for (var i = 0; i < 4; i += 1) {
+        slots.add(
+          Slot(
+            card('G Unit $i', {'grade': '4', 'cardType': 'g-unit'}),
+            zoneG,
+            4,
+          ),
+        );
+      }
+      slots.add(
+        Slot(
+          card('G Unit extra', {'grade': '4', 'cardType': 'g-unit'}),
+          zoneG,
+          1,
+        ),
+      );
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('17 cards')),
       );
     });
 
@@ -334,6 +381,186 @@ void main() {
         errorsOf(viewOf(formatPremium, slots)),
         contains(contains('first vanguard')),
       );
+    });
+  });
+
+  group('the card pool each format draws from', () {
+    // Standard is the D-series format. It used to be described as taking
+    // V-series cards too, which is what this group pins down.
+    test('Standard rejects a V-series card', () {
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = card('V Only Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'v',
+      });
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('is not a Standard card')),
+      );
+    });
+
+    test('Standard rejects an original series card', () {
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = card('Very Old Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'o',
+      });
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('is not a Standard card')),
+      );
+    });
+
+    test('Standard accepts a card reprinted into the D-series', () {
+      // An old card given a D-series printing is legal again, which is why
+      // legality is tracked across every printing rather than the newest one.
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = card('Reprinted Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'dgov',
+      });
+      expect(errorsOf(viewOf(formatStandard, slots)), isEmpty);
+    });
+
+    test('the message says which eras the card is actually in', () {
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = card('Old Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'gv',
+      });
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('only in G-series and V-series')),
+      );
+    });
+
+    test('V Premium rejects a D-series card', () {
+      final slots = legalStandardDeck()
+        ..removeWhere((slot) => slot.zoneId == zoneRide);
+      named(slots, 'Grade 2 A').card = card('D Only Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'd',
+      });
+      expect(
+        errorsOf(viewOf(formatVPremium, slots)),
+        contains(contains('is not a V Premium card')),
+      );
+    });
+
+    test('Premium rejects a D-series card', () {
+      final slots = legalStandardDeck()
+        ..removeWhere((slot) => slot.zoneId == zoneRide);
+      named(slots, 'Grade 2 A').card = card('D Only Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'd',
+      });
+      expect(
+        errorsOf(viewOf(formatPremium, slots)),
+        contains(contains('is not a Premium card')),
+      );
+    });
+
+    test('Premium accepts G-series and original series cards', () {
+      final slots = legalStandardDeck()
+        ..removeWhere((slot) => slot.zoneId == zoneRide);
+      named(slots, 'Grade 2 A').card = card('G Era Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'g',
+      });
+      named(slots, 'Grade 2 B').card = card('Original Card', {
+        'grade': '2',
+        'cardType': 'normal',
+        'series': 'o',
+      });
+      expect(errorsOf(viewOf(formatPremium, slots)), isEmpty);
+    });
+
+    test('the casual format does not police the card pool', () {
+      final slots = [
+        Slot(
+          card('Any Era', {'grade': '3', 'cardType': 'normal', 'series': 'o'}),
+          zoneMain,
+          1,
+        ),
+      ];
+      expect(errorsOf(viewOf(formatCasual, slots)), isEmpty);
+    });
+
+    test('a card of unknown era is a warning, never an error', () {
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = CardDefinition(
+        id: 'undated',
+        gameId: 'vanguard',
+        name: 'Undated Card',
+        attributes: const {'grade': '2', 'cardType': 'normal'},
+        createdAt: DateTime(2024),
+        updatedAt: DateTime(2024),
+      );
+      final view = viewOf(formatStandard, slots);
+      expect(errorsOf(view), isEmpty);
+      expect(
+        game.validate(view).map((i) => i.message),
+        contains(contains('could not be checked')),
+      );
+    });
+  });
+
+  group('V Premium format', () {
+    List<Slot> vPremiumBase() {
+      final slots = legalStandardDeck()
+        ..removeWhere((slot) => slot.zoneId == zoneRide);
+      for (final slot in slots) {
+        slot.card = card(slot.card.name, {
+          ...slot.card.attributes,
+          'series': 'v',
+        });
+      }
+      return slots;
+    }
+
+    test('a V-series deck of fifty cards is legal', () {
+      expect(errorsOf(viewOf(formatVPremium, vPremiumBase())), isEmpty);
+    });
+
+    test('G units are rejected, because V Premium has no stride', () {
+      final slots = vPremiumBase()
+        ..add(
+          Slot(
+            card('Some G Unit', {
+              'grade': '4',
+              'cardType': 'g-unit',
+              'series': 'v',
+            }),
+            zoneMain,
+            1,
+          ),
+        );
+      expect(
+        errorsOf(viewOf(formatVPremium, slots)),
+        contains(contains('V Premium has no stride')),
+      );
+    });
+
+    test('it needs a grade 0 for the first vanguard', () {
+      final slots = vPremiumBase()
+        ..removeWhere((slot) => slot.card.attributes['grade'] == '0');
+      expect(
+        errorsOf(viewOf(formatVPremium, slots)),
+        contains(contains('first vanguard')),
+      );
+    });
+
+    test('it uses no ride deck', () {
+      final format = game.format(formatVPremium);
+      expect(format.zoneIds, [zoneMain]);
+      expect(format.name, 'V Premium');
     });
   });
 

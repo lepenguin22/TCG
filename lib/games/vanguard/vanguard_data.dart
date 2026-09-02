@@ -7,8 +7,27 @@ const zoneMain = 'main';
 const zoneG = 'gzone';
 
 const formatStandard = 'standard';
+const formatVPremium = 'vpremium';
 const formatPremium = 'premium';
 const formatCasual = 'casual';
+
+/// Which printing eras each format accepts, keyed by the `series` attribute
+/// letters the catalog stamps on a card.
+///
+///   d  D-series and Divinez, the current Standard pool
+///   v  V-series
+///   g  G-series
+///   o  the original series
+///   p  a pre-D-series card of an era the data does not pin down
+///
+/// A card carries one letter per era it has been printed in, so a V-series
+/// card later reprinted into the D-series counts as Standard legal. A format
+/// missing from this map does not restrict the card pool at all.
+const formatSeries = <String, Set<String>>{
+  formatStandard: {'d'},
+  formatVPremium: {'v'},
+  formatPremium: {'v', 'g', 'o', 'p'},
+};
 
 const vanguardZones = <ZoneDefinition>[
   ZoneDefinition(
@@ -28,7 +47,9 @@ const vanguardZones = <ZoneDefinition>[
     id: zoneG,
     name: 'G Zone',
     shortName: 'G',
-    description: 'Up to sixteen G units, at most four copies of any one card name. Premium only.',
+    description:
+        'Up to sixteen G units, at most four copies of any one card name. '
+        'Only a deck that strides needs one.',
   ),
 ];
 
@@ -172,14 +193,29 @@ const vanguardFormats = <FormatDefinition>[
   FormatDefinition(
     id: formatStandard,
     name: 'Standard',
-    description: '50 card main deck plus a 4 card ride deck. D-series and V-series cards.',
-    zoneIds: [zoneRide, zoneMain],
-    targets: {zoneRide: ZoneTarget(exact: 4), zoneMain: ZoneTarget(exact: 50)},
+    description:
+        'D-series cards only. 50 card main deck plus a 4 card ride deck, and '
+        'a G zone if the deck strides.',
+    zoneIds: [zoneRide, zoneMain, zoneG],
+    targets: {
+      zoneRide: ZoneTarget(exact: 4),
+      zoneMain: ZoneTarget(exact: 50),
+      zoneG: ZoneTarget(max: 16),
+    },
+  ),
+  FormatDefinition(
+    id: formatVPremium,
+    name: 'V Premium',
+    description: 'V-series cards only. 50 card main deck, no ride deck.',
+    zoneIds: [zoneMain],
+    targets: {zoneMain: ZoneTarget(exact: 50)},
   ),
   FormatDefinition(
     id: formatPremium,
     name: 'Premium',
-    description: '50 card main deck plus a G zone of up to 16 G units. Every era is legal.',
+    description:
+        'Everything from before the D-series. 50 card main deck plus a G zone '
+        'of up to 16 G units.',
     zoneIds: [zoneMain, zoneG],
     targets: {zoneMain: ZoneTarget(exact: 50), zoneG: ZoneTarget(max: 16)},
   ),

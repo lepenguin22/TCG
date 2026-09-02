@@ -40,6 +40,7 @@ class CatalogCard {
     'no': 'cardNo',
     'e': 'effect',
     'i': 'imageUrl',
+    'sr': 'series',
   };
 
   /// [imageBase] is the shared prefix the catalog strips from image URLs to

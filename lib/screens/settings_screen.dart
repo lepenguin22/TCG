@@ -84,6 +84,14 @@ class SettingsScreen extends StatelessWidget {
                     title: 'Triggers',
                     text: 'Exactly 16 trigger units in the main deck, at most 4 heal triggers and at most 1 over trigger.',
                   ),
+                  const _Rule(
+                    title: 'Card pool',
+                    text:
+                        'Each format draws from one era. Standard is D-series '
+                        'only, V Premium is V-series only, and Premium is '
+                        'everything older. A card reprinted into a newer era '
+                        'counts as legal there.',
+                  ),
                 ],
               ),
             ),

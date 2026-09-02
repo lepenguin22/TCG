@@ -269,6 +269,80 @@ void main() {
       expect(overlord.attributes['effect'], contains('[AUTO](VC)'));
     });
 
+    test('series letters are ones the rules engine understands', () {
+      const known = {'d', 'v', 'g', 'o', 'p'};
+      for (final entry in cards) {
+        final series = entry.attributes['series'];
+        if (series == null) continue;
+        expect(series, isNotEmpty, reason: entry.name);
+        expect(
+          series.split('').toSet().difference(known),
+          isEmpty,
+          reason: '${entry.name} -> $series',
+        );
+      }
+    });
+
+    test('almost every card is dated to an era', () {
+      final dated = cards
+          .where((c) => (c.attributes['series'] ?? '').isNotEmpty)
+          .length;
+      expect(dated / cards.length, greaterThan(0.97));
+    });
+
+    test('the Standard pool is a real subset, not everything', () {
+      final standard = cards
+          .where((c) => (c.attributes['series'] ?? '').contains('d'))
+          .length;
+      // D-series is a few thousand cards out of a decade of printings. If this
+      // ever swings to nearly all or nearly none, the era rules have broken.
+      expect(standard, greaterThan(2000));
+      expect(standard, lessThan(cards.length * 0.7));
+    });
+
+    test('cards printed only before the D-series are not Standard legal', () {
+      // Blaster Blade Seeker was reprinted in the V Clan Collection, which is
+      // a D-branded product for V Premium, not a Standard set.
+      final seeker = cards.firstWhere((c) => c.name == 'Blaster Blade Seeker');
+      expect(seeker.attributes['series'], isNot(contains('d')));
+
+      // Flash Shield, Iseult's newest printing is a Premium Deckset.
+      final iseult = cards.firstWhere((c) => c.name == 'Flash Shield, Iseult');
+      expect(iseult.attributes['series'], isNot(contains('d')));
+    });
+
+    test('D-series cards are Standard legal', () {
+      for (final name in [
+        'Dragonic Overlord',
+        'Blaster Blade',
+        'Light Dragon Deity of Honors, Amartinoa',
+      ]) {
+        final entry = cards.firstWhere((c) => c.name == name);
+        expect(entry.attributes['series'], contains('d'), reason: name);
+      }
+    });
+
+    test('every card in a D-series-only nation is Standard legal', () {
+      // These four nations exist only in the D-series, so a card in one must
+      // be in the Standard pool. Dragon Empire and Brandt Gate are left out:
+      // the V-series used those names too, so they prove nothing.
+      //
+      // This is the check that caught the Stride Decksets being mistaken for
+      // Premium products.
+      const nations = {
+        'dark-states',
+        'keter-sanctuary',
+        'stoicheia',
+        'lyrical-monasterio',
+      };
+      final wrong = cards
+          .where((c) => nations.contains(c.attributes['nation']))
+          .where((c) => !(c.attributes['series'] ?? '').contains('d'))
+          .map((c) => '${c.name} (${c.attributes['cardNo']})')
+          .toList();
+      expect(wrong, isEmpty);
+    });
+
     test('names are unique, so the four-copy rule counts correctly', () {
       final names = cards.map((c) => c.lowerName).toSet();
       expect(names.length, cards.length);

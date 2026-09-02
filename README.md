@@ -43,13 +43,19 @@ a real release key first if you ever go that way.
 
 ## What it does
 
-- **Decks** for Standard, Premium and a rule-free Casual/brew format, each with
-  notes, a colour and a pin-to-top flag.
+- **Decks** for Standard, V Premium, Premium and a rule-free Casual/brew format,
+  each with notes, a colour and a pin-to-top flag.
 - **Live rules checking.** Every deck screen shows what is illegal about the list
-  right now: deck size, the four-copy limit on a card name, the ride deck's one
-  card of each grade 0-3, the exactly-16 trigger count, the caps of four heal and
-  one over trigger, G units in the wrong format or zone, plus softer advice such
-  as a missing perfect guard.
+  right now: the card pool the format draws from, deck size, the four-copy limit
+  on a card name, the ride deck's one card of each grade 0-3, the exactly-16
+  trigger count, the caps of four heal and one over trigger, G units outside the
+  G zone, plus softer advice such as a missing perfect guard.
+- **Format card pools.** Standard is D-series only, V Premium is V-series only,
+  and Premium is everything from before the D-series. Every card is stamped with
+  the eras it has been printed in, so a card reprinted forward into the current
+  pool stays legal, while a V-series card in a Standard deck is flagged. Where
+  an era cannot be established — a couple of hundred promos — the app says so
+  rather than guessing, and never reports an error it cannot stand behind.
 - **Zones** that match how the game is actually laid out — Ride Deck, Main Deck
   and G Zone — with cards grouped by grade and a quantity stepper on each row.
 - **A card database of 11,000+ real cards**, bundled in the app and searchable
