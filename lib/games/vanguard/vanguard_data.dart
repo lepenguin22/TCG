@@ -147,10 +147,24 @@ const vanguardFields = <CardField>[
     placeholder: 'D-BT01/001EN',
   ),
   CardField(
-    key: 'notes',
-    label: 'Notes',
+    key: 'effect',
+    label: 'Card text',
     type: FieldType.multiline,
-    placeholder: 'Skill reminder, combo notes…',
+    placeholder: 'The card\'s abilities…',
+    helper: 'Filled in from the card database.',
+  ),
+  CardField(
+    key: 'imageUrl',
+    label: 'Image URL',
+    type: FieldType.text,
+    placeholder: 'https://…',
+    helper: 'Filled in from the card database. Needs internet the first time.',
+  ),
+  CardField(
+    key: 'notes',
+    label: 'Your notes',
+    type: FieldType.multiline,
+    placeholder: 'Combo notes, match-up reminders…',
   ),
 ];
 

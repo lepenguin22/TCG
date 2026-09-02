@@ -36,6 +36,36 @@ void main() {
       expect(parsed.attributes['hp'], '120');
     });
 
+    test('the image prefix is put back on', () {
+      final parsed = CatalogCard.fromJson({
+        'n': 'Dragonic Overlord',
+        'i': 'dbt02/dbt02_sp01.png',
+      }, imageBase: 'https://example.test/cards/');
+      expect(
+        parsed.attributes['imageUrl'],
+        'https://example.test/cards/dbt02/dbt02_sp01.png',
+      );
+    });
+
+    test('card text comes through as the effect attribute', () {
+      final parsed = CatalogCard.fromJson({
+        'n': 'Some Card',
+        'e': '[AUTO](VC):When this unit attacks, draw a card.',
+      });
+      expect(
+        parsed.attributes['effect'],
+        '[AUTO](VC):When this unit attacks, draw a card.',
+      );
+    });
+
+    test('the image prefix is only applied to the image', () {
+      final parsed = CatalogCard.fromJson({
+        'n': 'Some Card',
+        'no': 'D-BT01/001EN',
+      }, imageBase: 'https://example.test/');
+      expect(parsed.attributes['cardNo'], 'D-BT01/001EN');
+    });
+
     test('a card with no number still searches by name', () {
       final parsed = CatalogCard.fromJson({'n': 'Nameless'});
       expect(parsed.searchText, 'nameless');
@@ -207,6 +237,36 @@ void main() {
           .whereType<String>()
           .toSet();
       expect(triggers, {'over'});
+    });
+
+    test('every card carries an image URL on the official host', () {
+      for (final entry in cards) {
+        final url = entry.attributes['imageUrl'];
+        expect(url, isNotNull, reason: entry.name);
+        expect(
+          url,
+          startsWith('https://en.cf-vanguard.com/'),
+          reason: entry.name,
+        );
+        expect(
+          url!.endsWith('.png') || url.endsWith('.jpg'),
+          isTrue,
+          reason: '$entry.name -> $url',
+        );
+      }
+    });
+
+    test('nearly every card carries its abilities', () {
+      final withText = cards
+          .where((c) => (c.attributes['effect'] ?? '').isNotEmpty)
+          .length;
+      // A handful of vanilla cards genuinely print no text.
+      expect(withText / cards.length, greaterThan(0.99));
+    });
+
+    test('a known card has the abilities from its printing', () {
+      final overlord = cards.firstWhere((c) => c.name == 'Dragonic Overlord');
+      expect(overlord.attributes['effect'], contains('[AUTO](VC)'));
     });
 
     test('names are unique, so the four-copy rule counts correctly', () {

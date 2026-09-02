@@ -8,6 +8,7 @@ import '../store/deck_store.dart';
 import '../theme.dart';
 import '../utils/deck_text.dart';
 import '../widgets/action_sheet.dart';
+import '../widgets/card_detail_sheet.dart';
 import '../widgets/card_row.dart';
 import '../widgets/common.dart';
 import '../widgets/issue_list.dart';
@@ -258,6 +259,11 @@ class _DeckScreenState extends State<DeckScreen> {
       context,
       title: item.card.name,
       actions: [
+        SheetAction(
+          label: 'View card',
+          icon: Icons.image_outlined,
+          onPressed: () => showCardDetail(context, game: game, card: item.card),
+        ),
         SheetAction(
           label: 'Edit card details',
           icon: Icons.edit_outlined,

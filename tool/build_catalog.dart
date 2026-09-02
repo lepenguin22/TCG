@@ -12,6 +12,10 @@
 // draw, front, heal, stand). Over triggers and sentinels are recoverable from
 // the rules text, and are recovered here; the rest is left blank for the app to
 // ask about once, the first time a card is used.
+//
+// Card text and the official card image are included. Images are referenced by
+// URL rather than bundled -- there are over twenty thousand of them -- so the
+// app fetches and caches each one the first time it is shown.
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,6 +23,11 @@ const _indexUrl =
     'https://raw.githubusercontent.com/dragogodev/cgs/master/Cardfight%20Vanguard/AllSets.json';
 
 const _outputPath = 'assets/cards/vanguard.json';
+
+/// Every image in the source sits under this prefix, so entries store only the
+/// tail of the URL and the app puts them back together.
+const _imageBase =
+    'https://en.cf-vanguard.com/wordpress/wp-content/images/cardlist/';
 
 /// Values the source's `clan` field uses for the six modern nations. Anything
 /// else is a pre-D-series clan, which the app keeps as free text instead.
@@ -98,8 +107,10 @@ void main() async {
         continue;
       }
 
-      final effect = raw['effect'] as String? ?? '';
       final shield = _asInt(raw['shield']);
+      final effect = (raw['effect'] as String? ?? '').trim();
+      final image = raw['image_url'] as String? ?? '';
+
       // The source files sentinels under "Trigger Unit" alongside real
       // triggers. Counting one as a trigger would throw off the 16 trigger
       // rule, so the rules text decides instead of the source's card type.
@@ -119,6 +130,9 @@ void main() async {
         'p': ?_asInt(raw['power']),
         's': ?shield,
         if ((raw['number'] as String? ?? '').isNotEmpty) 'no': raw['number'],
+        if (effect.isNotEmpty) 'e': effect,
+        if (image.startsWith(_imageBase))
+          'i': image.substring(_imageBase.length),
       };
 
       byName[name.toLowerCase()] = entry;
@@ -144,7 +158,10 @@ void main() async {
     'generatedAt': DateTime.now().toUtc().toIso8601String().split('T').first,
     'source':
         'https://github.com/dragogodev/cgs (scraped from en.cf-vanguard.com)',
-    'fields': 'n=name g=grade t=cardType tr=trigger na=nation c=clan p=power s=shield no=cardNo',
+    'imageBase': _imageBase,
+    'fields':
+        'n=name g=grade t=cardType tr=trigger na=nation c=clan p=power '
+        's=shield no=cardNo e=effect i=image (relative to imageBase)',
     'cards': catalog,
   };
 

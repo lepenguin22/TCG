@@ -8,6 +8,7 @@ import '../games/games.dart';
 import '../models/card_definition.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
+import '../widgets/card_detail_sheet.dart';
 import '../widgets/card_row.dart';
 import '../widgets/common.dart';
 import '../widgets/field_prompt.dart';
@@ -331,7 +332,16 @@ class _AddCardsScreenState extends State<AddCardsScreen> {
           game: game,
           card: card,
           onTap: () => _add(card),
-          trailing: _AddTrailing(quantity: quantity),
+          trailing: _AddTrailing(
+            quantity: quantity,
+            onInfo: () => showCardDetail(
+              context,
+              game: game,
+              card: card,
+              actionLabel: 'Add to deck',
+              onAction: () => _add(card),
+            ),
+          ),
         );
       },
     );
@@ -423,34 +433,64 @@ class _CatalogRow extends StatelessWidget {
       game: game,
       card: preview,
       onTap: onTap,
-      trailing: _AddTrailing(quantity: quantity),
+      trailing: _AddTrailing(
+        quantity: quantity,
+        onInfo: () => showCardDetail(
+          context,
+          game: game,
+          card: preview,
+          actionLabel: 'Add to deck',
+          onAction: onTap,
+        ),
+      ),
     );
   }
 }
 
 class _AddTrailing extends StatelessWidget {
-  const _AddTrailing({required this.quantity});
+  const _AddTrailing({required this.quantity, required this.onInfo});
 
   final int quantity;
 
+  /// Opens the card, so you can read its abilities before committing to it.
+  final VoidCallback onInfo;
+
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        if (quantity > 0)
-          Text(
-            '$quantity in deck',
-            style: const TextStyle(color: AppColors.textFaint, fontSize: 11),
+        IconButton(
+          tooltip: 'View card',
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(
+            Icons.info_outline,
+            size: 18,
+            color: AppColors.textFaint,
           ),
-        const Text(
-          'Add',
-          style: TextStyle(
-            color: AppColors.accent,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
+          onPressed: onInfo,
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (quantity > 0)
+              Text(
+                '$quantity in deck',
+                style: const TextStyle(
+                  color: AppColors.textFaint,
+                  fontSize: 11,
+                ),
+              ),
+            const Text(
+              'Add',
+              style: TextStyle(
+                color: AppColors.accent,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ],
     );

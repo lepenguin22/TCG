@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../games/game_definition.dart';
 import '../models/card_definition.dart';
 import '../theme.dart';
+import 'card_image.dart';
 import 'common.dart';
 
 /// One card in a list: badge, name, generated subtitle, and either a quantity
@@ -44,9 +45,11 @@ class CardRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
+              CardImage(url: card.attribute('imageUrl'), width: 32),
+              const SizedBox(width: 10),
               if (badge != null) ...[
                 TagBadge(text: badge.text, color: badge.color),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
               ],
               Expanded(
                 child: Column(

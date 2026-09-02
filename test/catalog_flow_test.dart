@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,8 +9,11 @@ import 'package:tcg_decks/store/deck_store.dart';
 
 const _asset = 'assets/cards/vanguard.json';
 
+const _imageBase =
+    'https://en.cf-vanguard.com/wordpress/wp-content/images/cardlist/';
+
 CatalogCard _card(String name, Map<String, Object> extra) =>
-    CatalogCard.fromJson({'n': name, ...extra});
+    CatalogCard.fromJson({'n': name, ...extra}, imageBase: _imageBase);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +33,11 @@ void main() {
           'na': 'dragon-empire',
           'p': 13000,
           'no': 'D-BT02/SP01EN',
+          'e':
+              '[CONT](VC/RC):During the battle this unit attacked a '
+              'rear-guard, your opponent cannot call cards from their hand '
+              'to (GC).',
+          'i': 'dbt02/dbt02_sp01.png',
         }),
         _card('Dragonic Overlord the End', {
           'g': 3,
@@ -200,6 +209,92 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Embodiment of Armor, Bahr'), findsOneWidget);
+  });
+
+  testWidgets('the card sheet shows the image and the abilities', (
+    tester,
+  ) async {
+    final (store, _) = await pumpApp(tester);
+    await openAddCards(tester, store);
+
+    await tester.enterText(find.byType(TextField).first, 'dragonic overlord');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('View card').first);
+    await tester.pumpAndSettle();
+
+    // The sheet leads with the image and the card's identity.
+    expect(find.text('Dragonic Overlord'), findsWidgets);
+    expect(find.text('D-BT02/SP01EN'), findsWidgets);
+
+    // The image is requested from the official card list.
+    final image = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage).last,
+    );
+    expect(image.imageUrl, '${_imageBase}dbt02/dbt02_sp01.png');
+
+    // The abilities sit below the image, so scroll the sheet to them.
+    await tester.dragUntilVisible(
+      find.text('ABILITIES'),
+      find.byType(ListView).last,
+      const Offset(0, -120),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('cannot call cards from their hand'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the card sheet can add the card to the deck', (tester) async {
+    final (store, _) = await pumpApp(tester);
+    await openAddCards(tester, store);
+
+    await tester.enterText(find.byType(TextField).first, 'dragonic overlord');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('View card').first);
+    await tester.pumpAndSettle();
+
+    final addButton = find.widgetWithText(FilledButton, 'Add to deck');
+    await tester.dragUntilVisible(
+      addButton,
+      find.byType(ListView).last,
+      const Offset(0, -150),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(addButton);
+    await tester.pumpAndSettle();
+
+    expect(store.decks.single.entries.single.quantity, 1);
+    expect(store.cards.single.name, 'Dragonic Overlord');
+  });
+
+  testWidgets('abilities and image are kept on the library card', (
+    tester,
+  ) async {
+    final (store, _) = await pumpApp(tester);
+    await openAddCards(tester, store);
+
+    await tester.enterText(find.byType(TextField).first, 'dragonic overlord');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dragonic Overlord'));
+    await tester.pumpAndSettle();
+
+    final card = store.cards.single;
+    expect(card.attributes['effect'], contains('[CONT](VC/RC)'));
+    expect(card.attributes['imageUrl'], '${_imageBase}dbt02/dbt02_sp01.png');
+  });
+
+  testWidgets('a card with no image still renders', (tester) async {
+    // Hand-entered cards have no image; the row must fall back quietly.
+    final (store, _) = await pumpApp(tester);
+    await openAddCards(tester, store);
+
+    await tester.enterText(find.byType(TextField).first, 'bahr');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Embodiment of Armor, Bahr'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a deck built from the database validates correctly', (

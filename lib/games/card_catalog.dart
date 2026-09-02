@@ -38,14 +38,24 @@ class CatalogCard {
     'p': 'power',
     's': 'shield',
     'no': 'cardNo',
+    'e': 'effect',
+    'i': 'imageUrl',
   };
 
-  static CatalogCard fromJson(Map<String, dynamic> json) {
+  /// [imageBase] is the shared prefix the catalog strips from image URLs to
+  /// keep the asset small; it is put back here so the rest of the app only
+  /// ever sees a complete URL.
+  static CatalogCard fromJson(
+    Map<String, dynamic> json, {
+    String imageBase = '',
+  }) {
     final name = json['n'] as String? ?? '';
     final attributes = <String, String>{};
     for (final entry in json.entries) {
       if (entry.key == 'n' || entry.value == null) continue;
-      attributes[_aliases[entry.key] ?? entry.key] = '${entry.value}';
+      final key = _aliases[entry.key] ?? entry.key;
+      final value = '${entry.value}';
+      attributes[key] = key == 'imageUrl' ? '$imageBase$value' : value;
     }
     final lowerName = name.toLowerCase();
     final cardNo = (attributes['cardNo'] ?? '').toLowerCase();
@@ -58,12 +68,13 @@ class CatalogCard {
   }
 }
 
-/// Parsed off the UI thread, because the Vanguard catalog is over a megabyte.
+/// Parsed off the UI thread, because the Vanguard catalog runs to megabytes.
 List<CatalogCard> parseCatalog(String raw) {
   final json = jsonDecode(raw) as Map<String, dynamic>;
+  final imageBase = json['imageBase'] as String? ?? '';
   return (json['cards'] as List)
       .whereType<Map<String, dynamic>>()
-      .map(CatalogCard.fromJson)
+      .map((card) => CatalogCard.fromJson(card, imageBase: imageBase))
       .toList(growable: false);
 }
 
