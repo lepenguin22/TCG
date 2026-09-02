@@ -124,6 +124,11 @@ List<String> errorsOf(DeckView view) => [
     if (issue.level == IssueLevel.error) issue.message,
 ];
 
+List<String> warningsOf(DeckView view) => [
+  for (final issue in game.validate(view))
+    if (issue.level == IssueLevel.warning) issue.message,
+];
+
 void main() {
   group('standard format', () {
     test('a legal deck reports no issues', () {
@@ -239,6 +244,115 @@ void main() {
         errorsOf(viewOf(formatStandard, slots)),
         contains(contains('2 over triggers')),
       );
+    });
+
+    // The card data records that a card is a trigger unit but not which
+    // trigger it is, so every card added from the database, and every imported
+    // deck, arrives with the icon unset. Counting only cards whose icon was
+    // known reported a legal sixteen trigger deck as having one.
+    group('trigger units whose icon is not set', () {
+      /// The legal deck with every trigger icon stripped, as the database and
+      /// an import actually deliver them.
+      List<Slot> withoutIcons() {
+        final slots = legalStandardDeck();
+        for (final name in ['Crit A', 'Crit B', 'Draw A', 'Heal A']) {
+          final slot = named(slots, name);
+          slot.card = card(name, {'grade': '0', 'cardType': 'trigger'});
+        }
+        return slots;
+      }
+
+      test('still count towards the sixteen', () {
+        expect(
+          errorsOf(viewOf(formatStandard, withoutIcons())),
+          isNot(contains(contains('trigger units'))),
+        );
+      });
+
+      test('a deck short of sixteen is still caught', () {
+        final slots = withoutIcons();
+        named(slots, 'Crit A').quantity = 3;
+        named(slots, 'Grade 3 C').quantity = 5;
+        expect(
+          errorsOf(viewOf(formatStandard, slots)),
+          contains(contains('15 trigger units')),
+        );
+      });
+
+      test('the heal and over caps are declared unchecked', () {
+        expect(
+          warningsOf(viewOf(formatStandard, withoutIcons())),
+          contains(contains('16 trigger units have no trigger set')),
+        );
+      });
+
+      test('no such warning once every icon is set', () {
+        expect(
+          warningsOf(viewOf(formatStandard, legalStandardDeck())),
+          isNot(contains(contains('no trigger set'))),
+        );
+      });
+
+      test('one still reads as a unit rather than units', () {
+        final slots = legalStandardDeck();
+        named(slots, 'Heal A')
+          ..card = card('Heal A', {'grade': '0', 'cardType': 'trigger'})
+          ..quantity = 1;
+        named(slots, 'Grade 3 C').quantity = 7;
+        expect(
+          warningsOf(viewOf(formatStandard, slots)),
+          contains(contains('1 trigger unit has no trigger set')),
+        );
+      });
+
+      test('cannot sit in the ride deck either', () {
+        // This was missed too: a trigger unit with no icon was not recognised
+        // as a trigger unit anywhere, the ride deck check included.
+        final slots = legalStandardDeck();
+        named(slots, 'Ride G0').card = card('Trigger In Ride', {
+          'grade': '0',
+          'cardType': 'trigger',
+        });
+        expect(
+          errorsOf(viewOf(formatStandard, slots)),
+          contains(contains('cannot go in the ride deck')),
+        );
+      });
+
+      test('the breakdown counts them rather than losing them', () {
+        final groups = game.stats(viewOf(formatStandard, withoutIcons()));
+        final triggers = groups.firstWhere((g) => g.title == 'Triggers');
+        expect(triggers.caption, '16 of 16');
+        expect(
+          triggers.bars.fold<int>(0, (sum, bar) => sum + bar.value),
+          16,
+          reason: 'the spread must not look complete while hiding cards',
+        );
+        expect(
+          triggers.bars.firstWhere((bar) => bar.label == 'Not set').value,
+          16,
+        );
+      });
+
+      test('a heal cap is still enforced on the icons that are set', () {
+        // A mixed deck: some icons answered, some not. The cap has to hold on
+        // what is known instead of being abandoned because the rest is not.
+        final slots = withoutIcons();
+        named(slots, 'Heal A').card = card('Heal A', {
+          'grade': '0',
+          'cardType': 'trigger',
+          'trigger': 'heal',
+        });
+        named(slots, 'Crit A').card = card('Heal B', {
+          'grade': '0',
+          'cardType': 'trigger',
+          'trigger': 'heal',
+        });
+        expect(
+          errorsOf(viewOf(formatStandard, slots)),
+          contains(contains('8 heal triggers')),
+        );
+      });
     });
 
     test('a G unit in the main deck belongs in the G zone', () {

@@ -43,6 +43,16 @@ final _catalog = [
     'no': 'D-BT01/032EN',
     'sr': 'd',
   }),
+  // The database records that a card is a trigger unit but not which trigger
+  // it is, so imported trigger units arrive with no icon. Only 45 of the
+  // 1,315 trigger units in the real asset carry one.
+  _card('Cosmic Hero, Grandbeat', {
+    'g': 0,
+    't': 'trigger',
+    'na': 'dragon-empire',
+    'no': 'D-BT01/040EN',
+    'sr': 'd',
+  }),
   _card('Chronojet Dragon', {
     'g': 4,
     't': 'g-unit',
@@ -443,6 +453,32 @@ void main() {
       expect(view.zoneCount(zoneMain), 4);
       expect(view.items.single.card.name, 'Card From Next Week');
       expect(view.items.single.card.attributes['cardNo'], 'DZ-BT99/001EN');
+    });
+
+    test('imported trigger units are counted as trigger units', () async {
+      // They arrive with no trigger icon, and a deck of sixteen of them used
+      // to be reported as having one.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(list: [entry('Cosmic Hero, Grandbeat', 16, 'D-BT01/040EN')]),
+          code: 'X',
+        ),
+      );
+
+      const game = VanguardGame();
+      final view = store.viewOf(result.deck);
+      expect(
+        game.validate(view).map((i) => i.message),
+        isNot(contains(contains('1 trigger units'))),
+      );
+      final triggers = game
+          .stats(view)
+          .firstWhere((group) => group.title == 'Triggers');
+      expect(triggers.caption, '16 of 16');
     });
 
     test('an imported deck can be checked against the rules', () async {

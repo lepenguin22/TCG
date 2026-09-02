@@ -2,9 +2,19 @@ import '../../models/card_definition.dart';
 import '../game_definition.dart';
 import 'vanguard_data.dart';
 
-bool isTrigger(CardDefinition card) =>
-    card.attributes['cardType'] == 'trigger' &&
-    (card.attribute('trigger') != null);
+/// Whether a card is a trigger unit.
+///
+/// This is settled by the card's type alone. Which trigger it is -- critical,
+/// draw, front, heal, stand or over -- is a separate question that the card
+/// data does not answer for all but the over triggers, and that the app asks
+/// the user once per card. Requiring an answer here counted a deck of sixteen
+/// triggers as one, so the two are kept apart: [isTrigger] counts the sixteen,
+/// and [triggerIcon] is consulted only for the heal and over caps.
+bool isTrigger(CardDefinition card) => card.attributes['cardType'] == 'trigger';
+
+/// Which trigger a trigger unit is, when that is known.
+String? triggerIcon(CardDefinition card) =>
+    isTrigger(card) ? card.attribute('trigger') : null;
 
 Map<String, int> _tally(
   Iterable<DeckItem> items,
@@ -323,7 +333,7 @@ List<ValidationIssue> validateVanguard(DeckView view) {
   // --- Triggers -----------------------------------------------------------
   final triggers = main.where((item) => isTrigger(item.card)).toList();
   final triggerCount = _count(triggers);
-  final byTrigger = _tally(triggers, (card) => card.attributes['trigger']);
+  final byTrigger = _tally(triggers, triggerIcon);
   final heal = byTrigger['heal'] ?? 0;
   final over = byTrigger['over'] ?? 0;
 
@@ -339,6 +349,22 @@ List<ValidationIssue> validateVanguard(DeckView view) {
   }
   if (over > 1) {
     issues.add(ValidationIssue.error('$over over triggers. The limit is 1.'));
+  }
+
+  // The heal and over caps are counted from the trigger icons, which the card
+  // data does not carry. Saying nothing would let an illegal deck pass as
+  // checked, so the gap is named rather than glossed over.
+  final unknownIcons = _count(
+    triggers.where((item) => triggerIcon(item.card) == null),
+  );
+  if (strict && unknownIcons > 0) {
+    issues.add(
+      ValidationIssue.warning(
+        '$unknownIcons trigger ${unknownIcons == 1 ? 'unit has' : 'units have'} '
+        'no trigger set, so the heal and over limits cannot be checked. Tap '
+        'one and choose Edit card details to say which trigger it is.',
+      ),
+    );
   }
 
   // --- Soft advice --------------------------------------------------------
@@ -393,7 +419,10 @@ List<StatGroup> vanguardStats(DeckView view) {
   );
 
   final triggerItems = main.where((item) => isTrigger(item.card)).toList();
-  final triggers = _tally(triggerItems, (card) => card.attributes['trigger']);
+  final triggers = _tally(triggerItems, triggerIcon);
+  final triggersUnset =
+      _count(triggerItems) -
+      triggers.values.fold<int>(0, (sum, count) => sum + count);
   groups.add(
     StatGroup(
       title: 'Triggers',
@@ -407,6 +436,9 @@ List<StatGroup> vanguardStats(DeckView view) {
               triggers[option.value] ?? 0,
               color: option.color,
             ),
+        // Counted, but not yet attributed to an icon. Leaving these out made
+        // the spread look complete when it was not.
+        if (triggersUnset > 0) StatBar('Not set', triggersUnset),
       ],
     ),
   );

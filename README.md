@@ -117,10 +117,18 @@ The source data does not record which trigger a trigger unit is — critical,
 draw, front, heal or stand. Over triggers and sentinels are recoverable from the
 rules text and are filled in automatically; the rest is not.
 
-So the app asks. The first time you add a trigger unit, it shows one row of
-buttons and remembers your answer in your card library, for that card, forever.
-That keeps the "exactly 16 triggers, at most 4 heal, at most 1 over" checking
-honest rather than quietly wrong.
+So the app asks. The first time you add a trigger unit from the database, it
+shows one row of buttons and remembers your answer in your card library, for
+that card, forever.
+
+The two questions are kept apart, though, because only one of them needs an
+answer. Whether a card *is* a trigger unit is in the data, so the "exactly 16
+triggers" count is always right, including for a deck imported from Deck Log,
+where nobody was asked anything. The icon is needed only for the "at most 4
+heal, at most 1 over" caps, and while any of it is unset the deck screen says
+those two limits could not be checked instead of passing the deck as clean. The
+trigger breakdown counts the unanswered ones under *Not set* rather than
+dropping them.
 
 ## Importing from Deck Log
 
