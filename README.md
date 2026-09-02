@@ -58,6 +58,8 @@ a real release key first if you ever go that way.
   rather than guessing, and never reports an error it cannot stand behind.
 - **Zones** that match how the game is actually laid out — Ride Deck, Main Deck
   and G Zone — with cards grouped by grade and a quantity stepper on each row.
+  The ride deck takes four units, one of each grade 0-3, plus the optional ride
+  deck crest that Divinez added.
 - **A card database of 11,000+ real cards**, bundled in the app and searchable
   offline. Search by name or card number, filter by grade, tap to add: grade,
   card type, nation or clan, power, shield, card number and the card's printed

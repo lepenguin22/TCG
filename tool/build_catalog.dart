@@ -118,15 +118,34 @@ const _cardTypes = <String, String>{
   'Normal Order': 'order',
   'Blitz Order': 'order-blitz',
   'Set Order': 'order-set',
+  'Ride Deck Crest': 'ride-deck-crest',
 };
 
+/// Fetches one JSON document, retrying a few times.
+///
+/// A dropped request used to be skipped with a warning, which quietly produced
+/// a smaller catalog and still exited zero -- in the refresh workflow that
+/// would open a pull request deleting cards. Now a set that cannot be read
+/// fails the whole run.
 Future<dynamic> _getJson(HttpClient client, String url) async {
-  final request = await client.getUrl(Uri.parse(url));
-  final response = await request.close();
-  if (response.statusCode != 200) {
-    throw HttpException('HTTP ${response.statusCode} for $url');
+  Object? lastError;
+  for (var attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        throw HttpException('HTTP ${response.statusCode} for $url');
+      }
+      return jsonDecode(await response.transform(utf8.decoder).join());
+    } on Exception catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        stderr.writeln('  retrying ($attempt/3) after $error');
+        await Future<void>.delayed(Duration(seconds: attempt * 2));
+      }
+    }
   }
-  return jsonDecode(await response.transform(utf8.decoder).join());
+  throw StateError('Could not read $url after 3 attempts: $lastError');
 }
 
 int? _asInt(Object? value) {
@@ -170,19 +189,15 @@ void main() async {
     if (cardsUrl == null) continue;
     final setName = set['name'] as String? ?? '';
 
-    final List<dynamic> cards;
-    try {
-      cards = await _getJson(client, cardsUrl) as List;
-    } on Exception catch (error) {
-      stderr.writeln('  ! ${set['name']}: $error');
-      continue;
-    }
+    // Any failure here stops the run: a partial catalog that still exits zero
+    // would look like a successful rebuild that dropped cards.
+    final cards = await _getJson(client, cardsUrl) as List;
 
     for (final raw in cards.whereType<Map<String, dynamic>>()) {
       printings += 1;
       final name = (raw['name'] as String? ?? '').trim();
       final cardType = _cardTypes[raw['type']];
-      // Tokens, markers, crests and untyped rows are not deck cards.
+      // Tokens, markers and untyped rows are not deck cards.
       if (name.isEmpty || cardType == null) {
         skipped += 1;
         continue;
@@ -209,7 +224,9 @@ void main() async {
 
       final entry = <String, Object?>{
         'n': name,
-        'g': _asInt(raw['grade']) ?? 0,
+        // A ride deck crest has no grade at all; everything else defaults to
+        // zero when the source leaves it out.
+        if (cardType != 'ride-deck-crest') 'g': _asInt(raw['grade']) ?? 0,
         't': isSentinel ? 'sentinel' : cardType,
         if (cardType == 'trigger' && isOver) 'tr': 'over',
         'na': ?nation,

@@ -384,6 +384,78 @@ void main() {
     });
   });
 
+  group('the ride deck crest', () {
+    // Divinez added a fifth, optional ride deck card. Its own text reads
+    // "You may only have one ride deck crest in a ride deck", which caps it
+    // at one rather than requiring one.
+    Slot crest([String name = 'Energy Generator']) => Slot(
+      card(name, {'cardType': 'ride-deck-crest', 'series': 'd'}),
+      zoneRide,
+      1,
+    );
+
+    test('a ride deck of four units and no crest is legal', () {
+      expect(errorsOf(viewOf(formatStandard, legalStandardDeck())), isEmpty);
+    });
+
+    test('a ride deck of four units and one crest is legal', () {
+      final slots = legalStandardDeck()..add(crest());
+      expect(errorsOf(viewOf(formatStandard, slots)), isEmpty);
+    });
+
+    test('two crests are not allowed', () {
+      final slots = legalStandardDeck()
+        ..add(crest())
+        ..add(crest('Another Crest'));
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('2 ride deck crests')),
+      );
+    });
+
+    test('a crest does not fill a ride deck grade slot', () {
+      // Four units are still required alongside the crest.
+      final slots = legalStandardDeck()
+        ..removeWhere((slot) => slot.card.name == 'Ride G2')
+        ..add(crest());
+      final errors = errorsOf(viewOf(formatStandard, slots));
+      expect(errors, contains(contains('missing its grade 2')));
+      expect(errors, contains(contains('holds 3 units')));
+    });
+
+    test('a crest is not counted as a grade 0 unit', () {
+      // The crest has no grade at all, so it must not collide with the ride
+      // deck's grade 0.
+      final slots = legalStandardDeck()..add(crest());
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        isNot(contains(contains('grade 0 cards'))),
+      );
+    });
+
+    test('a crest in the main deck belongs in the ride deck', () {
+      final slots = legalStandardDeck()
+        ..add(
+          Slot(
+            card('Energy Generator', {
+              'cardType': 'ride-deck-crest',
+              'series': 'd',
+            }),
+            zoneMain,
+            1,
+          ),
+        );
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('belongs in the ride deck')),
+      );
+    });
+
+    test('the ride deck may hold five cards', () {
+      expect(game.format(formatStandard).targets[zoneRide]?.max, 5);
+    });
+  });
+
   group('the card pool each format draws from', () {
     // Standard is the D-series format. It used to be described as taking
     // V-series cards too, which is what this group pins down.

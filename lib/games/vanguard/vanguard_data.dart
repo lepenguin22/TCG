@@ -34,7 +34,9 @@ const vanguardZones = <ZoneDefinition>[
     id: zoneRide,
     name: 'Ride Deck',
     shortName: 'Ride',
-    description: 'Exactly four cards: one each of grade 0, 1, 2 and 3. No trigger units.',
+    description:
+        'One unit of each grade 0, 1, 2 and 3, and up to one ride deck crest. '
+        'No trigger units.',
   ),
   ZoneDefinition(
     id: zoneMain,
@@ -69,6 +71,7 @@ const cardTypeOptions = <FieldOption>[
   FieldOption('order-blitz', 'Blitz Order'),
   FieldOption('order-set', 'Set Order'),
   FieldOption('g-unit', 'G Unit'),
+  FieldOption('ride-deck-crest', 'Ride Deck Crest'),
   FieldOption('token', 'Token'),
 ];
 
@@ -194,11 +197,12 @@ const vanguardFormats = <FormatDefinition>[
     id: formatStandard,
     name: 'Standard',
     description:
-        'D-series cards only. 50 card main deck plus a 4 card ride deck, and '
-        'a G zone if the deck strides.',
+        'D-series cards only. 50 card main deck, a ride deck of four units '
+        'plus an optional crest, and a G zone if the deck strides.',
     zoneIds: [zoneRide, zoneMain, zoneG],
     targets: {
-      zoneRide: ZoneTarget(exact: 4),
+      // Four units, plus a ride deck crest when the deck runs one.
+      zoneRide: ZoneTarget(max: 5),
       zoneMain: ZoneTarget(exact: 50),
       zoneG: ZoneTarget(max: 16),
     },

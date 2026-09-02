@@ -87,6 +87,9 @@ class VanguardGame extends GameDefinition {
 
   @override
   CardBadge? badgeOf(CardDefinition card) {
+    if (card.attributes['cardType'] == 'ride-deck-crest') {
+      return const CardBadge('CR', Color(0xFF4FC08D));
+    }
     final trigger = card.attribute('trigger');
     if (card.attributes['cardType'] == 'trigger' && trigger != null) {
       final text = trigger == 'over' ? 'OV' : trigger[0].toUpperCase();

@@ -162,8 +162,13 @@ void main() {
     test('every entry has a name, grade and card type', () {
       for (final entry in cards) {
         expect(entry.name, isNotEmpty);
-        expect(entry.attributes['grade'], isNotNull, reason: entry.name);
         expect(entry.attributes['cardType'], isNotNull, reason: entry.name);
+        // Ride deck crests are the one card type with no grade.
+        if (entry.attributes['cardType'] == 'ride-deck-crest') {
+          expect(entry.attributes['grade'], isNull, reason: entry.name);
+        } else {
+          expect(entry.attributes['grade'], isNotNull, reason: entry.name);
+        }
       }
     });
 
@@ -176,6 +181,7 @@ void main() {
         'order-blitz',
         'order-set',
         'g-unit',
+        'ride-deck-crest',
         'token',
       };
       final seen = cards.map((c) => c.attributes['cardType']).toSet();
@@ -341,6 +347,20 @@ void main() {
           .map((c) => '${c.name} (${c.attributes['cardNo']})')
           .toList();
       expect(wrong, isEmpty);
+    });
+
+    test('ride deck crests are in the catalog and are Divinez cards', () {
+      final crests = cards
+          .where((c) => c.attributes['cardType'] == 'ride-deck-crest')
+          .toList();
+      expect(crests, isNotEmpty);
+      for (final crest in crests) {
+        // The crest arrived with Divinez, so it is a D-series card, and it has
+        // no grade to fill a ride deck slot with.
+        expect(crest.attributes['series'], contains('d'), reason: crest.name);
+        expect(crest.attributes['grade'], isNull, reason: crest.name);
+      }
+      expect(crests.map((c) => c.name), contains('Energy Generator'));
     });
 
     test('names are unique, so the four-copy rule counts correctly', () {

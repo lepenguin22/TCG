@@ -85,6 +85,13 @@ class SettingsScreen extends StatelessWidget {
                     text: 'Exactly 16 trigger units in the main deck, at most 4 heal triggers and at most 1 over trigger.',
                   ),
                   const _Rule(
+                    title: 'Ride deck crest',
+                    text:
+                        'Divinez added a fifth, optional ride deck card. A '
+                        'ride deck may hold one crest alongside its four '
+                        'units, and no more than one.',
+                  ),
+                  const _Rule(
                     title: 'Card pool',
                     text:
                         'Each format draws from one era. Standard is D-series '

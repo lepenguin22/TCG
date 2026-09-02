@@ -57,6 +57,11 @@ String _seriesSentence(String series) {
   return 'It is only in ${names.join(', ')} and $last.';
 }
 
+/// A ride deck crest: a fifth, optional ride deck card with no grade, added
+/// with Divinez. Its own text caps it at one per ride deck.
+bool _isCrest(DeckItem item) =>
+    item.card.attributes['cardType'] == 'ride-deck-crest';
+
 bool _isGUnit(DeckItem item) =>
     item.card.attributes['grade'] == '4' ||
     item.card.attributes['cardType'] == 'g-unit';
@@ -171,14 +176,39 @@ List<ValidationIssue> validateVanguard(DeckView view) {
   }
 
   if (formatId == formatStandard) {
-    if (rideCount != 4) {
+    // The ride deck is four units, one of each grade, plus at most one ride
+    // deck crest. The crest has no grade and does not fill a ride slot, so it
+    // is counted separately from the units.
+    final crests = ride.where(_isCrest).toList();
+    final rideUnits = ride.where((item) => !_isCrest(item)).toList();
+    final rideUnitCount = _count(rideUnits);
+
+    if (rideUnitCount != 4) {
       issues.add(
         ValidationIssue.error(
-          'Ride deck holds $rideCount cards. It must hold exactly 4.',
+          'Ride deck holds $rideUnitCount units. It takes exactly 4, one of '
+          'each grade 0-3.',
         ),
       );
     }
-    final rideGrades = _tally(ride, (card) => card.attributes['grade']);
+    final crestCount = _count(crests);
+    if (crestCount > 1) {
+      issues.add(
+        ValidationIssue.error(
+          'Ride deck holds $crestCount ride deck crests. Only one is allowed.',
+        ),
+      );
+    }
+    for (final item in [...main, ...gZone].where(_isCrest)) {
+      issues.add(
+        ValidationIssue.error(
+          '"${item.card.name}" is a ride deck crest, so it belongs in the ride '
+          'deck.',
+        ),
+      );
+    }
+
+    final rideGrades = _tally(rideUnits, (card) => card.attributes['grade']);
     for (final grade in ['0', '1', '2', '3']) {
       final n = rideGrades[grade] ?? 0;
       if (n == 0) {
