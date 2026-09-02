@@ -187,6 +187,101 @@ void main() {
     expect(store.decks, hasLength(1));
   });
 
+  group('adding cards from the catalog', () {
+    test('the first add creates the library card', () async {
+      final store = await loadedStore();
+      final card = store.ensureCard(
+        gameId: 'vanguard',
+        name: 'Dragonic Overlord',
+        attributes: {
+          'grade': '3',
+          'cardType': 'normal',
+          'cardNo': 'D-BT02/SP01EN',
+        },
+      );
+
+      expect(store.cards, hasLength(1));
+      expect(card.attributes['grade'], '3');
+    });
+
+    test(
+      'adding the same printing again reuses the one library card',
+      () async {
+        final store = await loadedStore();
+        final first = store.ensureCard(
+          gameId: 'vanguard',
+          name: 'Dragonic Overlord',
+          attributes: {'grade': '3', 'cardNo': 'D-BT02/SP01EN'},
+        );
+        final second = store.ensureCard(
+          gameId: 'vanguard',
+          name: 'Dragonic Overlord',
+          attributes: {'grade': '3', 'cardNo': 'D-BT02/SP01EN'},
+        );
+
+        expect(second.id, first.id);
+        expect(store.cards, hasLength(1));
+      },
+    );
+
+    test('the card number wins over the name when matching', () async {
+      final store = await loadedStore();
+      final reprint = store.ensureCard(
+        gameId: 'vanguard',
+        name: 'Blaster Blade',
+        attributes: {'grade': '2', 'cardNo': 'DZ-SS08/Re45EN'},
+      );
+      // A different printing of the same name is a different library card,
+      // because the user may want each one tracked separately.
+      final original = store.ensureCard(
+        gameId: 'vanguard',
+        name: 'Blaster Blade',
+        attributes: {'grade': '2', 'cardNo': 'BT01/003EN'},
+      );
+
+      expect(original.id, isNot(reprint.id));
+      expect(store.cards, hasLength(2));
+    });
+
+    test('a hand-entered card with no number is matched by name', () async {
+      final store = await loadedStore();
+      final typed = store.saveCard(
+        gameId: 'vanguard',
+        name: 'Dragonic Overlord',
+        attributes: {'grade': '3'},
+      );
+      final fromCatalog = store.ensureCard(
+        gameId: 'vanguard',
+        name: 'Dragonic Overlord',
+        attributes: {'grade': '3', 'cardNo': 'D-BT02/SP01EN'},
+      );
+
+      expect(fromCatalog.id, typed.id, reason: 'should not duplicate');
+      expect(store.cards, hasLength(1));
+    });
+
+    test('another game never matches', () async {
+      final store = await loadedStore();
+      store.saveCard(
+        gameId: 'other-game',
+        name: 'Dragonic Overlord',
+        attributes: const {},
+      );
+      store.ensureCard(
+        gameId: 'vanguard',
+        name: 'Dragonic Overlord',
+        attributes: {'grade': '3'},
+      );
+
+      expect(store.cards, hasLength(2));
+    });
+
+    test('findCard returns null when the library has nothing', () async {
+      final store = await loadedStore();
+      expect(store.findCard(gameId: 'vanguard', name: 'Nothing Here'), isNull);
+    });
+  });
+
   test('editing a card in the library updates it everywhere', () async {
     final store = await loadedStore();
     final deck = store.createDeck(name: 'Deck');

@@ -23,6 +23,7 @@ class CardField {
     this.placeholder,
     this.helper,
     this.isRequired = false,
+    this.promptWhenMissing = false,
     this.visibleWhenKey,
     this.visibleWhenValues = const [],
   });
@@ -34,6 +35,10 @@ class CardField {
   final String? placeholder;
   final String? helper;
   final bool isRequired;
+
+  /// Ask for this field when a card comes from the catalog without it. Used
+  /// for attributes the catalog cannot supply but the rules depend on.
+  final bool promptWhenMissing;
 
   /// Only show the field while [visibleWhenKey] holds one of
   /// [visibleWhenValues].
@@ -182,6 +187,10 @@ abstract class GameDefinition {
   List<FormatDefinition> get formats;
   String get defaultFormatId;
   List<CardField> get cardFields;
+
+  /// Bundled catalog of real printed cards for this game, or null when the
+  /// game has none and cards must be entered by hand.
+  String? get catalogAsset => null;
 
   /// Heading a card is listed under inside a zone (e.g. "Grade 2").
   String groupOf(CardDefinition card, String zoneId);

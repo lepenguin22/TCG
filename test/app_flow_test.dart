@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tcg_decks/games/card_catalog.dart';
 import 'package:tcg_decks/main.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 
@@ -31,7 +32,10 @@ void main() {
   Future<DeckStore> pumpApp(WidgetTester tester) async {
     final store = DeckStore();
     await store.load();
-    await tester.pumpWidget(TcgDecksApp(store: store));
+    // An empty stand-in catalog: these tests cover the hand-entry path, and
+    // the real asset is exercised by card_catalog_test and catalog_flow_test.
+    final catalog = CardCatalog()..seed('assets/cards/vanguard.json', const []);
+    await tester.pumpWidget(TcgDecksApp(store: store, catalog: catalog));
     await tester.pumpAndSettle();
     return store;
   }
@@ -74,11 +78,11 @@ void main() {
       find.widgetWithText(OutlinedButton, 'Add to Main'),
     );
     expect(find.text('Add to Main Deck'), findsOneWidget);
-    expect(find.text('Your card library is empty'), findsOneWidget);
 
+    // Enter this one by hand rather than pulling it from the database.
     await tapVisible(
       tester,
-      find.widgetWithText(FilledButton, 'Create a card'),
+      find.widgetWithText(FloatingActionButton, 'Enter by hand'),
     );
     expect(find.text('New Card'), findsOneWidget);
 

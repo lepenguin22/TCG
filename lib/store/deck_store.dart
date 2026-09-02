@@ -220,6 +220,47 @@ class DeckStore extends ChangeNotifier {
     return card;
   }
 
+  /// The library card matching [cardNo], or [name] when there is no number.
+  CardDefinition? findCard({
+    required String gameId,
+    String? cardNo,
+    String? name,
+  }) {
+    final wantedNo = cardNo?.trim().toLowerCase();
+    final wantedName = name?.trim().toLowerCase();
+    for (final card in _cards) {
+      if (card.gameId != gameId) continue;
+      final cardNumber = card.attributes['cardNo']?.trim().toLowerCase();
+      if (wantedNo != null && wantedNo.isNotEmpty && cardNumber == wantedNo) {
+        return card;
+      }
+      if (wantedNo == null || wantedNo.isEmpty || cardNumber == null) {
+        if (wantedName != null &&
+            card.name.trim().toLowerCase() == wantedName) {
+          return card;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Returns the library card for this printing, adding it to the library the
+  /// first time it is used. Picking the same catalogue card twice reuses the
+  /// one library entry, so edits to it apply everywhere.
+  CardDefinition ensureCard({
+    required String gameId,
+    required String name,
+    required Map<String, String> attributes,
+  }) {
+    final existing = findCard(
+      gameId: gameId,
+      cardNo: attributes['cardNo'],
+      name: name,
+    );
+    if (existing != null) return existing;
+    return saveCard(gameId: gameId, name: name, attributes: attributes);
+  }
+
   /// Removes a card from the library and from every deck that used it.
   void deleteCard(String cardId) {
     _cards = _cards.where((card) => card.id != cardId).toList();

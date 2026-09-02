@@ -106,6 +106,7 @@ const vanguardFields = <CardField>[
     options: triggerOptions,
     visibleWhenKey: 'cardType',
     visibleWhenValues: ['trigger'],
+    promptWhenMissing: true,
     helper: 'Heal is capped at four copies and Over at one per deck.',
   ),
   CardField(

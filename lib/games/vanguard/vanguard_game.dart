@@ -35,6 +35,9 @@ class VanguardGame extends GameDefinition {
   @override
   List<CardField> get cardFields => vanguardFields;
 
+  @override
+  String? get catalogAsset => 'assets/cards/vanguard.json';
+
   String _grade(CardDefinition card) => card.attributes['grade'] ?? '0';
 
   @override
