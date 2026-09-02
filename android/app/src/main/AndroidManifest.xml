@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Card images are fetched from the official card list the first time
-         each card is shown, then cached on the device. Everything else in the
-         app -- the card database, decks and rules checking -- works offline.
+         each card is shown, then cached on the device. Everything else in
+         the app (the card database, decks and rules checking) works offline.
          Flutter only grants this permission to debug builds by default, so a
          release APK needs it declared here. -->
     <uses-permission android:name="android.permission.INTERNET"/>

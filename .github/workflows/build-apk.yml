@@ -40,6 +40,25 @@ jobs:
       - name: Test
         run: flutter test
 
+      # Gradle only reaches the manifest five minutes into the build, and a
+      # malformed one fails there. Catching it here costs a second.
+      - name: Validate Android XML
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.dom.minidom
+          bad = []
+          files = glob.glob('android/**/*.xml', recursive=True)
+          for path in files:
+              try:
+                  xml.dom.minidom.parse(path)
+              except Exception as error:
+                  bad.append(f'{path}: {error}')
+          print(f'checked {len(files)} files')
+          if bad:
+              print('\n'.join(bad), file=sys.stderr)
+              sys.exit(1)
+          PY
+
       # The build number becomes the Android versionCode, so a newer build
       # always installs over an older one instead of being refused.
       - name: Build release APK
