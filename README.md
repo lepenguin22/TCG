@@ -68,7 +68,9 @@ a real release key first if you ever go that way.
   Search results and deck lists carry a thumbnail.
 - **A personal card library.** Cards you add from the database, or enter by
   hand, are kept for reuse in every later deck. Editing one updates it
-  everywhere.
+  everywhere. Cards saved before the database existed are repaired from it on
+  the next launch, filling in only what they are missing — anything you set
+  yourself always wins.
 - **Breakdown screen** with the grade curve, trigger spread, card types and
   nations.
 - **Copy as text** to paste a list into a chat, and a JSON backup you can copy to
@@ -152,6 +154,7 @@ lib/
     games.dart                   the registry
     vanguard/                    zones, fields, formats, rules, stats
   store/deck_store.dart          state and shared_preferences persistence
+  store/catalog_backfill.dart    repairs cards saved before the database
   screens/                       deck list, deck, add cards, card editor,
                                  breakdown, deck settings, settings
   widgets/                       card rows, images, charts, chips, sheets
@@ -165,6 +168,7 @@ test/
   vanguard_rules_test.dart       the deck construction rules
   deck_store_test.dart           state, persistence, import and export
   card_catalog_test.dart         search, plus checks on the real asset
+  catalog_backfill_test.dart     repairing old cards without losing edits
   catalog_flow_test.dart         searching and adding a card, end to end
   app_flow_test.dart             the screens, driven end to end
 ```

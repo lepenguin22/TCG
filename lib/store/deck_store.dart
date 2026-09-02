@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../games/card_catalog.dart';
 import '../games/game_definition.dart';
 import '../games/games.dart';
 import '../models/card_definition.dart';
@@ -12,6 +13,13 @@ import '../models/deck.dart';
 
 const _decksKey = 'tcgdecks.v1.decks';
 const _cardsKey = 'tcgdecks.v1.cards';
+const _backfillKey = 'tcgdecks.v1.backfill';
+
+/// Bumped whenever the catalog starts carrying something worth filling into
+/// cards that were saved before it existed. Cards entered before the catalog
+/// shipped have no series, card text or image; without those the rules engine
+/// cannot tell which format they belong to.
+const cardBackfillVersion = 1;
 
 /// How many decks and cards an import brought in.
 class ImportResult {
@@ -218,6 +226,84 @@ class DeckStore extends ChangeNotifier {
     _cards = [card, ..._cards];
     _save(cards: true);
     return card;
+  }
+
+  /// Whether the library has yet to be filled in from the current catalog.
+  bool get needsCardBackfill =>
+      (_preferences?.getInt(_backfillKey) ?? 0) < cardBackfillVersion;
+
+  /// Records that the backfill has run, so it never loads the catalog again
+  /// just to find nothing to do. Cards the catalog does not know stay as they
+  /// are, and would otherwise make the app retry on every launch.
+  void markCardBackfillDone() {
+    unawaited(
+      _preferences?.setInt(_backfillKey, cardBackfillVersion) ?? Future.value(),
+    );
+  }
+
+  /// Fills attributes the catalog knows into library cards that are missing
+  /// them, matching on card number first and name second.
+  ///
+  /// Only blanks are filled. Anything already on the card wins, including a
+  /// trigger you picked, a name you corrected and your own notes, so this can
+  /// never undo an edit. Returns how many cards changed.
+  int backfillFromCatalog({
+    required String gameId,
+    required List<CatalogCard> catalog,
+  }) {
+    final byNumber = <String, CatalogCard>{};
+    final byName = <String, CatalogCard>{};
+    for (final entry in catalog) {
+      final number = entry.cardNo?.trim().toLowerCase();
+      if (number != null && number.isNotEmpty) {
+        byNumber.putIfAbsent(number, () => entry);
+      }
+      byName.putIfAbsent(entry.lowerName, () => entry);
+    }
+
+    var changed = 0;
+    final updated = <CardDefinition>[];
+    for (final card in _cards) {
+      final number = card.attributes['cardNo']?.trim().toLowerCase();
+      CatalogCard? match;
+      if (card.gameId == gameId) {
+        match = (number != null && number.isNotEmpty) ? byNumber[number] : null;
+        // Fall back to the name only when the card has no number of its own,
+        // so a card identified by number is never matched to a different one.
+        match ??= (number == null || number.isEmpty)
+            ? byName[card.name.trim().toLowerCase()]
+            : null;
+      }
+      if (match == null) {
+        updated.add(card);
+        continue;
+      }
+
+      final merged = Map<String, String>.from(match.attributes);
+      for (final attribute in card.attributes.entries) {
+        if (attribute.value.isNotEmpty) merged[attribute.key] = attribute.value;
+      }
+      if (_sameAttributes(merged, card.attributes)) {
+        updated.add(card);
+        continue;
+      }
+      changed += 1;
+      updated.add(card.copyWith(attributes: merged, updatedAt: card.updatedAt));
+    }
+
+    if (changed > 0) {
+      _cards = updated;
+      _save(cards: true);
+    }
+    return changed;
+  }
+
+  static bool _sameAttributes(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
   }
 
   /// The library card matching [cardNo], or [name] when there is no number.
