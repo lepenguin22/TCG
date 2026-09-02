@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/option_picker.dart';
 import 'deck_screen.dart';
+import 'import_decklog_screen.dart';
 import 'new_deck_screen.dart';
 import 'settings_screen.dart';
 
@@ -54,6 +55,11 @@ class _DeckListScreenState extends State<DeckListScreen> {
       appBar: AppBar(
         title: const Text('My Decks'),
         actions: [
+          IconButton(
+            tooltip: 'Import from Deck Log',
+            icon: const Icon(Icons.download_outlined),
+            onPressed: _importFromDecklog,
+          ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings_outlined),
@@ -112,10 +118,21 @@ class _DeckListScreenState extends State<DeckListScreen> {
                   ? 'Build your first Cardfight!! Vanguard list. The app checks it against the format rules as you go.'
                   : 'Try a different search or clear the game filter.',
               action: store.decks.isEmpty
-                  ? FilledButton.icon(
-                      onPressed: _createDeck,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Create a deck'),
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _createDeck,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create a deck'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: _importFromDecklog,
+                          icon: const Icon(Icons.download_outlined, size: 18),
+                          label: const Text('Import from Deck Log'),
+                        ),
+                      ],
                     )
                   : null,
             )
@@ -128,6 +145,17 @@ class _DeckListScreenState extends State<DeckListScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _importFromDecklog() async {
+    final deckId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ImportDecklogScreen()),
+    );
+    if (deckId != null && mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => DeckScreen(deckId: deckId)),
+      );
+    }
   }
 
   Future<void> _createDeck() async {

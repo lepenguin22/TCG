@@ -75,6 +75,10 @@ a real release key first if you ever go that way.
   yourself always wins.
 - **Breakdown screen** with the grade curve, trigger spread, card types and
   nations.
+- **Import from Deck Log.** Paste a share link or deck code from Bushiroad's
+  Deck Log, the site behind Fighter Navigator, and the deck comes across with
+  its cards matched to the database, sorted into the right zones and ready to
+  be checked against the rules.
 - **Copy as text** to paste a list into a chat, and a JSON backup you can copy to
   the clipboard and import on another device.
 
@@ -118,6 +122,28 @@ buttons and remembers your answer in your card library, for that card, forever.
 That keeps the "exactly 16 triggers, at most 4 heal, at most 1 over" checking
 honest rather than quietly wrong.
 
+## Importing from Deck Log
+
+[Deck Log](https://decklog-en.bushiroad.com/) is Bushiroad's official deck
+site, reached through Fighter Navigator. A shared deck lives at
+`decklog-en.bushiroad.com/view/<CODE>`; the page is a script driven app fed by a
+JSON endpoint that takes the same code, and that endpoint is what the app reads
+— one request per import, with the same headers the site's own page sends.
+
+Paste a link, a link with text around it, or the bare code. Cards are matched to
+the bundled database by card number first and name second, so an imported deck
+arrives with grades, triggers, abilities and images filled in. A card the
+database does not know is still imported, with the name and count Deck Log gave,
+and the import screen lists what it could not match rather than quietly leaving
+the deck short.
+
+Zones come from Deck Log's own sections, except where the card itself decides:
+a G unit can only be in the G zone and a ride deck crest only in the ride deck,
+whichever list they arrived in.
+
+If the request is ever refused, the endpoint can be opened in a browser and its
+JSON pasted into the same box — it is read the same way.
+
 ## Checks
 
 ```bash
@@ -157,6 +183,8 @@ lib/
     vanguard/                    zones, fields, formats, rules, stats
   store/deck_store.dart          state and shared_preferences persistence
   store/catalog_backfill.dart    repairs cards saved before the database
+  store/decklog_import.dart      turns a Deck Log deck into one of ours
+  import/decklog.dart            the Deck Log client and payload reader
   screens/                       deck list, deck, add cards, card editor,
                                  breakdown, deck settings, settings
   widgets/                       card rows, images, charts, chips, sheets
@@ -171,6 +199,8 @@ test/
   deck_store_test.dart           state, persistence, import and export
   card_catalog_test.dart         search, plus checks on the real asset
   catalog_backfill_test.dart     repairing old cards without losing edits
+  decklog_import_test.dart       reading Deck Log links, payloads and decks
+  decklog_screen_test.dart       the import screen, driven end to end
   catalog_flow_test.dart         searching and adding a card, end to end
   app_flow_test.dart             the screens, driven end to end
 ```
