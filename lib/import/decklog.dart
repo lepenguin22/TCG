@@ -27,7 +27,7 @@ class DecklogCard {
     required this.name,
     required this.quantity,
     this.cardNumber,
-    required this.source,
+    required this.section,
   });
 
   final String name;
@@ -37,12 +37,19 @@ class DecklogCard {
   /// card far more reliably than its name.
   final String? cardNumber;
 
-  /// Which of the payload's lists this card came from. Deck Log keeps the
-  /// deck's sections apart, so this is evidence rather than a guess.
-  final DecklogList source;
+  /// The payload key this card came from, kept verbatim.
+  ///
+  /// Deck Log serves every game it hosts through the same endpoint, so its
+  /// sections are named `list`, `sub_list` and `p_list` rather than after what
+  /// they hold. Which one is a Vanguard ride deck is not stated anywhere, so
+  /// the key is carried through as an opaque label and the meaning is worked
+  /// out later, from the cards themselves.
+  final String section;
 }
 
-enum DecklogList { main, sub, leader }
+/// The sections Deck Log is known to use. Any other key holding cards is read
+/// too, so a section we have not seen before is not silently dropped.
+const decklogKnownSections = <String>['list', 'sub_list', 'p_list'];
 
 class DecklogDeck {
   const DecklogDeck({
@@ -108,11 +115,7 @@ DecklogDeck parseDecklogPayload(String body, {required String code}) {
     throw const DecklogException('Deck Log returned something unexpected.');
   }
 
-  final cards = <DecklogCard>[
-    ..._readList(decoded['list'], DecklogList.main),
-    ..._readList(decoded['sub_list'], DecklogList.sub),
-    ..._readList(decoded['p_list'], DecklogList.leader),
-  ];
+  final cards = _readSections(decoded);
 
   if (cards.isEmpty) {
     throw const DecklogException('That Deck Log entry has no cards in it.');
@@ -128,7 +131,17 @@ DecklogDeck parseDecklogPayload(String body, {required String code}) {
   );
 }
 
-List<DecklogCard> _readList(Object? raw, DecklogList source) {
+/// Reads every section of the payload that holds cards.
+///
+/// The known keys are read first so their order is stable; anything else that
+/// turns out to be a list of cards is read after, because a deck arriving one
+/// section short is worse than reading a key we did not expect.
+List<DecklogCard> _readSections(Map<String, dynamic> decoded) {
+  final keys = <String>{...decklogKnownSections, ...decoded.keys};
+  return [for (final key in keys) ..._readList(decoded[key], key)];
+}
+
+List<DecklogCard> _readList(Object? raw, String section) {
   if (raw is! List) return const [];
   final cards = <DecklogCard>[];
   for (final entry in raw.whereType<Map<String, dynamic>>()) {
@@ -142,7 +155,7 @@ List<DecklogCard> _readList(Object? raw, DecklogList source) {
         name: name,
         quantity: quantity,
         cardNumber: number.isEmpty ? null : number,
-        source: source,
+        section: section,
       ),
     );
   }

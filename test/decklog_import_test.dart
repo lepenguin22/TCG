@@ -36,6 +36,13 @@ final _catalog = [
     'no': 'D-BT01/031EN',
     'sr': 'd',
   }),
+  _card('Dragonic Deathscythe', {
+    'g': 2,
+    't': 'normal',
+    'na': 'dragon-empire',
+    'no': 'D-BT01/032EN',
+    'sr': 'd',
+  }),
   _card('Chronojet Dragon', {
     'g': 4,
     't': 'g-unit',
@@ -55,6 +62,7 @@ String payload({
   List<Map<String, Object>> list = const [],
   List<Map<String, Object>> subList = const [],
   List<Map<String, Object>> pList = const [],
+  Map<String, List<Map<String, Object>>> extra = const {},
   String gameTitleId = '1',
   String? deckName,
 }) => jsonEncode({
@@ -63,7 +71,16 @@ String payload({
   'list': list,
   'sub_list': subList,
   'p_list': pList,
+  ...extra,
 });
+
+/// A ride deck: one unit of each grade 0-3, as the rules require.
+final rideDeck = [
+  entry('Lizard Soldier, Conroe', 1, 'D-BT01/031EN'),
+  entry('Embodiment of Armor, Bahr', 1, 'D-BT01/030EN'),
+  entry('Dragonic Deathscythe', 1, 'D-BT01/032EN'),
+  entry('Dragonic Overlord', 1, 'D-BT02/001EN'),
+];
 
 Map<String, Object> entry(String name, int num, [String? number]) => {
   'name': name,
@@ -142,8 +159,8 @@ void main() {
       expect(deck.cards.first.name, 'Dragonic Overlord');
       expect(deck.cards.first.quantity, 4);
       expect(deck.cards.first.cardNumber, 'D-BT02/001EN');
-      expect(deck.cards.first.source, DecklogList.main);
-      expect(deck.cards.last.source, DecklogList.sub);
+      expect(deck.cards.first.section, 'list');
+      expect(deck.cards.last.section, 'sub_list');
     });
 
     test('a deck for one of the other games is recognisable as such', () {
@@ -254,24 +271,124 @@ void main() {
       expect(result.unmatched, isEmpty);
     });
 
-    test('the sub list becomes the ride deck', () async {
-      final store = await loadedStore();
-      final catalog = CardCatalog()..seed(_asset, _catalog);
-      final result = await importDecklogDeck(
-        store,
-        catalog,
-        parseDecklogPayload(
-          payload(
-            list: [entry('Dragonic Overlord', 4, 'D-BT02/001EN')],
-            subList: [entry('Lizard Soldier, Conroe', 1, 'D-BT01/031EN')],
-          ),
-          code: 'X',
-        ),
-      );
+    // Deck Log names its sections `list`, `sub_list` and `p_list` for every
+    // game it hosts, and nothing says which holds a Vanguard ride deck.
+    // Reading the names the wrong way round put ride decks in the main deck,
+    // so the section is now identified by shape and these pin that down.
+    group('finding the ride deck', () {
+      Future<(DeckStore, DecklogImportResult)> importOf(String body) async {
+        final store = await loadedStore();
+        final catalog = CardCatalog()..seed(_asset, _catalog);
+        final result = await importDecklogDeck(
+          store,
+          catalog,
+          parseDecklogPayload(body, code: 'X'),
+        );
+        return (store, result);
+      }
 
-      final view = store.viewOf(result.deck);
-      expect(view.zoneCount(zoneMain), 4);
-      expect(view.zoneCount(zoneRide), 1);
+      final mainDeck = [
+        entry('Dragonic Overlord', 4, 'D-BT02/001EN'),
+        entry('Embodiment of Armor, Bahr', 4, 'D-BT01/030EN'),
+      ];
+
+      test('in p_list', () async {
+        final (store, result) = await importOf(
+          payload(list: mainDeck, pList: rideDeck),
+        );
+        expect(store.viewOf(result.deck).zoneCount(zoneRide), 4);
+        expect(store.viewOf(result.deck).zoneCount(zoneMain), 8);
+        expect(result.rideDeckFound, isTrue);
+      });
+
+      test('in sub_list', () async {
+        final (store, result) = await importOf(
+          payload(list: mainDeck, subList: rideDeck),
+        );
+        expect(store.viewOf(result.deck).zoneCount(zoneRide), 4);
+        expect(store.viewOf(result.deck).zoneCount(zoneMain), 8);
+      });
+
+      test('in a section we have never seen before', () async {
+        final (store, result) = await importOf(
+          payload(list: mainDeck, extra: {'ride_list': rideDeck}),
+        );
+        expect(store.viewOf(result.deck).zoneCount(zoneRide), 4);
+        expect(store.viewOf(result.deck).zoneCount(zoneMain), 8);
+      });
+
+      test('a G zone alongside it is not mistaken for one', () async {
+        final (store, result) = await importOf(
+          payload(
+            list: mainDeck,
+            pList: rideDeck,
+            subList: [entry('Chronojet Dragon', 16, 'DZ-BT06/EX03EN')],
+          ),
+        );
+        final view = store.viewOf(result.deck);
+        expect(view.zoneCount(zoneRide), 4);
+        expect(view.zoneCount(zoneG), 16);
+        expect(view.zoneCount(zoneMain), 8);
+      });
+
+      test('the main deck is never taken for the ride deck', () async {
+        final (store, result) = await importOf(payload(list: mainDeck));
+        expect(store.viewOf(result.deck).zoneCount(zoneRide), 0);
+        expect(store.viewOf(result.deck).zoneCount(zoneMain), 8);
+      });
+
+      test('a section holding two of a grade is not a ride deck', () async {
+        // Four one-ofs, but two grade 3s: that is a trimmed main deck, not a
+        // ride deck, and guessing wrong is what this whole path is avoiding.
+        final (store, result) = await importOf(
+          payload(
+            list: mainDeck,
+            pList: [
+              entry('Lizard Soldier, Conroe', 1, 'D-BT01/031EN'),
+              entry('Dragonic Overlord', 1, 'D-BT02/001EN'),
+              entry('Dragonic Overlord', 1, 'D-BT02/001EN'),
+            ],
+          ),
+        );
+        expect(store.viewOf(result.deck).zoneCount(zoneRide), 0);
+        expect(result.rideDeckFound, isFalse);
+      });
+
+      test('a single flat list is left alone and reported', () async {
+        final (store, result) = await importOf(
+          payload(list: [...mainDeck, ...rideDeck]),
+        );
+        expect(result.rideDeckFound, isFalse);
+        expect(store.viewOf(result.deck).zoneCount(zoneRide), 0);
+        expect(
+          store.viewOf(result.deck).zoneCount(zoneMain),
+          12,
+          reason: 'nothing is dropped, even when the ride deck cannot be told',
+        );
+      });
+
+      test('the counts say where every card went', () async {
+        final (_, result) = await importOf(
+          payload(list: mainDeck, pList: rideDeck),
+        );
+        expect(result.zoneCounts, {zoneMain: 8, zoneRide: 4});
+      });
+
+      test('a ride deck of cards the database does not know', () async {
+        // Nothing to read a grade off, so the shape alone has to carry it.
+        final (store, result) = await importOf(
+          payload(
+            list: mainDeck,
+            pList: [
+              entry('Unknown Zero', 1, 'DZ-BT99/010EN'),
+              entry('Unknown One', 1, 'DZ-BT99/011EN'),
+              entry('Unknown Two', 1, 'DZ-BT99/012EN'),
+              entry('Unknown Three', 1, 'DZ-BT99/013EN'),
+            ],
+          ),
+        );
+        expect(store.viewOf(result.deck).zoneCount(zoneRide), 4);
+      });
     });
 
     test('a G unit lands in the G zone whatever list it came from', () async {

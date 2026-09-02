@@ -23,7 +23,8 @@ String _payload({String gameTitleId = '1', String? deckName}) => jsonEncode({
     {'name': 'Dragonic Overlord', 'num': 4, 'card_number': 'D-BT02/001EN'},
     {'name': 'Card From Next Week', 'num': 2},
   ],
-  'sub_list': [
+  // The ride deck, in the section Deck Log actually files it under.
+  'p_list': [
     {'name': 'Lizard Soldier, Conroe', 'num': 1, 'card_number': 'D-BT01/031EN'},
   ],
 });
@@ -100,6 +101,9 @@ void main() {
     expect(find.textContaining('7 cards imported'), findsOneWidget);
     expect(find.textContaining('1 card not in the database'), findsOneWidget);
     expect(find.textContaining('Card From Next Week'), findsOneWidget);
+    // The breakdown makes a zone that came out wrong visible straight away.
+    expect(find.textContaining('6 in the Main Deck'), findsOneWidget);
+    expect(find.textContaining('1 in the Ride Deck'), findsOneWidget);
   });
 
   testWidgets('a deck for another Bushiroad game is refused', (tester) async {
@@ -148,6 +152,31 @@ void main() {
 
     expect(find.textContaining('not a Deck Log link'), findsOneWidget);
     expect(store.decks, isEmpty);
+  });
+
+  testWidgets('a deck with no separable ride deck says so', (tester) async {
+    // One flat list: the ride deck cannot be told from the main deck, and the
+    // screen has to say that rather than leave the user to notice.
+    final flat = jsonEncode({
+      'game_title_id': '1',
+      'list': [
+        {'name': 'Dragonic Overlord', 'num': 4, 'card_number': 'D-BT02/001EN'},
+        {
+          'name': 'Lizard Soldier, Conroe',
+          'num': 1,
+          'card_number': 'D-BT01/031EN',
+        },
+      ],
+    });
+    final store = await pumpScreen(tester, fetch: (_) async => flat);
+
+    await tester.enterText(find.byType(TextField).first, '7K3X');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Import deck'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('single list'), findsOneWidget);
+    expect(store.viewOf(store.decks.single).zoneCount(zoneMain), 5);
   });
 
   testWidgets('a pasted payload works when the request cannot be made', (

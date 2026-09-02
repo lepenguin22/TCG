@@ -5,6 +5,9 @@ import '../import/decklog.dart';
 import '../models/deck.dart';
 import 'deck_store.dart';
 
+/// A ride deck is four units, one of each grade 0-3, plus at most one crest.
+const _rideDeckLimit = 5;
+
 /// What an import produced, so the user can be told what came across and what
 /// did not rather than being handed a deck that quietly lost cards.
 class DecklogImportResult {
@@ -13,6 +16,8 @@ class DecklogImportResult {
     required this.matched,
     required this.cardsAdded,
     required this.unmatched,
+    required this.zoneCounts,
+    required this.rideDeckFound,
   });
 
   final Deck deck;
@@ -26,20 +31,85 @@ class DecklogImportResult {
   /// Names of cards the database did not recognise. They are still added, from
   /// the name and count Deck Log gave, so the deck is never silently short.
   final List<String> unmatched;
+
+  /// How many cards landed in each zone, so the import can show where the deck
+  /// went instead of leaving the user to find out on the deck screen.
+  final Map<String, int> zoneCounts;
+
+  /// Whether a ride deck could be picked out of the payload's sections.
+  final bool rideDeckFound;
 }
 
-/// Which zone a Deck Log card belongs in.
-///
-/// Deck Log keeps its sections apart, so the list a card came from is evidence
-/// rather than a guess. What the card *is* still wins where the two disagree: a
-/// G unit can only live in the G zone and a ride deck crest only in the ride
-/// deck, whichever list Deck Log filed them under.
-String _zoneFor(DecklogCard card, CatalogCard? match) {
+/// The zone a card belongs in by virtue of what it is, whatever section of the
+/// payload it arrived in. A G unit is only ever legal in the G zone and a ride
+/// deck crest only in the ride deck, so neither needs the payload's help.
+String? _zoneFromCard(CatalogCard? match) {
   final type = match?.attributes['cardType'];
-  final grade = match?.attributes['grade'];
   if (type == 'ride-deck-crest') return zoneRide;
-  if (type == 'g-unit' || grade == '4') return zoneG;
-  return card.source == DecklogList.sub ? zoneRide : zoneMain;
+  if (type == 'g-unit' || match?.attributes['grade'] == '4') return zoneG;
+  return null;
+}
+
+/// Works out which section of the payload holds the ride deck.
+///
+/// Deck Log serves every game it hosts through one endpoint, and its sections
+/// are named `list`, `sub_list` and `p_list` rather than after what they hold.
+/// Nothing in the payload says which is a Vanguard ride deck, and reading the
+/// names the wrong way round is exactly how ride decks ended up in the main
+/// deck, so the names are not consulted at all.
+///
+/// The shape decides instead, and a ride deck is unmistakable: a handful of
+/// cards, one copy of each, no two of the same grade and nothing above grade 3.
+/// A fifty card main deck cannot be mistaken for that, and neither can a G
+/// zone. Whichever section fits best is the ride deck.
+String? _rideDeckSection(
+  List<DecklogCard> cards,
+  Map<DecklogCard, CatalogCard?> matches,
+) {
+  // Cards that place themselves say nothing about what their section is for.
+  final sections = <String, List<DecklogCard>>{};
+  for (final card in cards) {
+    if (_zoneFromCard(matches[card]) != null) continue;
+    sections.putIfAbsent(card.section, () => []).add(card);
+  }
+
+  // One section is a flat list of the whole deck. There is nothing to compare
+  // it against, and peeling a ride deck out of it would be guesswork.
+  if (sections.length < 2) return null;
+
+  int total(List<DecklogCard> group) =>
+      group.fold(0, (sum, card) => sum + card.quantity);
+
+  // The largest section is the main deck, whatever it happens to be called.
+  final mainSection = sections.entries
+      .reduce((a, b) => total(b.value) > total(a.value) ? b : a)
+      .key;
+
+  String? best;
+  var bestGrades = -1;
+  for (final entry in sections.entries) {
+    if (entry.key == mainSection) continue;
+    final group = entry.value;
+    if (total(group) > _rideDeckLimit) continue;
+    if (group.any((card) => card.quantity != 1)) continue;
+
+    // A card the database does not know raises no objection: an unreadable
+    // grade is not evidence against, only the absence of evidence for.
+    final grades = <int>{};
+    var ruledOut = false;
+    for (final card in group) {
+      final grade = int.tryParse(matches[card]?.attributes['grade'] ?? '');
+      if (grade == null) continue;
+      if (grade > 3 || !grades.add(grade)) ruledOut = true;
+    }
+    if (ruledOut) continue;
+
+    if (grades.length > bestGrades) {
+      bestGrades = grades.length;
+      best = entry.key;
+    }
+  }
+  return best;
 }
 
 /// Builds a deck in the library from a Deck Log payload.
@@ -71,6 +141,18 @@ Future<DecklogImportResult> importDecklogDeck(
     byName.putIfAbsent(entry.lowerName, () => entry);
   }
 
+  // Match everything first: the ride deck can only be picked out once the
+  // grades are known.
+  final matches = <DecklogCard, CatalogCard?>{
+    for (final card in source.cards)
+      card:
+          (card.cardNumber?.trim().isNotEmpty == true
+              ? byNumber[card.cardNumber!.trim().toLowerCase()]
+              : null) ??
+          byName[card.name.trim().toLowerCase()],
+  };
+  final rideSection = _rideDeckSection(source.cards, matches);
+
   final deck = store.createDeck(
     name: name?.trim().isNotEmpty == true
         ? name!.trim()
@@ -83,13 +165,10 @@ Future<DecklogImportResult> importDecklogDeck(
   var matched = 0;
   var cardsAdded = 0;
   final unmatched = <String>[];
+  final zoneCounts = <String, int>{};
 
   for (final card in source.cards) {
-    final number = card.cardNumber?.trim().toLowerCase();
-    final match =
-        (number != null && number.isNotEmpty ? byNumber[number] : null) ??
-        byName[card.name.trim().toLowerCase()];
-
+    final match = matches[card];
     if (match != null) {
       matched += 1;
     } else {
@@ -108,13 +187,12 @@ Future<DecklogImportResult> importDecklogDeck(
       name: match?.name ?? card.name,
       attributes: attributes,
     );
-    store.addToDeck(
-      deck.id,
-      libraryCard.id,
-      _zoneFor(card, match),
-      quantity: card.quantity,
-    );
+    final zone =
+        _zoneFromCard(match) ??
+        (card.section == rideSection ? zoneRide : zoneMain);
+    store.addToDeck(deck.id, libraryCard.id, zone, quantity: card.quantity);
     cardsAdded += card.quantity;
+    zoneCounts[zone] = (zoneCounts[zone] ?? 0) + card.quantity;
   }
 
   return DecklogImportResult(
@@ -122,5 +200,7 @@ Future<DecklogImportResult> importDecklogDeck(
     matched: matched,
     cardsAdded: cardsAdded,
     unmatched: unmatched,
+    zoneCounts: zoneCounts,
+    rideDeckFound: rideSection != null,
   );
 }

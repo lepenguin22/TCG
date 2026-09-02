@@ -137,9 +137,19 @@ database does not know is still imported, with the name and count Deck Log gave,
 and the import screen lists what it could not match rather than quietly leaving
 the deck short.
 
-Zones come from Deck Log's own sections, except where the card itself decides:
-a G unit can only be in the G zone and a ride deck crest only in the ride deck,
-whichever list they arrived in.
+Zones are worked out from the cards, not from what Deck Log calls its sections.
+It serves every game it hosts through one endpoint, so the sections are named
+`list`, `sub_list` and `p_list` rather than after what they hold, and nothing
+in the payload says which one is a Vanguard ride deck. Instead a G unit goes to
+the G zone and a ride deck crest to the ride deck on their own account, and the
+ride deck section is recognised by its shape: a handful of cards, one copy of
+each, no two of the same grade and nothing above grade 3. A fifty card main
+deck cannot be mistaken for that, and neither can a G zone. If a deck arrives
+as one flat list, everything stays in the main deck and the import says so
+rather than splitting it on a guess.
+
+The import screen shows how many cards landed in each zone, so a deck that came
+out in the wrong place is visible immediately.
 
 If the request is ever refused, the endpoint can be opened in a browser and its
 JSON pasted into the same box — it is read the same way.

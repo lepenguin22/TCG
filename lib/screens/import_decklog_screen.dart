@@ -237,6 +237,39 @@ class _Summary extends StatelessWidget {
           '${result.matched} matched to the card database.',
           style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
         ),
+        const SizedBox(height: 14),
+        // Where the cards landed, so a zone that came out wrong is visible
+        // here rather than being discovered later on the deck screen.
+        for (final zone in gameById(result.deck.gameId).zones)
+          if ((result.zoneCounts[zone.id] ?? 0) > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '${result.zoneCounts[zone.id]} in the ${zone.name}',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
+        if (!result.rideDeckFound &&
+            (result.zoneCounts[zoneRide] ?? 0) == 0 &&
+            gameById(result.deck.gameId)
+                .format(result.deck.formatId)
+                .zoneIds
+                .contains(zoneRide)) ...[
+          const SizedBox(height: 14),
+          const Text(
+            'Deck Log sent this deck as a single list, so there was no ride '
+            'deck to separate out. Move the ride deck\'s four units across on '
+            'the deck screen.',
+            style: TextStyle(
+              color: AppColors.warning,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
         if (result.unmatched.isNotEmpty) ...[
           const SizedBox(height: 20),
           Container(
