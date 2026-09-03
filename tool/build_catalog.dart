@@ -59,7 +59,24 @@ const _nations = <String, String>{
 /// Bushiroad has published several D-branded collections of older cards for
 /// V Premium and Premium. Their product names say so, and the card numbers
 /// do not.
-String? _seriesOf(String number, [String setName = '', String? nation]) {
+String? _seriesOf(
+  String number, [
+  String setName = '',
+  String? nation,
+  String format = '',
+]) {
+  // The official card list states the format outright, which beats every
+  // inference below: a D-numbered set can be a collection of older cards for
+  // Premium, and the card itself says so.
+  switch (format) {
+    case 'Standard':
+      return 'd';
+    case 'V Premium':
+      return 'v';
+    case 'Premium':
+      return 'p';
+  }
+
   // These D-branded products are collections of older cards, and every card in
   // them carries a clan rather than one of the D-series nations. Note that the
   // Stride Decksets are NOT among them: those are D-series products that bring
@@ -259,7 +276,12 @@ void main() async {
       final number = raw['number'] as String? ?? '';
       final source = (raw['clan'] as String? ?? '').trim();
       final nation = _nations[source];
-      final series = _seriesOf(number, setName, nation);
+      final series = _seriesOf(
+        number,
+        setName,
+        nation,
+        raw['format'] as String? ?? '',
+      );
       if (series != null) {
         seriesByName.putIfAbsent(key, () => <String>{}).add(series);
         if (nation == null && source.isNotEmpty && source != '-') {

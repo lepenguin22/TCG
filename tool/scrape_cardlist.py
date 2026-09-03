@@ -16,6 +16,7 @@ Run from CI, where the site is reachable:
 from __future__ import annotations
 
 import argparse
+import collections
 import gzip
 import io
 import json
@@ -173,11 +174,13 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
 
     # The format line, identified by the card's own number following it.
     end_at = -1
+    card_format = ""
     for index, line in enumerate(block[:-1]):
         if re.fullmatch(r"Standard|Premium|V Premium", line) and (
             block[index + 1] == number
         ):
             end_at = index
+            card_format = line
             break
     if end_at < 2:
         return {}
@@ -238,6 +241,10 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
         "shield": values.get("shield", ""),
         "critical": values.get("critical", ""),
         "trigger": trigger,
+        # The format the site says the card is legal in. Worth far more than
+        # guessing an era from the card number: a D-numbered set can be a
+        # collection of older cards for Premium, and this says so outright.
+        "format": card_format,
         "productName": product,
     }
 
@@ -322,7 +329,8 @@ def main() -> int:
     everything = [
         card for entry in sets.values() for card in entry["cards"]  # type: ignore[index]
     ]
-    for field in ("name", "type", "grade", "clan", "effect", "image_url"):
+    print("formats:", collections.Counter(c.get("format") for c in everything))
+    for field in ("name", "type", "clan", "image_url", "format"):
         missing = [c for c in everything if not c.get(field)]
         print(f"  without {field}: {len(missing)}  {[c['number'] for c in missing][:5]}")
     if everything:
