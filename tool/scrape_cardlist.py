@@ -30,7 +30,10 @@ import urllib.request
 
 SITE = "https://en.cf-vanguard.com"
 INDEX = f"{SITE}/cardlist/"
-OUT = pathlib.Path("assets/cards/extra_sets.json")
+# Deliberately not under assets/: pubspec bundles that whole directory into
+# the app, and this is the scraper's working data, read by the generator and
+# never by the app itself.
+OUT = pathlib.Path("data/cardlist/extra_sets.json")
 
 HEADERS = {
     "User-Agent": (

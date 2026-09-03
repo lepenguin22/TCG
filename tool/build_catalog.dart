@@ -147,7 +147,7 @@ const _cardTypes = <String, String>{
 
 /// Sets read from the official card list, which the mirror does not have.
 Future<List<({String name, List<dynamic> cards})>> _readExtraSets() async {
-  final file = File('assets/cards/extra_sets.json');
+  final file = File('data/cardlist/extra_sets.json');
   if (!file.existsSync()) return const [];
   final decoded = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
   return [
