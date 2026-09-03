@@ -1,4 +1,5 @@
-# A diagnostic, not part of the build. Removed once the scraper is written.
+# Iterating on the scraper: the site is unreachable from where it is written,
+# so a runner tries it and the log is the feedback. Removed once it is proven.
 name: Probe card list
 
 on:
@@ -9,4 +10,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 tool/probe_cardlist.py
+      - name: Read one recent set
+        run: python3 tool/scrape_cardlist.py --expansion 257 --limit 12
