@@ -73,7 +73,7 @@ def main() -> None:
     print("\n=== THE CARD'S OWN PAGE (text only) ===")
     text = strip_tags(detail)
     where = text.find("DZ-BT15/002EN")
-    print(text[max(0, where - 300) : where + 1200])
+    print(text[max(0, where - 2600) : where + 200])
 
 
 if __name__ == "__main__":
