@@ -1,0 +1,12 @@
+# A diagnostic, not part of the build. Removed once the scraper is written.
+name: Probe card list
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tool/probe_cardlist.py
