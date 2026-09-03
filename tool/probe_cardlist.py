@@ -46,43 +46,47 @@ def get(url: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
 
 
 def main() -> None:
-    root = "https://en.cf-vanguard.com/cardlist/"
+    latest = "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=257"
 
-    print("=== does a browser User-Agent change the answer?")
-    for label, headers in (("bare", None), ("browser", BROWSER)):
-        status, body = get(root, headers)
-        print(f"    {label:8} http={status} bytes={len(body)}")
+    print("=== how many cards does a set page render, and is there more?")
+    status, body = get(latest, BROWSER)
+    numbers = sorted(set(re.findall(r"DZ-BT15/\d+EN", body)))
+    print(f"    http={status} bytes={len(body)} distinct numbers={len(numbers)}")
+    print(f"    {numbers[:3]} ... {numbers[-3:]}")
 
-    status, body = get(root, BROWSER)
-    if status != 200:
-        print("    still refused; nothing more to learn here")
-        return
+    print("\n=== pagination hints")
+    for pattern in (
+        r'page=\d+', r'"[^"]*page[^"]*"', r'data-[a-z-]+="[^"]{0,60}"',
+    ):
+        found = sorted(set(re.findall(pattern, body)))[:10]
+        print(f"    {pattern}: {found}")
 
-    print("\n=== what does the card list link to?")
-    for pattern in (r'expansion=\d+', r'cardsearch[^"\']*', r'/cardlist/[^"\']*'):
-        found = sorted(set(re.findall(pattern, body)))
-        print(f"    {pattern}: {len(found)} distinct")
-        for item in found[:8]:
-            print(f"      {item}")
+    print("\n=== scripts and anything endpoint shaped")
+    for hint in sorted(set(re.findall(r'(?:src|href)="([^"]*\.js[^"]*)"', body))):
+        print(f"    script: {hint}")
+    for hint in sorted(set(re.findall(r'["\'](/[^"\']*(?:ajax|api|json|php)[^"\']*)["\']', body)))[:15]:
+        print(f"    path: {hint}")
 
-    print("\n=== the highest expansion numbers offered")
-    numbers = sorted({int(n) for n in re.findall(r'expansion=(\d+)', body)})
-    print(f"    {len(numbers)} expansions, highest: {numbers[-12:]}")
-
-    print("\n=== does a set page carry its cards without JavaScript?")
-    for number in numbers[-3:]:
-        url = f"https://en.cf-vanguard.com/cardlist/cardsearch/?expansion={number}"
-        status, page = get(url, BROWSER)
-        title = re.search(r"<title>([^<]*)</title>", page)
-        cards = sorted(set(re.findall(r"[A-Z]{1,3}Z?-[A-Z]{2,4}\d+/\d+[A-Z]*", page)))
+    print("\n=== try asking for a later page")
+    for extra in ("&page=2", "&p=2", "&offset=20"):
+        status, page = get(latest + extra, BROWSER)
+        found = sorted(set(re.findall(r"DZ-BT15/\d+EN", page)))
+        overlap = set(found) & set(numbers)
         print(
-            f"    expansion={number} http={status} bytes={len(page)} "
-            f"title={title.group(1).strip() if title else '?'}"
+            f"    {extra:10} http={status} numbers={len(found)} "
+            f"new={len(set(found) - set(numbers))}"
         )
-        print(f"      card numbers in raw html: {len(cards)} {cards[:5]}")
-        if not cards:
-            for hint in re.findall(r'(?:src|href)="([^"]*\.(?:js|json)[^"]*)"', page)[:6]:
-                print(f"      script: {hint}")
+
+    print("\n=== does a single card page carry its details?")
+    card = "https://en.cf-vanguard.com/cardlist/?cardno=DZ-BT15/001EN&view=text"
+    status, page = get(card, BROWSER)
+    print(f"    http={status} bytes={len(page)}")
+    text = re.sub(r"<[^>]+>", " ", page)
+    text = re.sub(r"\s+", " ", text)
+    for label in ("Grade", "Power", "Shield", "Nation", "Card Type", "Trigger"):
+        found = re.search(rf"{label}[^A-Za-z0-9]{{0,8}}([^ ]{{0,40}})", text)
+        print(f"    {label}: {found.group(1) if found else 'not found'}")
+    print(f"    excerpt: {text[:400]}")
 
 
 if __name__ == "__main__":
