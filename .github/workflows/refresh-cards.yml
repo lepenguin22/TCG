@@ -11,6 +11,14 @@ name: Refresh card database
 # community mirror of it stop dead at DZ-BT09 and take the database with it.
 on:
   workflow_dispatch:
+    inputs:
+      expansions:
+        description: >-
+          Specific expansion numbers to read, space separated. Leave empty to
+          read everything the mirror does not have. Use this to pick up a set
+          the mirror numbered differently, or to re-read one after an errata.
+        required: false
+        default: ''
   schedule:
     # 04:00 UTC on the 1st of each month.
     - cron: '0 4 1 * *'
@@ -34,7 +42,17 @@ jobs:
       - run: flutter pub get
 
       - name: Read any sets the catalog does not have
-        run: python3 tool/scrape_cardlist.py --from-expansion 243
+        run: |
+          if [ -n "${{ inputs.expansions }}" ]; then
+            args=""
+            for n in ${{ inputs.expansions }}; do
+              args="$args --expansion $n"
+            done
+            echo "reading only:$args"
+            python3 tool/scrape_cardlist.py $args
+          else
+            python3 tool/scrape_cardlist.py --from-expansion 243
+          fi
 
       - name: Rebuild the catalog
         run: dart run tool/build_catalog.dart
