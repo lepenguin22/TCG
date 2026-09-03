@@ -98,6 +98,12 @@ Map<String, Object> entry(String name, int num, [String? number]) => {
   'card_number': ?number,
 };
 
+/// The deck codes in some text, without their sites, for the cases where only
+/// the codes are under test.
+List<String> codesIn(String input) => [
+  for (final code in decklogCodesFrom(input)) code.code,
+];
+
 Future<DeckStore> loadedStore() async {
   final store = DeckStore();
   await store.load();
@@ -110,23 +116,26 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('reading a deck code out of what was pasted', () {
-    test('a full share link', () {
+    test('a full share link, remembering which site it names', () {
       expect(
         decklogCodeFrom('https://decklog-en.bushiroad.com/view/7K3X'),
-        '7K3X',
+        const DecklogCode('7K3X', host: decklogEnHost),
       );
     });
 
-    test('the Japanese host', () {
-      expect(
-        decklogCodeFrom('https://decklog.bushiroad.com/view/1TXGS'),
-        '1TXGS',
-      );
+    test('the Japanese site', () {
+      // The two sites share a code space, so which one a code belongs to has
+      // to travel with it: asking the wrong site returns nothing.
+      final code = decklogCodeFrom('https://decklog.bushiroad.com/view/19RVZ6');
+      expect(code, const DecklogCode('19RVZ6', host: decklogJpHost));
+      expect(code!.isJapanese, isTrue);
+      expect(code.hosts, [decklogJpHost]);
     });
 
     test('a link with a locale segment and a query string', () {
       expect(
-        decklogCodeFrom('https://decklog-en.bushiroad.com/en/view/ABC123?x=1'),
+        decklogCodeFrom('https://decklog-en.bushiroad.com/en/view/ABC123?x=1')
+            ?.code,
         'ABC123',
       );
     });
@@ -135,13 +144,16 @@ void main() {
       expect(
         decklogCodeFrom(
           'Check my deck! https://decklog-en.bushiroad.com/view/7RD6E',
-        ),
+        )?.code,
         '7RD6E',
       );
     });
 
-    test('a bare deck code', () {
-      expect(decklogCodeFrom('  CQMN '), 'CQMN');
+    test('a bare deck code belongs to neither site, so both are tried', () {
+      final code = decklogCodeFrom('  CQMN ');
+      expect(code?.code, 'CQMN');
+      expect(code?.host, isNull);
+      expect(code?.hosts, [decklogEnHost, decklogJpHost]);
     });
 
     test('nonsense is rejected rather than guessed at', () {
@@ -154,7 +166,7 @@ void main() {
   group('reading several deck codes at once', () {
     test('one link per line', () {
       expect(
-        decklogCodesFrom(
+        codesIn(
           'https://decklog-en.bushiroad.com/view/AAA1\n'
           'https://decklog-en.bushiroad.com/view/BBB2',
         ),
@@ -164,16 +176,14 @@ void main() {
 
     test('links and bare codes mixed together', () {
       expect(
-        decklogCodesFrom(
-          'https://decklog-en.bushiroad.com/view/AAA1\nBBB2\nCCC3',
-        ),
+        codesIn('https://decklog-en.bushiroad.com/view/AAA1\nBBB2\nCCC3'),
         ['AAA1', 'BBB2', 'CCC3'],
       );
     });
 
     test('several links run together in one message', () {
       expect(
-        decklogCodesFrom(
+        codesIn(
           'my decks: https://decklog-en.bushiroad.com/view/AAA1 and '
           'https://decklog-en.bushiroad.com/view/BBB2 enjoy',
         ),
@@ -182,12 +192,12 @@ void main() {
     });
 
     test('a comma separated list of codes', () {
-      expect(decklogCodesFrom('AAA1, BBB2, CCC3'), ['AAA1', 'BBB2', 'CCC3']);
+      expect(codesIn('AAA1, BBB2, CCC3'), ['AAA1', 'BBB2', 'CCC3']);
     });
 
     test('duplicates are dropped so a deck imports once', () {
       expect(
-        decklogCodesFrom(
+        codesIn(
           'https://decklog-en.bushiroad.com/view/AAA1\n'
           'https://decklog-en.bushiroad.com/view/AAA1\n'
           'aaa1',
@@ -206,11 +216,133 @@ void main() {
 
     test('a link and the text around it yields only the code', () {
       expect(
-        decklogCodesFrom(
-          'Check my deck! https://decklog-en.bushiroad.com/view/7RD6E',
-        ),
+        codesIn('Check my deck! https://decklog-en.bushiroad.com/view/7RD6E'),
         ['7RD6E'],
       );
+    });
+  });
+
+  group('importing from the Japanese site', () {
+    // The game is Japanese, so decks are often shared from decklog.bushiroad
+    // .com. Its cards come back with Japanese names, which the English card
+    // database cannot match -- but the card numbers are the same apart from
+    // the EN the English printings carry, so the number bridges the two.
+
+    test('a Japanese number finds the English card', () {
+      expect(decklogNumberKey('D-BT02/001'), decklogNumberKey('D-BT02/001EN'));
+      expect(decklogNumberKey('DZ-BT06/EX03'), 'dz-bt06/ex03');
+    });
+
+    test('an English variant marker survives the trip', () {
+      expect(decklogNumberKey('EB10/021EN-W'), 'eb10/021-w');
+      expect(decklogNumberKey('G-CB04/001EN SGR'), 'g-cb04/001 sgr');
+    });
+
+    test('the looser key drops the variant marker', () {
+      expect(decklogLooseNumberKey('EB10/021EN-W'), 'eb10/021');
+      expect(decklogLooseNumberKey('G-CB04/001EN SGR'), 'g-cb04/001');
+      // A promo whose letter is part of the number keeps it: BSF2025/01A and
+      // /01B are two different cards.
+      expect(decklogLooseNumberKey('BSF2025/01B'), 'bsf2025/01b');
+    });
+
+    test('a Japanese deck comes across in English', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(
+            deckName: 'ドラゴニックオーバーロード',
+            list: [
+              // Japanese names, and numbers without the EN.
+              entry('ドラゴニック・オーバーロード', 4, 'D-BT02/001'),
+              entry('鎧の化身 バール', 4, 'D-BT01/030'),
+            ],
+            pList: [entry('リザードソルジャー コンロー', 1, 'D-BT01/031')],
+          ),
+          code: '19RVZ6',
+        ),
+      );
+
+      expect(result.matched, 3, reason: 'matched on number, not name');
+      expect(result.unmatched, isEmpty);
+      final view = store.viewOf(result.deck);
+      expect(
+        view.items.map((item) => item.card.name),
+        containsAll([
+          'Dragonic Overlord',
+          'Embodiment of Armor, Bahr',
+          'Lizard Soldier, Conroe',
+        ]),
+        reason: 'the English name is what gets stored',
+      );
+      // And the rest of the import still works: zones, grades, rules.
+      expect(view.zoneCount(zoneRide), 1);
+      expect(view.zoneCount(zoneMain), 8);
+      expect(
+        view.items.first.card.attributes['series'],
+        isNotNull,
+        reason: 'a matched card arrives fully filled in',
+      );
+    });
+
+    test('the deck keeps the name its owner gave it', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(
+            deckName: 'オーバーロード軸',
+            list: [entry('ドラゴニック・オーバーロード', 4, 'D-BT02/001')],
+          ),
+          code: '19RVZ6',
+        ),
+      );
+      expect(result.deck.name, 'オーバーロード軸');
+    });
+
+    test('a card with no English printing keeps its Japanese name', () async {
+      // Japanese sets run ahead of English ones, so this is normal rather
+      // than exceptional, and the deck must not come out short because of it.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(list: [entry('未発売のカード', 4, 'DZ-BT99/001')]),
+          code: '19RVZ6',
+        ),
+      );
+      expect(result.unmatched, ['未発売のカード']);
+      expect(result.cardsAdded, 4);
+      expect(store.viewOf(result.deck).zoneCount(zoneMain), 4);
+    });
+
+    test('a Japanese link is fetched from the Japanese site', () async {
+      final asked = <String>[];
+      await loadDecklogBatch(
+        'https://decklog.bushiroad.com/view/19RVZ6',
+        fetch: (ref) async {
+          asked.addAll(ref.hosts);
+          return payload(list: [entry('Dragonic Overlord', 4)]);
+        },
+      );
+      expect(asked, [decklogJpHost]);
+    });
+
+    test('an English and a Japanese deck import side by side', () async {
+      final loads = await loadDecklogBatch(
+        'https://decklog-en.bushiroad.com/view/7K3X\n'
+        'https://decklog.bushiroad.com/view/19RVZ6',
+        fetch: (ref) async =>
+            payload(list: [entry('Dragonic Overlord', 4, 'D-BT02/001EN')]),
+      );
+      expect(loads.map((load) => load.deck?.code), ['7K3X', '19RVZ6']);
     });
   });
 
@@ -284,8 +416,8 @@ void main() {
       final requested = <String>[];
       final loads = await loadDecklogBatch(
         'AAA1\nBBB2',
-        fetch: (code) async {
-          requested.add(code);
+        fetch: (ref) async {
+          requested.add(ref.code);
           return payload(list: [entry('Dragonic Overlord', 4)]);
         },
       );
@@ -296,8 +428,8 @@ void main() {
     test('a failure is reported against its code, not thrown', () async {
       final loads = await loadDecklogBatch(
         'AAA1\nBAD2',
-        fetch: (code) async {
-          if (code == 'BAD2') throw const DecklogException('Nope.');
+        fetch: (ref) async {
+          if (ref.code == 'BAD2') throw const DecklogException('Nope.');
           return payload(list: [entry('Dragonic Overlord', 4)]);
         },
       );
@@ -395,8 +527,8 @@ void main() {
       var requested = '';
       final deck = await loadDecklog(
         'https://decklog-en.bushiroad.com/view/7K3X',
-        fetch: (code) async {
-          requested = code;
+        fetch: (ref) async {
+          requested = ref.code;
           return payload(list: [entry('Dragonic Overlord', 4)]);
         },
       );

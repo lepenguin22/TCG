@@ -155,9 +155,14 @@ dropping them.
 
 [Deck Log](https://decklog-en.bushiroad.com/) is Bushiroad's official deck
 site, reached through Fighter Navigator. A shared deck lives at
-`decklog-en.bushiroad.com/view/<CODE>`; the page is a script driven app fed by a
+`decklog-en.bushiroad.com/view/<CODE>`, or on the Japanese site at
+`decklog.bushiroad.com/view/<CODE>`; the page is a script driven app fed by a
 JSON endpoint that takes the same code, and that endpoint is what the app reads
 — one request per import, with the same headers the site's own page sends.
+
+**Both sites work.** They share a code space but not their decks, so a link's
+site travels with its code and only that site is asked; a bare code with no
+site to go on tries the English one and then the Japanese one.
 
 Paste a link, a link with text around it, or the bare code. Paste several, one
 per line, and they all come across in one go — fetched one at a time, in order,
@@ -166,7 +171,18 @@ rest: it is reported on its own and the other decks still land.
 
 Cards are matched to the bundled database by card number first and name second,
 so an imported deck arrives with grades, triggers, abilities and images filled
-in. A card the database does not know is still imported, with the name and count
+in.
+
+Matching by number first is what makes a Japanese deck work. Its cards come back
+with Japanese names the English database cannot match, but the two releases of a
+set number their cards identically apart from the `EN` the English printings
+carry — `D-BT02/001` and `D-BT02/001EN` are the same card — so dropping that
+marker bridges the languages and the deck arrives in English. Where an English
+printing adds a variant marker (`EB10/021EN-W`, `G-CB04/001EN SGR`) a second,
+looser key drops that too, and is used only where it picks out a single card.
+Both keys are checked against the whole database for collisions by a test.
+A Japanese card with no English printing yet keeps its Japanese name and is
+still imported, so a deck ahead of the English releases is never short. A card the database does not know is still imported, with the name and count
 Deck Log gave, and the import screen lists what it could not match rather than
 quietly leaving the deck short.
 

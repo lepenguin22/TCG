@@ -64,7 +64,9 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
               'Deck Log is Bushiroad\'s official deck site, reached through '
               'Fighter Navigator. Open your deck there, share it, and paste '
               'the link or the deck code here. Paste several, one per line, to '
-              'import them all at once.',
+              'import them all at once. Links from the Japanese site work too: '
+              'its cards are matched by card number, so the deck arrives in '
+              'English.',
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 14,
@@ -75,8 +77,8 @@ class _ImportDecklogScreenState extends State<ImportDecklogScreen> {
             LabeledField(
               label: 'Deck Log links or codes',
               helper:
-                  'For example decklog-en.bushiroad.com/view/ABC123, or just '
-                  'ABC123. One per line for several decks.',
+                  'From decklog-en.bushiroad.com or decklog.bushiroad.com, or '
+                  'just the code. One per line for several decks.',
               child: TextField(
                 controller: _controller,
                 autofocus: true,

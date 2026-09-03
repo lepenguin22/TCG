@@ -93,8 +93,8 @@ void main() {
   testWidgets('pasting a link imports the deck', (tester) async {
     final store = await pumpScreen(
       tester,
-      fetch: (code) async {
-        expect(code, '7K3X');
+      fetch: (ref) async {
+        expect(ref.code, '7K3X');
         return _payload(deckName: 'Overlord Turbo');
       },
     );
@@ -127,9 +127,9 @@ void main() {
     final requested = <String>[];
     final store = await pumpScreen(
       tester,
-      fetch: (code) async {
-        requested.add(code);
-        return _payload(deckName: 'Deck $code');
+      fetch: (ref) async {
+        requested.add(ref.code);
+        return _payload(deckName: 'Deck ${ref.code}');
       },
     );
 
@@ -171,11 +171,11 @@ void main() {
   testWidgets('one bad code does not cost the others', (tester) async {
     final store = await pumpScreen(
       tester,
-      fetch: (code) async {
-        if (code == 'BAD2') {
+      fetch: (ref) async {
+        if (ref.code == 'BAD2') {
           throw const DecklogException('That deck is not shared publicly.');
         }
-        return _payload(deckName: 'Deck $code');
+        return _payload(deckName: 'Deck ${ref.code}');
       },
     );
 
@@ -215,7 +215,7 @@ void main() {
   ) async {
     final store = await pumpScreen(
       tester,
-      fetch: (code) async => _payload(deckName: 'Deck $code'),
+      fetch: (ref) async => _payload(deckName: 'Deck ${ref.code}'),
     );
 
     await tester.enterText(find.byType(TextField).first, 'AAA1');

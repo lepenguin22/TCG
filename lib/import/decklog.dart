@@ -1,9 +1,15 @@
 /// A client for Bushiroad's Deck Log, the official deck sharing site also
 /// reached through Fighter Navigator.
 ///
-/// A shared deck lives at `https://decklog-en.bushiroad.com/view/<CODE>`. The
+/// A shared deck lives at `https://decklog-en.bushiroad.com/view/<CODE>`, or
+/// on the Japanese site at `https://decklog.bushiroad.com/view/<CODE>`. The
 /// page itself is a script driven app, but it is fed by a JSON endpoint that
 /// takes the same code, and that is what this reads.
+///
+/// Both sites are supported. A Japanese deck's cards come back with Japanese
+/// names, which the English card database cannot match -- but the two releases
+/// of a set number their cards alike, so the number bridges them and the deck
+/// arrives in English.
 ///
 /// The network call is deliberately kept behind [DecklogFetcher] so that
 /// everything interesting -- pulling a code out of whatever the user pasted,
@@ -14,8 +20,43 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-const decklogViewUrl = 'https://decklog-en.bushiroad.com/view/';
-const decklogApiUrl = 'https://decklog-en.bushiroad.com/system/app/api/view/';
+/// Deck Log runs one site per language. They share a layout and a deck code
+/// space, but a code on one is not a code on the other.
+const decklogEnHost = 'decklog-en.bushiroad.com';
+const decklogJpHost = 'decklog.bushiroad.com';
+
+const decklogViewUrl = 'https://$decklogEnHost/view/';
+
+String decklogApiUrlOn(String host, String code) =>
+    'https://$host/system/app/api/view/$code';
+
+String decklogViewUrlOn(String host, String code) => 'https://$host/view/$code';
+
+/// A deck code, and the site it came from.
+class DecklogCode {
+  const DecklogCode(this.code, {this.host});
+
+  final String code;
+
+  /// The site the link named, or null when a bare code was pasted: either
+  /// site could hold it, so both are tried.
+  final String? host;
+
+  bool get isJapanese => host == decklogJpHost;
+
+  List<String> get hosts =>
+      host == null ? const [decklogEnHost, decklogJpHost] : [host!];
+
+  @override
+  String toString() => host == null ? code : '$code on $host';
+
+  @override
+  bool operator ==(Object other) =>
+      other is DecklogCode && other.code == code && other.host == host;
+
+  @override
+  int get hashCode => Object.hash(code, host);
+}
 
 /// Deck Log's id for Cardfight!! Vanguard, used to reject a deck from one of
 /// the other games it hosts.
@@ -84,7 +125,7 @@ class DecklogException implements Exception {
 }
 
 final _decklogUrl = RegExp(
-  r'decklog(?:-en)?\.bushiroad\.com/(?:[a-z-]+/)*view/([A-Za-z0-9]+)',
+  r'(decklog(?:-en)?\.bushiroad\.com)/(?:[a-z-]+/)*view/([A-Za-z0-9]+)',
   caseSensitive: false,
 );
 
@@ -96,17 +137,24 @@ final _decklogBareCode = RegExp(r'^[A-Za-z0-9]{3,16}$');
 /// codes one per line.
 ///
 /// Duplicates are dropped, so pasting the same deck twice imports it once.
-List<String> decklogCodesFrom(String input) {
-  final codes = <String>[];
+List<DecklogCode> decklogCodesFrom(String input) {
+  final codes = <DecklogCode>[];
   final seen = <String>{};
-  void add(String code) {
-    if (seen.add(code.toUpperCase())) codes.add(code);
+  final seenCodes = <String>{};
+  void add(String code, String? host) {
+    final upper = code.toUpperCase();
+    // A bare code adds nothing when the same code already arrived as a link:
+    // the link says which site, and the bare one does not.
+    if (host == null && seenCodes.contains(upper)) return;
+    if (!seen.add('${host ?? '*'}|$upper')) return;
+    seenCodes.add(upper);
+    codes.add(DecklogCode(code, host: host));
   }
 
   // Links first. What they matched is then blanked out, so a link's own path
   // can never be read a second time as a bare code.
   final remainder = input.replaceAllMapped(_decklogUrl, (match) {
-    add(match.group(1)!);
+    add(match.group(2)!, match.group(1)!.toLowerCase());
     return ' ';
   });
 
@@ -120,13 +168,17 @@ List<String> decklogCodesFrom(String input) {
         if (part.trim().isNotEmpty) part.trim(),
     ];
     if (parts.isEmpty) continue;
-    if (parts.every(_decklogBareCode.hasMatch)) parts.forEach(add);
+    if (parts.every(_decklogBareCode.hasMatch)) {
+      for (final part in parts) {
+        add(part, null);
+      }
+    }
   }
   return codes;
 }
 
 /// The first deck code in what the user pasted, or null if there is none.
-String? decklogCodeFrom(String input) {
+DecklogCode? decklogCodeFrom(String input) {
   final codes = decklogCodesFrom(input);
   return codes.isEmpty ? null : codes.first;
 }
@@ -236,50 +288,53 @@ String? _triggerIn(Map<String, dynamic> entry, {bool nested = false}) {
 }
 
 /// Fetches the raw payload for a deck code.
-typedef DecklogFetcher = Future<String> Function(String code);
+typedef DecklogFetcher = Future<String> Function(DecklogCode code);
 
 /// The real network call.
 ///
 /// Deck Log's own page reaches this endpoint with same-origin headers, so they
 /// are sent here too. It is tried as a POST first, which is what the site does,
 /// and retried as a GET because some deployments answer that instead.
-Future<String> fetchDecklogPayload(String code) async {
+///
+/// Each of the code's sites is tried in turn. A link says which one it came
+/// from and only that one is asked; a bare code could belong to either, so the
+/// English site is tried first and the Japanese one after.
+Future<String> fetchDecklogPayload(DecklogCode code) async {
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 20)
     ..userAgent = 'Mozilla/5.0 (Android) TCGDecks';
 
   try {
-    for (final method in ['POST', 'GET']) {
-      try {
-        final request = await client.openUrl(
-          method,
-          Uri.parse('$decklogApiUrl$code'),
-        );
-        request.headers
-          ..set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*')
-          ..set(HttpHeaders.refererHeader, '$decklogViewUrl$code')
-          ..set('Origin', 'https://decklog-en.bushiroad.com')
-          ..set('X-Requested-With', 'XMLHttpRequest');
-        if (method == 'POST') {
-          request.headers.contentType = ContentType(
-            'application',
-            'x-www-form-urlencoded',
+    for (final host in code.hosts) {
+      for (final method in ['POST', 'GET']) {
+        try {
+          final request = await client.openUrl(
+            method,
+            Uri.parse(decklogApiUrlOn(host, code.code)),
           );
-          request.write('');
-        }
+          request.headers
+            ..set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*')
+            ..set(HttpHeaders.refererHeader, decklogViewUrlOn(host, code.code))
+            ..set('Origin', 'https://$host')
+            ..set('X-Requested-With', 'XMLHttpRequest');
+          if (method == 'POST') {
+            request.headers.contentType = ContentType(
+              'application',
+              'x-www-form-urlencoded',
+            );
+            request.write('');
+          }
 
-        final response = await request.close();
-        final body = await response.transform(utf8.decoder).join();
-        if (response.statusCode == 200 && body.trim().isNotEmpty) return body;
-      } on HttpException {
-        // Fall through and try the other method.
+          final response = await request.close();
+          final body = await response.transform(utf8.decoder).join();
+          if (response.statusCode == 200 && body.trim().isNotEmpty) return body;
+        } on HttpException {
+          // Fall through and try the other method, then the other site.
+        } on SocketException {
+          // Same: one site being unreachable should not end the attempt.
+        }
       }
     }
-    throw const DecklogException(
-      'Could not reach Deck Log. Check your connection, or paste the deck '
-      'text instead.',
-    );
-  } on SocketException {
     throw const DecklogException(
       'Could not reach Deck Log. Check your connection, or paste the deck '
       'text instead.',
@@ -290,9 +345,9 @@ Future<String> fetchDecklogPayload(String code) async {
 }
 
 const _notADeckLogInput = DecklogException(
-  'That is not a Deck Log link or code. Paste a link like '
-  'decklog-en.bushiroad.com/view/ABC123, or just the code. Several links, one '
-  'per line, import several decks.',
+  'That is not a Deck Log link or code. Paste a link from either '
+  'decklog-en.bushiroad.com or decklog.bushiroad.com, or just the code. '
+  'Several links, one per line, import several decks.',
 );
 
 /// One deck's outcome in a batch: the deck, or why it could not be loaded.
@@ -323,7 +378,7 @@ Future<DecklogDeck> loadDecklog(
 
   final code = decklogCodeFrom(text);
   if (code == null) throw _notADeckLogInput;
-  return parseDecklogPayload(await fetch(code), code: code);
+  return parseDecklogPayload(await fetch(code), code: code.code);
 }
 
 /// Loads every deck named in what the user pasted, in order.
@@ -348,10 +403,12 @@ Future<List<DecklogLoad>> loadDecklogBatch(
   for (final code in codes) {
     try {
       loads.add(
-        DecklogLoad.loaded(parseDecklogPayload(await fetch(code), code: code)),
+        DecklogLoad.loaded(
+          parseDecklogPayload(await fetch(code), code: code.code),
+        ),
       );
     } on DecklogException catch (error) {
-      loads.add(DecklogLoad.failed(code, error.message));
+      loads.add(DecklogLoad.failed(code.code, error.message));
     }
   }
   return loads;

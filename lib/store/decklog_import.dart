@@ -5,6 +5,24 @@ import '../import/decklog.dart';
 import '../models/deck.dart';
 import 'deck_store.dart';
 
+/// A card number reduced to what the Japanese and English printings share.
+///
+/// The two releases of a set number their cards identically apart from the EN
+/// the English ones carry: `D-BT02/001` and `D-BT02/001EN` are the same card.
+/// Dropping that marker is therefore the whole trick behind importing a deck
+/// from the Japanese site and showing it in English -- the number bridges the
+/// languages, where the name cannot.
+String decklogNumberKey(String raw) =>
+    raw.trim().toLowerCase().replaceFirst(RegExp(r'en(?=$|[^a-z0-9])'), '');
+
+/// The same, with a printing's variant marker dropped too: the `-W` of an
+/// alternate art, or the ` SGR` of a rarity. Two printings of one card can
+/// share this key, so it is only ever used where it picks out a single card.
+String decklogLooseNumberKey(String raw) =>
+    decklogNumberKey(raw)
+        .replaceFirst(RegExp(r'\s+\S+$'), '')
+        .replaceFirst(RegExp(r'-[a-z]$'), '');
+
 /// The trigger already on a catalogue card, if any. Only the over triggers
 /// carry one, so this is nearly always blank.
 String? attributesTriggerType(CatalogCard? match) =>
@@ -138,23 +156,39 @@ Future<DecklogImportResult> importDecklogDeck(
 
   final byNumber = <String, CatalogCard>{};
   final byName = <String, CatalogCard>{};
+  // Built alongside a count, so a loose key shared by two printings is thrown
+  // away rather than matching one of them arbitrarily.
+  final byLooseNumber = <String, CatalogCard>{};
+  final looseCounts = <String, int>{};
   for (final entry in entries) {
-    final number = entry.cardNo?.trim().toLowerCase();
+    final number = entry.cardNo?.trim();
     if (number != null && number.isNotEmpty) {
-      byNumber.putIfAbsent(number, () => entry);
+      byNumber.putIfAbsent(decklogNumberKey(number), () => entry);
+      final loose = decklogLooseNumberKey(number);
+      looseCounts[loose] = (looseCounts[loose] ?? 0) + 1;
+      byLooseNumber.putIfAbsent(loose, () => entry);
     }
     byName.putIfAbsent(entry.lowerName, () => entry);
+  }
+  byLooseNumber.removeWhere((key, _) => (looseCounts[key] ?? 0) > 1);
+
+  /// Number first and name second. For a Japanese deck the number is the only
+  /// thing that can match at all, since the names arrive in Japanese.
+  CatalogCard? lookUp(DecklogCard card) {
+    final number = card.cardNumber?.trim();
+    if (number != null && number.isNotEmpty) {
+      final match =
+          byNumber[decklogNumberKey(number)] ??
+          byLooseNumber[decklogLooseNumberKey(number)];
+      if (match != null) return match;
+    }
+    return byName[card.name.trim().toLowerCase()];
   }
 
   // Match everything first: the ride deck can only be picked out once the
   // grades are known.
   final matches = <DecklogCard, CatalogCard?>{
-    for (final card in source.cards)
-      card:
-          (card.cardNumber?.trim().isNotEmpty == true
-              ? byNumber[card.cardNumber!.trim().toLowerCase()]
-              : null) ??
-          byName[card.name.trim().toLowerCase()],
+    for (final card in source.cards) card: lookUp(card),
   };
   final rideSection = _rideDeckSection(source.cards, matches);
 
