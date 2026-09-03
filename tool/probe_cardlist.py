@@ -45,50 +45,35 @@ def get(url: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
         return 0, ""
 
 
+def strip_tags(html: str) -> str:
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
+    text = re.sub(r"<[^>]+>", "\n", text)
+    text = re.sub(r"&nbsp;?", " ", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    return "\n".join(
+        line.strip() for line in text.splitlines() if line.strip()
+    )
+
+
 def main() -> None:
-    import pathlib
+    _, listing = get(
+        "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=257", BROWSER
+    )
+    _, detail = get(
+        "https://en.cf-vanguard.com/cardlist/?cardno=DZ-BT15/002EN&view=text",
+        BROWSER,
+    )
 
-    out = pathlib.Path("probe-out")
-    out.mkdir(exist_ok=True)
+    print("=== ONE ENTRY ON THE SET PAGE (raw) ===")
+    anchor = listing.find("DZ-BT15/002EN")
+    chunk = listing[max(0, anchor - 1200) : anchor + 400]
+    opening = chunk.find("<li")
+    print(chunk[opening if opening >= 0 else 0 :][:1400])
 
-    # A set page, so the entry markup can be parsed offline.
-    for page in (1, 2):
-        url = (
-            "https://en.cf-vanguard.com/cardlist/cardsearch/"
-            f"?expansion=257&page={page}"
-        )
-        status, body = get(url, BROWSER)
-        (out / f"set-257-page{page}.html").write_text(body, encoding="utf-8")
-        print(f"    set page {page}: http={status} bytes={len(body)}")
-
-    # A card's own page, which is where the fields live.
-    for number in ("DZ-BT15/002EN", "DZ-BT15/012EN"):
-        url = f"https://en.cf-vanguard.com/cardlist/?cardno={number}&view=text"
-        status, body = get(url, BROWSER)
-        name = number.replace("/", "_")
-        (out / f"card-{name}.html").write_text(body, encoding="utf-8")
-        print(f"    card {number}: http={status} bytes={len(body)}")
-
-    # The index, for how sets are enumerated.
-    status, body = get("https://en.cf-vanguard.com/cardlist/", BROWSER)
-    (out / "index.html").write_text(body, encoding="utf-8")
-    print(f"    index: http={status} bytes={len(body)}")
-
-    # How many pages a set runs to.
-    seen: set[str] = set()
-    for page in range(1, 10):
-        _, html = get(
-            "https://en.cf-vanguard.com/cardlist/cardsearch/"
-            f"?expansion=257&page={page}",
-            BROWSER,
-        )
-        found = set(re.findall(r"DZ-BT15/\d+EN", html))
-        fresh = found - seen
-        seen |= found
-        print(f"    page={page}: {len(found)} numbers, {len(fresh)} new")
-        if not fresh:
-            break
-    print(f"    DZ-BT15 has {len(seen)} cards across those pages")
+    print("\n=== THE CARD'S OWN PAGE (text only) ===")
+    text = strip_tags(detail)
+    where = text.find("DZ-BT15/002EN")
+    print(text[max(0, where - 300) : where + 1200])
 
 
 if __name__ == "__main__":
