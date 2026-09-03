@@ -53,6 +53,12 @@ NATIONS = {
     "Lyrical Monasterio",
 }
 
+# A stat line is a label and a number. The value has to be pinned down like
+# that because "Critical Trigger +10000" begins with a stat's name without
+# being one -- read as a Critical stat, it swallowed every critical trigger
+# on the site.
+STAT_LINE = re.compile(r"(Grade|Power|Critical|Shield)\s*([-\u2013\d][^A-Za-z]*)?")
+
 # Lines that are an ability marker rather than a value, so a parser walking
 # the block knows where the stats stop.
 ABILITY_WORDS = ("Boost", "Intercept", "Twin Drive", "Triple Drive", "Sentinel")
@@ -182,10 +188,10 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
     values: dict[str, str] = {}
     stats_at = end_at
     for index in range(2, end_at):
-        match = re.fullmatch(r"(Grade|Power|Critical|Shield)\s*(.*)", block[index])
+        match = STAT_LINE.fullmatch(block[index])
         if match:
             stats_at = min(stats_at, index)
-            values[match.group(1).lower()] = match.group(2).strip()
+            values[match.group(1).lower()] = (match.group(2) or "").strip()
 
     # Between the card type and the stats sit the nation, the race and the
     # clan. Prose is not one of those, which is what bounds the region on a
@@ -202,7 +208,7 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
     rules: list[str] = []
     trigger = ""
     for line in block[stats_at:end_at]:
-        if re.fullmatch(r"(Grade|Power|Critical|Shield)\s*(.*)", line):
+        if STAT_LINE.fullmatch(line):
             continue
         if line.startswith(ABILITY_WORDS) or line.startswith("Persona Ride"):
             continue
@@ -322,6 +328,16 @@ def main() -> int:
     if everything:
         sample = everything[len(everything) // 2]
         print("  sample:", json.dumps(sample, ensure_ascii=False)[:420])
+
+    # Every trigger kind should turn up somewhere in a few thousand cards.
+    # One missing entirely means the parser is eating it, which is exactly how
+    # "Critical Trigger" was lost to the Critical stat.
+    if any(card["type"] == "Trigger Unit" for card in everything):
+        absent = {"critical", "draw", "front", "heal", "stand", "over"} - set(
+            triggers
+        )
+        if absent:
+            print(f"  no trigger unit of these kinds at all: {sorted(absent)}")
 
     if failures:
         print(f"\n{len(failures)} cards could not be read:")
