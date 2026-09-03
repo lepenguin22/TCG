@@ -418,21 +418,32 @@ void main() {
     });
 
     test('a card reprinted forward into Standard becomes legal there', () {
-      // Flash Shield, Iseult used to be Premium only. The Blaster Blade Start
-      // Deck brought it into Standard, and a card is legal wherever any of
-      // its printings is -- so the database has to follow the reprint.
-      final iseult = cards.firstWhere((c) => c.name == 'Flash Shield, Iseult');
+      // The Blaster Blade Start Deck brought this printing of Flash Shield,
+      // Iseult into Standard, and a card is legal wherever any of its
+      // printings is -- so the database has to follow the reprint. Looked up
+      // by number, because the name belongs to two different cards.
+      final iseult = cards.firstWhere(
+        (c) => c.allNumbers.contains('DZ-SS13/012EN'),
+      );
       expect(iseult.attributes['series'], contains('d'));
     });
 
     test('D-series cards are Standard legal', () {
+      // By name, because a name can belong to more than one card: the game
+      // remakes a card under its old name with new stats, and those are
+      // separate entries. At least one of them has to be Standard legal.
       for (final name in [
         'Dragonic Overlord',
         'Blaster Blade',
         'Light Dragon Deity of Honors, Amartinoa',
       ]) {
-        final entry = cards.firstWhere((c) => c.name == name);
-        expect(entry.attributes['series'], contains('d'), reason: name);
+        final entries = cards.where((c) => c.name == name);
+        expect(entries, isNotEmpty, reason: name);
+        expect(
+          entries.any((c) => (c.attributes['series'] ?? '').contains('d')),
+          isTrue,
+          reason: name,
+        );
       }
     });
 
@@ -471,9 +482,41 @@ void main() {
       expect(crests.map((c) => c.name), contains('Energy Generator'));
     });
 
-    test('names are unique, so the four-copy rule counts correctly', () {
+    test('a card is unique by its name and its stats, not its name', () {
+      // The game remakes cards under their old names: an 8000 power original
+      // and its 10000 power reissue are two cards, and "Flash Shield, Iseult"
+      // is a grade 0 trigger in one era and a grade 1 normal unit in another.
+      // Keyed by name alone, one silently stood in for the other. What must
+      // be unique is the whole identity.
+      final identities = cards
+          .map(
+            (c) => [
+              c.lowerName,
+              c.attributes['grade'] ?? '',
+              c.attributes['power'] ?? '',
+              c.attributes['shield'] ?? '',
+              c.attributes['cardType'] ?? '',
+            ].join('|'),
+          )
+          .toSet();
+      expect(identities.length, cards.length);
+
+      // And the duplication by name is the exception, not the rule.
       final names = cards.map((c) => c.lowerName).toSet();
-      expect(names.length, cards.length);
+      expect(names.length, greaterThan(cards.length * 0.85));
+    });
+
+    test('every printing of a card can be looked up by its number', () {
+      // Only one printing's number is shown, but a deck can name any of them.
+      // Matching only the shown one sent the rest to be matched by name,
+      // where a card sharing a name with a different one took its place.
+      final iseult = cards.where((c) => c.name == 'Flash Shield, Iseult');
+      expect(iseult.length, greaterThan(1), reason: 'a remade card');
+      for (final entry in iseult) {
+        expect(entry.allNumbers, contains(entry.cardNo));
+      }
+      final withAlternates = cards.where((c) => c.otherNumbers.isNotEmpty);
+      expect(withAlternates.length, greaterThan(1000));
     });
 
     test('known cards resolve with the right attributes', () {

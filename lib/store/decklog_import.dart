@@ -207,8 +207,12 @@ Future<DecklogImportResult> importDecklogDeck(
   final byImage = <String, CatalogCard>{};
   final imageCounts = <String, int>{};
   for (final entry in entries) {
-    final number = entry.cardNo?.trim();
-    if (number != null && number.isNotEmpty) {
+    // Every printing's number, not just the one shown: a deck can name any of
+    // them, and matching only the shown one sent the rest down to matching by
+    // name, where a card sharing a name with a different one takes its place.
+    for (final printed in entry.allNumbers) {
+      final number = printed.trim();
+      if (number.isEmpty) continue;
       byNumber.putIfAbsent(decklogNumberKey(number), () => entry);
       final loose = decklogLooseNumberKey(number);
       looseCounts[loose] = (looseCounts[loose] ?? 0) + 1;

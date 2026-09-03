@@ -62,7 +62,7 @@ a real release key first if you ever go that way.
   and G Zone — with cards grouped by grade and a quantity stepper on each row.
   The ride deck takes four units, one of each grade 0-3, plus the optional ride
   deck crest that Divinez added.
-- **A card database of 11,000+ real cards**, bundled in the app and searchable
+- **A card database of 13,000+ real cards**, bundled in the app and searchable
   offline. Search by name or card number, filter by grade, tap to add: grade,
   card type, nation or clan, power, shield, card number and the card's printed
   abilities are filled in for you. Every English printing is covered, from the
@@ -128,6 +128,23 @@ flutter test test/card_catalog_test.dart
 
 Or run the **Refresh card database** workflow from the Actions tab, which does
 the same thing and opens a pull request.
+
+### One entry per card, not per name
+
+The game remakes cards under their old names. An 8000 power original and its
+10000 power reissue are two different cards; "Flash Shield, Iseult" is a grade 0
+trigger unit in one era and a grade 1 normal unit in another. So a card is
+identified by its name *and* its stats, and each entry carries the numbers of
+every printing it has had — a deck can name any of them, and matching only the
+shown one used to fall through to matching by name, which is how one card ended
+up standing in for another.
+
+Not every printing can be read. The community mirror maps a card's status line
+positionally, so one missing or extra field shifts every value along and leaves
+a unit with no power, or a power of 3. Those printings are not allowed to invent
+a card: where the same name has printings that were read properly, the bad one
+folds into them. Only where a name has nothing readable at all does it stand
+alone, because 306 cards exist in no other printing.
 
 ### Dating a card that carries no date
 

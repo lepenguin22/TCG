@@ -16,6 +16,7 @@ class CatalogCard {
     required this.lowerName,
     required this.attributes,
     required this.searchText,
+    this.otherNumbers = const [],
   });
 
   final String name;
@@ -28,6 +29,19 @@ class CatalogCard {
   final String searchText;
 
   String? get cardNo => attributes['cardNo'];
+
+  /// The numbers of this card's other printings, if it has any.
+  ///
+  /// A deck can name any printing, so all of them have to find the card. They
+  /// are kept out of [attributes] because they are for looking the card up,
+  /// not for showing.
+  final List<String> otherNumbers;
+
+  /// Every number this card has been printed under, the shown one first.
+  Iterable<String> get allNumbers => [
+    if (cardNo != null && cardNo!.isNotEmpty) cardNo!,
+    ...otherNumbers,
+  ];
 
   static const _aliases = <String, String>{
     'g': 'grade',
@@ -52,9 +66,14 @@ class CatalogCard {
     String imageBase = '',
   }) {
     final name = json['n'] as String? ?? '';
+    final others = [
+      for (final number in json['no2'] as List? ?? const []) '$number',
+    ];
     final attributes = <String, String>{};
     for (final entry in json.entries) {
-      if (entry.key == 'n' || entry.value == null) continue;
+      if (entry.key == 'n' || entry.key == 'no2' || entry.value == null) {
+        continue;
+      }
       final key = _aliases[entry.key] ?? entry.key;
       final value = '${entry.value}';
       attributes[key] = key == 'imageUrl' ? '$imageBase$value' : value;
@@ -66,6 +85,7 @@ class CatalogCard {
       lowerName: lowerName,
       attributes: attributes,
       searchText: cardNo.isEmpty ? lowerName : '$lowerName $cardNo',
+      otherNumbers: others,
     );
   }
 }

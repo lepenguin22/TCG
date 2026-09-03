@@ -133,6 +133,10 @@ String? _seriesOf(
   return null;
 }
 
+/// Whether a card type is a unit, and so must have a power.
+bool _isUnit(String cardType) =>
+    cardType == 'normal' || cardType == 'trigger' || cardType == 'g-unit';
+
 /// Source card type -> the app's `cardType` attribute.
 const _cardTypes = <String, String>{
   'Normal Unit': 'normal',
@@ -234,12 +238,33 @@ void main() async {
   /// which clans belong to the old game rather than to a D-series collab.
   final erasByClan = <String, Set<String>>{};
 
+  /// Every card number a card has been printed under. Only one printing's
+  /// number is shown, but a deck can name any of them, so all are kept for
+  /// looking a card up.
+  final numbersByCard = <String, Set<String>>{};
+
   /// The era of the printing currently held in [byName], used only to stop an
   /// older printing displacing a Standard legal one.
   final chosenSeries = <String, String?>{};
 
   var printings = 0;
   var skipped = 0;
+
+  /// Every printing, read before any of them is aggregated: whether a badly
+  /// read printing should stand on its own depends on what the rest of that
+  /// card's printings look like.
+  final records =
+      <
+        ({
+          String name,
+          String key,
+          bool usable,
+          String? series,
+          String number,
+          String? trigger,
+          Map<String, Object?> entry,
+        })
+      >[];
 
   // The community mirror stopped scraping at DZ-BT09, so the sets after it are
   // read from the official card list by tool/scrape_cardlist.py and committed
@@ -272,7 +297,6 @@ void main() async {
         continue;
       }
 
-      final key = name.toLowerCase();
       final number = raw['number'] as String? ?? '';
       final source = (raw['clan'] as String? ?? '').trim();
       final nation = _nations[source];
@@ -282,14 +306,16 @@ void main() async {
         nation,
         raw['format'] as String? ?? '',
       );
-      if (series != null) {
-        seriesByName.putIfAbsent(key, () => <String>{}).add(series);
-        if (nation == null && source.isNotEmpty && source != '-') {
-          erasByClan.putIfAbsent(source, () => <String>{}).add(series);
-        }
+      if (series != null &&
+          nation == null &&
+          source.isNotEmpty &&
+          source != '-') {
+        erasByClan.putIfAbsent(source, () => <String>{}).add(series);
       }
 
       final shield = _asInt(raw['shield']);
+      final power = _asInt(raw['power']);
+      final grade = _asInt(raw['grade']);
       final effect = (raw['effect'] as String? ?? '').trim();
       final image = raw['image_url'] as String? ?? '';
 
@@ -299,21 +325,36 @@ void main() async {
       final isSentinel = effect.contains('[CONT]:Sentinel');
       final isOver = effect.contains('[Over] trigger') || shield == 50000;
 
+      final type = isSentinel ? 'sentinel' : cardType;
+
+      // A card is identified by its name AND its stats, not by its name alone.
+      // Vanguard remakes a card under the same name with different numbers --
+      // an 8000 power original and a 10000 power D-series version are two
+      // cards, and "Flash Shield, Iseult" is a grade 0 trigger in one era and
+      // a grade 1 normal unit in another. Keyed by name alone, one of them
+      // silently stood in for the other everywhere it appeared.
+      final key = [
+        name.toLowerCase(),
+        grade ?? '',
+        power ?? '',
+        shield ?? '',
+        type,
+      ].join('|');
+
       final trigger = cardType == 'trigger'
           ? (_triggerOf(raw) ?? (isOver ? 'over' : null))
           : null;
-      if (trigger != null) triggerByName.putIfAbsent(key, () => trigger);
 
       final entry = <String, Object?>{
         'n': name,
         // A ride deck crest has no grade at all; everything else defaults to
         // zero when the source leaves it out.
-        if (cardType != 'ride-deck-crest') 'g': _asInt(raw['grade']) ?? 0,
-        't': isSentinel ? 'sentinel' : cardType,
+        if (cardType != 'ride-deck-crest') 'g': grade ?? 0,
+        't': type,
         // Stamped after every printing has been read, from triggerByName.
         'na': ?nation,
         if (nation == null && source.isNotEmpty && source != '-') 'c': source,
-        'p': ?_asInt(raw['power']),
+        'p': ?power,
         's': ?shield,
         if (number.isNotEmpty) 'no': number,
         if (effect.isNotEmpty) 'e': effect,
@@ -321,13 +362,19 @@ void main() async {
           'i': image.substring(_imageBase.length),
       };
 
-      // Later printings win, except that a D-series printing is never replaced
-      // by an older one: that is the printing a Standard player owns, so it is
-      // the number and the artwork worth showing.
-      if (byName[key] == null || chosenSeries[key] != 'd') {
-        byName[key] = entry;
-        chosenSeries[key] = series;
-      }
+      records.add((
+        name: name.toLowerCase(),
+        key: key,
+        // A unit with no power, or a power in single digits, is a row the
+        // mirror misread: its status fields are positional, and one missing
+        // or extra field shifts every value along. Such a printing must not
+        // be allowed to invent a card of its own.
+        usable: !_isUnit(cardType) || (power != null && power >= 1000),
+        series: series,
+        number: number,
+        trigger: trigger,
+        entry: entry,
+      ));
     }
 
     if ((i + 1) % 40 == 0) {
@@ -338,6 +385,59 @@ void main() async {
   }
 
   client.close();
+
+  // A printing the mirror misread must not become a card of its own. Where the
+  // same name has printings that were read properly, the bad one is folded
+  // into the busiest of them; only where a name has nothing readable at all
+  // does it stand alone, because 306 cards exist in no other printing.
+  final usableKeys = <String, Map<String, int>>{};
+  for (final record in records) {
+    if (!record.usable) continue;
+    final counts = usableKeys.putIfAbsent(record.name, () => <String, int>{});
+    counts[record.key] = (counts[record.key] ?? 0) + 1;
+  }
+  String keyFor(
+    ({
+      String name,
+      String key,
+      bool usable,
+      String? series,
+      String number,
+      String? trigger,
+      Map<String, Object?> entry,
+    })
+    record,
+  ) {
+    if (record.usable) return record.key;
+    final counts = usableKeys[record.name];
+    if (counts == null || counts.isEmpty) return record.key;
+    return counts.entries.reduce((a, b) => b.value > a.value ? b : a).key;
+  }
+
+  var folded = 0;
+  for (final record in records) {
+    final key = keyFor(record);
+    if (key != record.key) folded += 1;
+    final series = record.series;
+    if (series != null) {
+      seriesByName.putIfAbsent(key, () => <String>{}).add(series);
+    }
+    if (record.trigger != null) {
+      triggerByName.putIfAbsent(key, () => record.trigger!);
+    }
+    if (record.number.isNotEmpty) {
+      numbersByCard.putIfAbsent(key, () => <String>{}).add(record.number);
+    }
+    // Later printings win, except that a D-series printing is never replaced
+    // by an older one: that is the printing a Standard player owns, so it is
+    // the number and the artwork worth showing. A misread printing never
+    // displaces one that was read properly.
+    if (byName[key] == null || (chosenSeries[key] != 'd' && record.usable)) {
+      byName[key] = record.entry;
+      chosenSeries[key] = series;
+    }
+  }
+  stdout.writeln('$folded misread printings folded into a readable one');
 
   // A clan that only ever appears on D-series cards belongs to one of its
   // collaboration sets, not to the old game. Working the list out from the
@@ -382,6 +482,20 @@ void main() async {
     withTrigger += 1;
   }
 
+  // The numbers of every other printing, so a deck naming one of them finds
+  // the card. Without these a deck built from a reprint matched nothing by
+  // number and fell back to matching by name, which is what put the wrong
+  // card in front of the user.
+  var withAlternates = 0;
+  for (final entry in byName.entries) {
+    final numbers = numbersByCard[entry.key] ?? const <String>{};
+    final others = numbers.where((n) => n != entry.value['no']).toList()
+      ..sort();
+    if (others.isEmpty) continue;
+    entry.value['no2'] = others;
+    withAlternates += 1;
+  }
+
   final catalog = byName.values.toList()
     ..sort(
       (a, b) => (a['n']! as String).toLowerCase().compareTo(
@@ -402,7 +516,8 @@ void main() async {
         'sr=series (d=D-series v=V-series g=G-series o=original p=old promo; '
         'one letter per era the card was printed in, absent when unknown) '
         'sp=possible series (the same letters, but one of them rather than '
-        'all: the era is unknown and these are what it could be)',
+        'all: the era is unknown and these are what it could be) '
+        'no2=the numbers of this card\'s other printings',
     'cards': catalog,
   };
 
@@ -419,5 +534,6 @@ void main() async {
     ..writeln('$unknownSeries of them could not be dated to an era')
     ..writeln('$narrowedSeries are known only to predate the D-series')
     ..writeln('$withTrigger trigger units know which trigger they are')
+    ..writeln('$withAlternates carry the numbers of their other printings')
     ..writeln('${(await file.length() / 1024 / 1024).toStringAsFixed(2)} MB');
 }
