@@ -257,9 +257,12 @@ class DeckStore extends ChangeNotifier {
     final byNumber = <String, CatalogCard>{};
     final byName = <String, CatalogCard>{};
     for (final entry in catalog) {
-      final number = entry.cardNo?.trim().toLowerCase();
-      if (number != null && number.isNotEmpty) {
-        byNumber.putIfAbsent(number, () => entry);
+      // Every printing, not just the one the catalogue shows: a card saved
+      // under any other printing's number would otherwise match nothing here
+      // and never be repaired.
+      for (final printed in entry.allNumbers) {
+        final number = printed.trim().toLowerCase();
+        if (number.isNotEmpty) byNumber.putIfAbsent(number, () => entry);
       }
       byName.putIfAbsent(entry.lowerName, () => entry);
     }

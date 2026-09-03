@@ -275,4 +275,38 @@ void main() {
     expect(card.attributes['series'], isNull);
     expect(card.attributes['possibleSeries'], 'gopv');
   });
+
+  test('a card saved under another printing is still repaired', () async {
+    // The catalogue shows one of a card's printings. A card saved under any
+    // other one matched nothing here and was never filled in.
+    final store = DeckStore();
+    await store.load();
+    store.saveCard(
+      gameId: 'vanguard',
+      name: 'Blaster Blade',
+      attributes: {'cardNo': 'DZ-SS13/002EN'},
+    );
+
+    final catalog = CardCatalog()
+      ..seed(_asset, [
+        CatalogCard.fromJson({
+          'n': 'Blaster Blade',
+          'no': 'D-BT05/005EN',
+          'no2': ['DZ-SS13/002EN'],
+          'g': 2,
+          'p': 10000,
+          'sr': 'dv',
+        }),
+      ]);
+    await backfillLibraryFromCatalog(store, catalog);
+
+    final card = store.cards.single;
+    expect(card.attributes['grade'], '2');
+    expect(card.attributes['power'], '10000');
+    expect(
+      card.attributes['cardNo'],
+      'DZ-SS13/002EN',
+      reason: 'the printing the user has is not overwritten',
+    );
+  });
 }

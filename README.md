@@ -139,6 +139,13 @@ every printing it has had — a deck can name any of them, and matching only the
 shown one used to fall through to matching by name, which is how one card ended
 up standing in for another.
 
+A deck records the printing it names. Blaster Blade has twenty printings and
+the database shows one of them, so a deck built from the Blaster Blade Start
+Deck used to come out reading `D-BT05/005EN` — the right card, under a number
+its owner had never entered. Where the number a deck gives is one the card is
+known by, that printing is what gets stored, in the database's own English
+form, so a Japanese deck still reads as English.
+
 Not every printing can be read. The community mirror maps a card's status line
 positionally, so one missing or extra field shifts every value along and leaves
 a unit with no power, or a power of 3. Those printings are not allowed to invent

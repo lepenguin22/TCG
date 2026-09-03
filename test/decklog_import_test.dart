@@ -54,6 +54,17 @@ final _catalog = [
     'no': 'D-BT01/040EN',
     'sr': 'd',
   }),
+  // A card with twenty printings in the real database. The catalogue shows
+  // one of them; a deck can name any.
+  _card('Blaster Blade', {
+    'g': 2,
+    't': 'normal',
+    'na': 'keter-sanctuary',
+    'no': 'D-BT05/005EN',
+    'no2': ['DZ-SS13/002EN', 'V-TD01/004EN'],
+    'p': 10000,
+    'sr': 'dv',
+  }),
   _card('Chronojet Dragon', {
     'g': 4,
     't': 'g-unit',
@@ -677,6 +688,60 @@ void main() {
           .firstWhere((item) => item.card.name == 'ソウルセイバー・ドラゴン');
       expect(unseen.card.attributes['grade'], '3');
       expect(unseen.card.attributes['series'], 'd', reason: 'from its number');
+    });
+  });
+
+  group('the printing a deck names', () {
+    // A card can have twenty printings and the database shows one of them, so
+    // a deck naming another came out reading a number its owner had never
+    // entered: the right card, under the wrong printing.
+    final blaster = _catalog.firstWhere((c) => c.name == 'Blaster Blade');
+
+    test('every printing is reachable', () {
+      expect(blaster.allNumbers, contains('D-BT05/005EN'));
+      expect(blaster.allNumbers, contains('DZ-SS13/002EN'));
+    });
+
+    test('the number given is the number recorded', () {
+      expect(printedNumberFor(blaster, 'DZ-SS13/002EN'), 'DZ-SS13/002EN');
+      expect(printedNumberFor(blaster, 'V-TD01/004EN'), 'V-TD01/004EN');
+    });
+
+    test('a Japanese number records its English printing', () {
+      // DZ-SS13/002R is how the Japanese site writes it -- the rarity where
+      // the English printing carries EN.
+      expect(printedNumberFor(blaster, 'DZ-SS13/002R'), 'DZ-SS13/002EN');
+    });
+
+    test('nothing given leaves the database\'s own number', () {
+      expect(printedNumberFor(blaster, null), isNull);
+      expect(printedNumberFor(blaster, '  '), isNull);
+    });
+
+    test('a printing the database has never seen is still recorded', () {
+      expect(printedNumberFor(blaster, 'DZ-BT99/001EN'), 'DZ-BT99/001EN');
+    });
+
+    test('an imported deck keeps the printing it named', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(list: [entry('Blaster Blade', 4, 'DZ-SS13/002EN')]),
+          code: '6XDWK',
+        ),
+      );
+
+      final card = store.viewOf(result.deck).items.single.card;
+      expect(card.name, 'Blaster Blade');
+      expect(card.attributes['cardNo'], 'DZ-SS13/002EN');
+      // And it is still the right card, filled in from the database.
+      expect(card.attributes['grade'], '2');
+      expect(card.attributes['power'], '10000');
+      expect(result.matched, 1);
+      expect(result.unmatched, isEmpty);
     });
   });
 

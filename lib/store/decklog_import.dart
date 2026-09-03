@@ -47,6 +47,29 @@ String decklogImageKey(String raw) {
       .replaceFirst(RegExp(r'en$'), '');
 }
 
+/// The number of the printing the deck actually names.
+///
+/// A card can have twenty printings and the database shows one of them, so a
+/// deck naming any other one used to come out reading a number its owner had
+/// never entered: the right card, under the wrong printing. Where the number
+/// given matches one the card is known by, that printing's number is what the
+/// deck records -- in the catalogue's own English form, so a Japanese deck
+/// still reads as English.
+String? printedNumberFor(CatalogCard match, String? given) {
+  final asked = given?.trim() ?? '';
+  if (asked.isEmpty) return null;
+  final strict = decklogNumberKey(asked);
+  for (final number in match.allNumbers) {
+    if (decklogNumberKey(number) == strict) return number;
+  }
+  final loose = decklogLooseNumberKey(asked);
+  for (final number in match.allNumbers) {
+    if (decklogLooseNumberKey(number) == loose) return number;
+  }
+  // A printing the database has never seen. The deck still says what it says.
+  return asked;
+}
+
 /// The trigger already on a catalogue card, if any. Only the over triggers
 /// carry one, so this is nearly always blank.
 String? attributesTriggerType(CatalogCard? match) =>
@@ -286,7 +309,11 @@ Future<DecklogImportResult> importDecklogDeck(
         : null;
     final attributes = <String, String>{
       ...?match?.attributes,
-      if (card.cardNumber != null && match == null) 'cardNo': card.cardNumber!,
+      // The printing the deck names, not the one the database happens to
+      // show for this card.
+      'cardNo': ?(match == null
+          ? card.cardNumber?.trim()
+          : printedNumberFor(match, card.cardNumber)),
       // A card the database has never seen still has a number, and the number
       // says which era it is from. Japanese sets run ahead of the English
       // ones, so an imported Japanese deck is full of these -- without this
