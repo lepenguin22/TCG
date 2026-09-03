@@ -46,19 +46,37 @@ def get(url: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
 
 
 def main() -> None:
-    print("=== the shape of one entry on a set page")
-    status, body = get(
-        "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=257", BROWSER
-    )
-    print(f"    http={status} bytes={len(body)}")
-    anchor = body.find("DZ-BT15/002EN")
-    if anchor > 0:
-        print("--- raw html around the second card ---")
-        print(body[max(0, anchor - 1800) : anchor + 700])
+    import pathlib
 
-    print("\n\n=== how many pages does a set have?")
+    out = pathlib.Path("probe-out")
+    out.mkdir(exist_ok=True)
+
+    # A set page, so the entry markup can be parsed offline.
+    for page in (1, 2):
+        url = (
+            "https://en.cf-vanguard.com/cardlist/cardsearch/"
+            f"?expansion=257&page={page}"
+        )
+        status, body = get(url, BROWSER)
+        (out / f"set-257-page{page}.html").write_text(body, encoding="utf-8")
+        print(f"    set page {page}: http={status} bytes={len(body)}")
+
+    # A card's own page, which is where the fields live.
+    for number in ("DZ-BT15/002EN", "DZ-BT15/012EN"):
+        url = f"https://en.cf-vanguard.com/cardlist/?cardno={number}&view=text"
+        status, body = get(url, BROWSER)
+        name = number.replace("/", "_")
+        (out / f"card-{name}.html").write_text(body, encoding="utf-8")
+        print(f"    card {number}: http={status} bytes={len(body)}")
+
+    # The index, for how sets are enumerated.
+    status, body = get("https://en.cf-vanguard.com/cardlist/", BROWSER)
+    (out / "index.html").write_text(body, encoding="utf-8")
+    print(f"    index: http={status} bytes={len(body)}")
+
+    # How many pages a set runs to.
     seen: set[str] = set()
-    for page in range(1, 8):
+    for page in range(1, 10):
         _, html = get(
             "https://en.cf-vanguard.com/cardlist/cardsearch/"
             f"?expansion=257&page={page}",
@@ -67,20 +85,10 @@ def main() -> None:
         found = set(re.findall(r"DZ-BT15/\d+EN", html))
         fresh = found - seen
         seen |= found
-        print(f"    page={page} numbers={len(found)} new={len(fresh)} total={len(seen)}")
+        print(f"    page={page}: {len(found)} numbers, {len(fresh)} new")
         if not fresh:
             break
-
-    print("\n=== everything a card's own page says")
-    _, page = get(
-        "https://en.cf-vanguard.com/cardlist/?cardno=DZ-BT15/002EN&view=text",
-        BROWSER,
-    )
-    start_at = page.find("cardlist-Detail")
-    if start_at < 0:
-        start_at = page.find("DZ-BT15/002EN")
-    print("--- raw html of the detail block ---")
-    print(page[max(0, start_at - 200) : start_at + 3000])
+    print(f"    DZ-BT15 has {len(seen)} cards across those pages")
 
 
 if __name__ == "__main__":
