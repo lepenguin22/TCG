@@ -314,4 +314,71 @@ void main() {
     // the user's own printing's art.
     expect(card.attributes['imageUrl'], 'blaster-blade-dz-ss13.jpg');
   });
+
+  test('a card the database used to describe wrongly is corrected', () async {
+    // DZ-SS13/002 and D-BT05/005 Blaster Blade were held as one card, so a
+    // deck holding either was saved carrying the other's abilities and
+    // artwork. Once they are told apart, the saved deck has to be corrected:
+    // these came from the database, not from the user, so the database's
+    // answer wins.
+    final store = DeckStore();
+    await store.load();
+    store.saveCard(
+      gameId: 'vanguard',
+      name: 'Blaster Blade',
+      attributes: {
+        'cardNo': 'DZ-SS13/002EN',
+        'effect': 'retire one of your opponent\'s rear-guards',
+        'imageUrl': 'blaster-blade-d-bt05.jpg',
+        'notes': 'my combo note',
+      },
+    );
+
+    final catalog = CardCatalog()
+      ..seed(_asset, [
+        CatalogCard.fromJson({
+          'n': 'Blaster Blade',
+          'no': 'DZ-SS13/002EN',
+          'g': 2,
+          'p': 10000,
+          'e': 'choose a grade 3 card with an Aichi icon from your ride deck',
+          'i': 'blaster-blade-dz-ss13.jpg',
+          'sr': 'd',
+        }),
+      ]);
+    await backfillLibraryFromCatalog(store, catalog);
+
+    final card = store.cards.single;
+    expect(card.attributes['effect'], contains('Aichi icon'));
+    expect(card.attributes['imageUrl'], 'blaster-blade-dz-ss13.jpg');
+    expect(card.attributes['notes'], 'my combo note', reason: 'yours is kept');
+  });
+
+  test('a card matched only by name keeps the text it has', () async {
+    // Several cards can share a name, so a card with no number of its own
+    // could be any of them. Overwriting its abilities with a same-named
+    // card's would be worse than leaving what is already there.
+    final store = DeckStore();
+    await store.load();
+    store.saveCard(
+      gameId: 'vanguard',
+      name: 'Blaster Blade',
+      attributes: {'effect': 'the text this card already had'},
+    );
+
+    final catalog = CardCatalog()
+      ..seed(_asset, [
+        CatalogCard.fromJson({
+          'n': 'Blaster Blade',
+          'no': 'DZ-SS13/002EN',
+          'g': 2,
+          'e': 'a different Blaster Blade\'s abilities',
+        }),
+      ]);
+    await backfillLibraryFromCatalog(store, catalog);
+
+    final card = store.cards.single;
+    expect(card.attributes['effect'], 'the text this card already had');
+    expect(card.attributes['grade'], '2', reason: 'blanks are still filled');
+  });
 }

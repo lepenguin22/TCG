@@ -133,6 +133,25 @@ String? _seriesOf(
   return null;
 }
 
+/// A card's rules text, reduced to what distinguishes one card from another.
+///
+/// What a card does decides which card it is, but only what it does: the two
+/// sources and the printings within them write the same ability differently,
+/// and splitting on that tears a card in two rather than keeping two cards
+/// apart. So this compares the substance and drops the presentation.
+///
+///  - Reminder text, which some printings carry and others leave off. It is
+///    parenthesised, as is the zone an ability works in -- and "(VC)" is a
+///    real difference -- so length tells them apart: a reminder is a
+///    sentence, a zone is two or three letters.
+///  - Punctuation and spacing, which covers "[Energy-Charge 3]" against
+///    "Energy-Charge 3" and a line break against a run-on. No two cards
+///    differ only in their bracketing.
+String _ruleKey(String effect) => effect
+    .toLowerCase()
+    .replaceAll(RegExp(r'\([^)]{9,}\)'), '')
+    .replaceAll(RegExp(r'[^a-z0-9]'), '');
+
 /// Whether a card type is a unit, and so must have a power.
 bool _isUnit(String cardType) =>
     cardType == 'normal' || cardType == 'trigger' || cardType == 'g-unit';
@@ -265,6 +284,8 @@ void main() async {
         ({
           String name,
           String key,
+          String statsKey,
+          bool hasRules,
           bool usable,
           String? series,
           String number,
@@ -341,13 +362,22 @@ void main() async {
       // cards, and "Flash Shield, Iseult" is a grade 0 trigger in one era and
       // a grade 1 normal unit in another. Keyed by name alone, one of them
       // silently stood in for the other everywhere it appeared.
-      final key = [
+      final statsKey = [
         name.toLowerCase(),
         grade ?? '',
         power ?? '',
         shield ?? '',
         type,
       ].join('|');
+
+      // Nor by its stats. A remake can match the original's numbers exactly
+      // and still be a different card: DZ-SS13/002 Blaster Blade and
+      // D-BT05/005 Blaster Blade are both grade 2, 10000 power, 5000 shield,
+      // and do entirely different things. What separates two cards that agree
+      // on everything else is what they do, so the rules text is part of the
+      // identity -- and printings that agree on it are genuine reprints, the
+      // ones that should share an entry.
+      final key = '$statsKey|${_ruleKey(effect)}';
 
       final trigger = cardType == 'trigger'
           ? (_triggerOf(raw) ?? (isOver ? 'over' : null))
@@ -376,6 +406,8 @@ void main() async {
       records.add((
         name: name.toLowerCase(),
         key: key,
+        statsKey: statsKey,
+        hasRules: effect.isNotEmpty,
         // A unit with no power, or a power in single digits, is a row the
         // mirror misread: its status fields are positional, and one missing
         // or extra field shifts every value along. Such a printing must not
@@ -408,10 +440,30 @@ void main() async {
     final counts = usableKeys.putIfAbsent(record.name, () => <String, int>{});
     counts[record.key] = (counts[record.key] ?? 0) + 1;
   }
+
+  // A printing whose rules text the source never carried says nothing about
+  // which of two same-named, same-statted cards it is, so it must not become a
+  // third one. Where a printing with text shares its stats, the silent one
+  // joins the busiest of those instead.
+  final ruledKeys = <String, Map<String, int>>{};
+  for (final record in records) {
+    if (!record.usable || !record.hasRules) continue;
+    final counts = ruledKeys.putIfAbsent(
+      record.statsKey,
+      () => <String, int>{},
+    );
+    counts[record.key] = (counts[record.key] ?? 0) + 1;
+  }
+
+  String busiest(Map<String, int> counts) =>
+      counts.entries.reduce((a, b) => b.value > a.value ? b : a).key;
+
   String keyFor(
     ({
       String name,
       String key,
+      String statsKey,
+      bool hasRules,
       bool usable,
       String? series,
       String number,
@@ -421,10 +473,15 @@ void main() async {
     })
     record,
   ) {
-    if (record.usable) return record.key;
-    final counts = usableKeys[record.name];
-    if (counts == null || counts.isEmpty) return record.key;
-    return counts.entries.reduce((a, b) => b.value > a.value ? b : a).key;
+    if (!record.usable) {
+      final counts = usableKeys[record.name];
+      return counts == null || counts.isEmpty ? record.key : busiest(counts);
+    }
+    if (!record.hasRules) {
+      final counts = ruledKeys[record.statsKey];
+      if (counts != null && counts.isNotEmpty) return busiest(counts);
+    }
+    return record.key;
   }
 
   var folded = 0;
@@ -457,6 +514,25 @@ void main() async {
     }
   }
   stdout.writeln('$folded misread printings folded into a readable one');
+
+  // One number, one card. Two entries claiming the same printing would be
+  // looked up by number and resolved arbitrarily, which is the failure that
+  // put the wrong Blaster Blade in front of the user in the first place. It
+  // can only happen if the two sources word one printing's rules differently,
+  // so it is worth knowing about rather than assuming away.
+  final keysByNumber = <String, Set<String>>{};
+  for (final entry in numbersByCard.entries) {
+    for (final number in entry.value) {
+      keysByNumber.putIfAbsent(number, () => <String>{}).add(entry.key);
+    }
+  }
+  final split = keysByNumber.entries.where((e) => e.value.length > 1).toList();
+  if (split.isNotEmpty) {
+    stdout.writeln('${split.length} numbers claimed by more than one card:');
+    for (final entry in split.take(10)) {
+      stdout.writeln('  ${entry.key}');
+    }
+  }
 
   // A clan that only ever appears on D-series cards belongs to one of its
   // collaboration sets, not to the old game. Working the list out from the

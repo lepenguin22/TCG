@@ -21,8 +21,11 @@ const _backfillKey = 'tcgdecks.v1.backfill';
 /// cannot tell which format they belong to.
 /// Bumped whenever the catalogue's derived data changes in a way saved cards
 /// should pick up. Version 2 carries corrected eras and the new "known to
-/// predate the D-series" answer.
-const cardBackfillVersion = 2;
+/// predate the D-series" answer. Version 3 tells apart cards that share a
+/// name and every stat but do different things -- DZ-SS13/002 Blaster Blade
+/// and D-BT05/005 Blaster Blade were one entry until then, so decks holding
+/// either are carrying the wrong card's abilities and artwork.
+const cardBackfillVersion = 3;
 
 /// How many decks and cards an import brought in.
 class ImportResult {
@@ -272,8 +275,10 @@ class DeckStore extends ChangeNotifier {
     for (final card in _cards) {
       final number = card.attributes['cardNo']?.trim().toLowerCase();
       CatalogCard? match;
+      var byPrinting = false;
       if (card.gameId == gameId) {
         match = (number != null && number.isNotEmpty) ? byNumber[number] : null;
+        byPrinting = match != null;
         // Fall back to the name only when the card has no number of its own,
         // so a card identified by number is never matched to a different one.
         match ??= (number == null || number.isEmpty)
@@ -289,25 +294,33 @@ class DeckStore extends ChangeNotifier {
       for (final attribute in card.attributes.entries) {
         if (attribute.value.isNotEmpty) merged[attribute.key] = attribute.value;
       }
-      // The era is worked out by the app rather than entered by hand, so the
-      // catalogue's answer replaces what an older build wrote -- and removes
-      // it when a card that used to be dated turns out not to be datable.
-      for (final key in const ['series', 'possibleSeries']) {
-        final value = match.attributes[key];
-        if (value == null || value.isEmpty) {
-          merged.remove(key);
-        } else {
-          merged[key] = value;
+      // Some attributes are the printed card's, not yours: the era the app
+      // works out, the abilities printed on it and its artwork. The
+      // catalogue's answer replaces what an older build wrote -- and goes
+      // when the catalogue no longer has one -- so a card the database once
+      // described wrongly does not stay wrong forever.
+      //
+      // Only ever on an exact printing, though. A card matched by name alone
+      // could be any of the several cards sharing that name, and overwriting
+      // a right answer with a same-named card's would be worse than leaving
+      // it be.
+      if (byPrinting) {
+        final printed = <String, String?>{
+          'series': match.attributes['series'],
+          'possibleSeries': match.attributes['possibleSeries'],
+          'effect': match.attributes['effect'],
+          // Which artwork follows from the printing the card names, not from
+          // whichever printing the catalogue happens to show.
+          'imageUrl': match.imageFor(card.attributes['cardNo']?.trim()),
+        };
+        for (final entry in printed.entries) {
+          final value = entry.value;
+          if (value == null || value.isEmpty) {
+            merged.remove(entry.key);
+          } else {
+            merged[entry.key] = value;
+          }
         }
-      }
-      // The artwork follows from the printing, not from hand entry either --
-      // recomputed the same way an import would, so a card saved before
-      // printings had their own images self-heals here.
-      final image = match.imageFor(card.attributes['cardNo']?.trim());
-      if (image == null || image.isEmpty) {
-        merged.remove('imageUrl');
-      } else {
-        merged['imageUrl'] = image;
       }
       if (_sameAttributes(merged, card.attributes)) {
         updated.add(card);

@@ -333,6 +333,13 @@ void main() {
     test('every card is either dated or at least placed before the D-series', () {
       // Old PR promos carry no era in their number. Their clan still rules the
       // D-series out, which is enough to check them against Standard.
+      //
+      // A handful are left over: a promo whose number says nothing, whose
+      // nation the V- and D-series both used, and whose wording differs from
+      // every other printing -- so it is its own card and has no sibling to
+      // borrow a date from. Dating it off a differently worded card would be
+      // guessing, and guessing "D-series" is what makes an illegal deck look
+      // legal, so these stay undated and the app says it cannot check them.
       final unplaced = cards
           .where(
             (c) =>
@@ -342,7 +349,7 @@ void main() {
           .toList();
       expect(
         unplaced.length,
-        lessThan(5),
+        lessThan(10),
         reason: 'unplaced: ${unplaced.map((c) => c.name).take(10).toList()}',
       );
     });
@@ -487,12 +494,14 @@ void main() {
       expect(crests.map((c) => c.name), contains('Energy Generator'));
     });
 
-    test('a card is unique by its name and its stats, not its name', () {
+    test('a card is unique by its name, its stats and what it does', () {
       // The game remakes cards under their old names: an 8000 power original
       // and its 10000 power reissue are two cards, and "Flash Shield, Iseult"
       // is a grade 0 trigger in one era and a grade 1 normal unit in another.
       // Keyed by name alone, one silently stood in for the other. What must
-      // be unique is the whole identity.
+      // be unique is the whole identity -- and stats are not the whole of it,
+      // because a remake can match the original's numbers exactly and still
+      // do something entirely different.
       final identities = cards
           .map(
             (c) => [
@@ -501,6 +510,7 @@ void main() {
               c.attributes['power'] ?? '',
               c.attributes['shield'] ?? '',
               c.attributes['cardType'] ?? '',
+              (c.attributes['effect'] ?? '').replaceAll(RegExp(r'\s+'), ''),
             ].join('|'),
           )
           .toSet();
@@ -508,7 +518,52 @@ void main() {
 
       // And the duplication by name is the exception, not the rule.
       final names = cards.map((c) => c.lowerName).toSet();
-      expect(names.length, greaterThan(cards.length * 0.85));
+      expect(names.length, greaterThan(cards.length * 0.7));
+    });
+
+    test('same stats but different abilities are different cards', () {
+      // DZ-SS13/002 and D-BT05/005 Blaster Blade are both grade 2, 10000
+      // power, 5000 shield Keter Sanctuary units -- and do entirely different
+      // things. Held as one card, a deck naming either was shown the other's
+      // abilities and artwork.
+      CatalogCard of(String number) => cards.firstWhere(
+        (c) => c.allNumbers.contains(number),
+        orElse: () => fail('no card printed as $number'),
+      );
+
+      final start = of('DZ-SS13/002EN');
+      final booster = of('D-BT05/005EN');
+
+      expect(start.name, 'Blaster Blade');
+      expect(booster.name, 'Blaster Blade');
+      expect(start.attributes['grade'], booster.attributes['grade']);
+      expect(start.attributes['power'], booster.attributes['power']);
+
+      expect(
+        start.attributes['effect'],
+        contains('Aichi icon'),
+        reason: 'the start deck card searches the ride deck',
+      );
+      expect(
+        booster.attributes['effect'],
+        isNot(contains('Aichi icon')),
+        reason: 'the booster card does not',
+      );
+      expect(start.imageFor('DZ-SS13/002EN'), isNot(booster.imageFor(null)));
+    });
+
+    test('one number never names two cards', () {
+      // A number is looked up to decide which card a deck means, so two cards
+      // claiming one printing would resolve arbitrarily -- exactly the bug
+      // that showed the wrong Blaster Blade.
+      final owners = <String, int>{};
+      for (final card in cards) {
+        for (final number in card.allNumbers) {
+          owners[number] = (owners[number] ?? 0) + 1;
+        }
+      }
+      final shared = owners.entries.where((e) => e.value > 1).toList();
+      expect(shared, isEmpty, reason: 'numbers claimed twice: $shared');
     });
 
     test('every printing of a card can be looked up by its number', () {
@@ -535,16 +590,22 @@ void main() {
       expect(overlord.attributes['cardType'], 'normal');
 
       // The older Kagero cards of the same name are their own entries, and
-      // keep their own stats rather than being overwritten by this one.
-      final older = cards.where(
-        (c) =>
-            c.name == 'Dragonic Overlord' && c.attributes['clan'] == 'Kagero',
+      // keep their own stats rather than being overwritten by this one. Every
+      // era it was remade in has its own numbers: 11000 in the original
+      // series, 13000 in the V-series, and neither carries a nation.
+      final original = cards.firstWhere(
+        (c) => c.allNumbers.contains('BT01/S04EN'),
       );
-      expect(older, isNotEmpty);
-      for (final entry in older) {
-        expect(entry.attributes['power'], '11000');
-        expect(entry.attributes['nation'], isNull);
-      }
+      expect(original.attributes['power'], '11000');
+      expect(original.attributes['clan'], 'Kagero');
+      expect(original.attributes['nation'], isNull);
+
+      final vSeries = cards.firstWhere(
+        (c) => c.allNumbers.contains('V-CS01/004EN'),
+      );
+      expect(vSeries.attributes['power'], '13000');
+      expect(vSeries.attributes['clan'], 'Kagero');
+      expect(vSeries.attributes['nation'], isNull);
     });
 
     test('searching the real catalog finds a card by name', () {

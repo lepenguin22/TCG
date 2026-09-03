@@ -139,6 +139,23 @@ every printing it has had — a deck can name any of them, and matching only the
 shown one used to fall through to matching by name, which is how one card ended
 up standing in for another.
 
+Stats are not the whole of it either. A remake can match the original's numbers
+exactly and still be a different card: `DZ-SS13/002` and `D-BT05/005` Blaster
+Blade are both grade 2, 10000 power, 5000 shield Keter Sanctuary units, and do
+entirely different things — one searches the ride deck for a card with an Aichi
+icon, the other retires a rear-guard. Held as one card, a deck naming either was
+shown the other's abilities and artwork. So what a card *does* is part of its
+identity too, which is also what makes a genuine reprint recognisable: the
+printings that agree on it are the ones that should share an entry.
+
+Only what it does, though — not how the text is set. The two sources write the
+same ability differently, one bracketing `[Energy-Charge 3]` where the other
+does not, one carrying a line of reminder text the other leaves off. Comparing
+those verbatim tore genuine reprints apart, so the comparison drops punctuation,
+spacing, and parenthesised reminders, while keeping short parentheses like
+`(VC)` — the zone an ability works in is a real difference. What survives is
+one entry per card, and no card number claimed by two of them.
+
 A deck records the printing it names. Blaster Blade has twenty printings and
 the database shows one of them, so a deck built from the Blaster Blade Start
 Deck used to come out reading `D-BT05/005EN` — the right card, under a number
