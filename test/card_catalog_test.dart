@@ -232,18 +232,40 @@ void main() {
       );
     });
 
-    test('over triggers are marked, and only over triggers are', () {
-      final over = cards.where((c) => c.attributes['trigger'] == 'over');
-      expect(over, isNotEmpty);
-      for (final entry in over) {
+    test('a trigger icon is only ever on a trigger unit', () {
+      final marked = cards.where((c) => c.attributes['trigger'] != null);
+      expect(marked, isNotEmpty);
+      for (final entry in marked) {
         expect(entry.attributes['cardType'], 'trigger', reason: entry.name);
       }
-      // No other trigger icon is claimed, because the source cannot supply it.
-      final triggers = cards
+    });
+
+    test('the trigger icons come from the card list, not from guessing', () {
+      // For a long time only over triggers could be marked, because the only
+      // source available did not record which trigger a trigger unit is. The
+      // official card list prints it, and the sets read from there carry all
+      // six kinds.
+      final kinds = cards
           .map((c) => c.attributes['trigger'])
           .whereType<String>()
           .toSet();
-      expect(triggers, {'over'});
+      expect(kinds, containsAll(['critical', 'draw', 'front', 'heal', 'over']));
+      expect(
+        kinds.difference({
+          'critical',
+          'draw',
+          'front',
+          'heal',
+          'stand',
+          'over',
+        }),
+        isEmpty,
+      );
+
+      final marked = cards
+          .where((c) => (c.attributes['trigger'] ?? '').isNotEmpty)
+          .length;
+      expect(marked, greaterThan(200));
     });
 
     test('every card carries an image URL on the official host', () {
@@ -264,11 +286,17 @@ void main() {
     });
 
     test('nearly every card carries its abilities', () {
-      final withText = cards
-          .where((c) => (c.attributes['effect'] ?? '').isNotEmpty)
+      // A vanilla trigger's only printed text is its trigger, and that is now
+      // read into the trigger field rather than left in the rules text -- so
+      // "has something to say about itself" is either of the two.
+      final described = cards
+          .where(
+            (c) =>
+                (c.attributes['effect'] ?? '').isNotEmpty ||
+                (c.attributes['trigger'] ?? '').isNotEmpty,
+          )
           .length;
-      // A handful of vanilla cards genuinely print no text.
-      expect(withText / cards.length, greaterThan(0.99));
+      expect(described / cards.length, greaterThan(0.99));
     });
 
     test('a known card has the abilities from its printing', () {
@@ -384,9 +412,17 @@ void main() {
       final seeker = cards.firstWhere((c) => c.name == 'Blaster Blade Seeker');
       expect(seeker.attributes['series'], isNot(contains('d')));
 
-      // Flash Shield, Iseult's newest printing is a Premium Deckset.
+      // An original-series card with no reprint since.
+      final frank = cards.firstWhere((c) => c.name == 'Monster Frank');
+      expect(frank.attributes['series'], isNot(contains('d')));
+    });
+
+    test('a card reprinted forward into Standard becomes legal there', () {
+      // Flash Shield, Iseult used to be Premium only. The Blaster Blade Start
+      // Deck brought it into Standard, and a card is legal wherever any of
+      // its printings is -- so the database has to follow the reprint.
       final iseult = cards.firstWhere((c) => c.name == 'Flash Shield, Iseult');
-      expect(iseult.attributes['series'], isNot(contains('d')));
+      expect(iseult.attributes['series'], contains('d'));
     });
 
     test('D-series cards are Standard legal', () {
