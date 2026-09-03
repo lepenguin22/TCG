@@ -47,13 +47,51 @@ def describe(body: bytes) -> bool:
         return False
 
     print(f"    keys: {sorted(payload)}")
-    for key, value in payload.items():
-        if isinstance(value, list):
-            print(f"    {key}: list of {len(value)}")
-            for entry in value[:2]:
-                print(f"      {json.dumps(entry, ensure_ascii=False)[:700]}")
-        else:
-            print(f"    {key}: {json.dumps(value, ensure_ascii=False)[:150]}")
+    for key in ("title", "deck_param1", "deck_param2", "game_title_id"):
+        if key in payload:
+            print(f"    {key}: {json.dumps(payload[key], ensure_ascii=False)}")
+
+    sections = {
+        key: value for key, value in payload.items() if isinstance(value, list)
+    }
+    numbers_in = {
+        key: {str(e.get("card_number")) for e in value if isinstance(e, dict)}
+        for key, value in sections.items()
+    }
+    for key, value in sections.items():
+        rows = [e for e in value if isinstance(e, dict)]
+        copies = sum(int(e.get("num") or 0) for e in rows)
+        kinds = sorted({str(e.get("type")) for e in rows})
+        slots = sorted({str(e.get("slot")) for e in rows})
+        grades = sorted({str(e.get("grade")) for e in rows})
+        print(
+            f"    {key}: {len(rows)} rows, {copies} copies, "
+            f"type={kinds} slot={slots} grade={grades}"
+        )
+        # Does this section repeat cards that are already in another one?
+        for other, numbers in numbers_in.items():
+            if other == key or not numbers:
+                continue
+            shared = numbers_in[key] & numbers
+            if shared:
+                print(f"      shares {len(shared)} card numbers with {other}")
+        fields = sorted({field for e in rows for field in e})
+        print(f"      fields: {fields}")
+        for entry in rows[:1]:
+            print(f"      sample: {json.dumps(entry, ensure_ascii=False)[:500]}")
+
+    # Anything that looks like it could name a trigger icon.
+    for key, value in sections.items():
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            interesting = {
+                f: v
+                for f, v in entry.items()
+                if f in ("card_kind", "is_over", "rare", "type", "slot")
+            }
+            print(f"    {key} markers sample: {interesting}")
+            break
     return True
 
 
