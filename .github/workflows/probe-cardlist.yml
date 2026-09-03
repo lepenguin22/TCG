@@ -1,62 +1,29 @@
 # A one-off diagnostic, not part of the build. Removed once it has answered.
-#
-# Two questions this environment cannot answer for itself, because every
-# Bushiroad and cf-vanguard domain is blocked from it:
-#   1. where the official card list lives now, since its old paths 404;
-#   2. what a Deck Log payload actually contains -- every field the importer
-#      reads has so far been inferred from other people's code.
 name: Probe card list
 
 on:
   workflow_dispatch:
     inputs:
       deck_code:
-        description: A public Deck Log code to dump, for reading the real payload
-        default: 19RVZ6
+        description: A public Deck Log code to dump
+        required: false
+        default: '19RVZ6'
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Where does the card list live now?
         run: |
-          for url in \
-            "https://en.cf-vanguard.com/" \
-            "https://en.cf-vanguard.com/cardlist" \
-            "https://cf-vanguard.com/" ; do
+          for url in "https://en.cf-vanguard.com/" "https://cf-vanguard.com/"; do
             echo "=== $url"
             curl -sSL -m 30 -o /tmp/p.html -w "final=%{url_effective} http=%{http_code} bytes=%{size_download}\n" "$url" || echo FAILED
           done
-          echo "--- links containing cardlist on the english home page ---"
+          echo "--- cardlist links on the english home page ---"
           curl -sSL -m 45 -o /tmp/home.html "https://en.cf-vanguard.com/" || true
           grep -oE 'https?://[^"]*cardlist[^"]*' /tmp/home.html | sort -u | head -20 || true
 
       - name: What does a Deck Log payload actually look like?
-        run: |
-          code="${{ github.event.inputs.deck_code }}"
-          for host in decklog.bushiroad.com decklog-en.bushiroad.com; do
-            for method in POST GET; do
-              echo "=== $method https://$host/system/app/api/view/$code"
-              curl -sS -m 30 -X "$method" \
-                -H "Accept: application/json, text/plain, */*" \
-                -H "Referer: https://$host/view/$code" \
-                -H "Origin: https://$host" \
-                -H "X-Requested-With: XMLHttpRequest" \
-                -o /tmp/deck.json -w "http=%{http_code} bytes=%{size_download}\n" \
-                "https://$host/system/app/api/view/$code" || { echo FAILED; continue; }
-              echo "--- top level keys ---"
-              python3 -c "
-import json,sys
-try: d=json.load(open('/tmp/deck.json'))
-except Exception as e: print('not json:', e); print(open('/tmp/deck.json').read()[:300]); raise SystemExit
-print(sorted(d.keys()) if isinstance(d,dict) else type(d))
-if isinstance(d,dict):
-    for k,v in d.items():
-        if isinstance(v,list):
-            print(f'  {k}: list of {len(v)}')
-            if v: print('    first entry:', json.dumps(v[0], ensure_ascii=False)[:600])
-        else:
-            print(f'  {k}: {json.dumps(v, ensure_ascii=False)[:120]}')
-" || true
-            done
-          done
+        run: python3 tool/probe_decklog.py "${{ inputs.deck_code }}"
