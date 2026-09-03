@@ -214,6 +214,71 @@ void main() {
     });
   });
 
+  group('the trigger icon, when Deck Log carries one', () {
+    // The card database says a card is a trigger unit but not which trigger,
+    // so this is an answer the user would otherwise have to give by hand.
+    // Which key Deck Log uses is not documented and could not be checked from
+    // where this was written, so no key name is assumed: a value that can only
+    // be a trigger is believed, and anything else is ignored.
+    DecklogCard first(Map<String, Object?> row) => parseDecklogPayload(
+      jsonEncode({
+        'game_title_id': '1',
+        'list': [
+          {'name': 'Some Trigger', 'num': 4, ...row},
+        ],
+      }),
+      code: 'X',
+    ).cards.first;
+
+    test('read from a plainly named field', () {
+      expect(first({'trigger': 'heal'}).trigger, 'heal');
+    });
+
+    test('read whatever the field is called', () {
+      expect(first({'trigger_type': 'critical'}).trigger, 'critical');
+      expect(first({'icon': 'DRAW'}).trigger, 'draw');
+      expect(first({'whatever_they_call_it': 'front'}).trigger, 'front');
+    });
+
+    test('read out of an icon filename', () {
+      expect(first({'icon': 'trigger_stand.png'}).trigger, 'stand');
+    });
+
+    test('read from a nested object', () {
+      expect(
+        first({
+          'custom_param': {'trigger': 'over'},
+        }).trigger,
+        'over',
+      );
+    });
+
+    test('absent when nothing in the row spells a trigger', () {
+      expect(first({'card_number': 'D-BT01/030EN'}).trigger, isNull);
+      expect(first({'rarity': 'RRR', 'num2': '4'}).trigger, isNull);
+    });
+
+    test('the name and the rules text are never read as one', () {
+      // "Draw" and "Critical" are ordinary words in both.
+      expect(
+        parseDecklogPayload(
+          jsonEncode({
+            'game_title_id': '1',
+            'list': [
+              {'name': 'Draw', 'num': 4, 'effect': 'critical'},
+            ],
+          }),
+          code: 'X',
+        ).cards.first.trigger,
+        isNull,
+      );
+    });
+
+    test('a value that merely contains a trigger word is not believed', () {
+      expect(first({'note': 'healing potion of drawing'}).trigger, isNull);
+    });
+  });
+
   group('loading a batch', () {
     test('every code is fetched, in order', () async {
       final requested = <String>[];
@@ -587,6 +652,31 @@ void main() {
           .stats(view)
           .firstWhere((group) => group.title == 'Triggers');
       expect(triggers.caption, '16 of 16');
+    });
+
+    test('a trigger Deck Log named arrives set on the card', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          jsonEncode({
+            'game_title_id': '1',
+            'list': [
+              {
+                'name': 'Cosmic Hero, Grandbeat',
+                'num': 4,
+                'card_number': 'D-BT01/040EN',
+                'trigger': 'heal',
+              },
+            ],
+          }),
+          code: 'X',
+        ),
+      );
+      final card = store.viewOf(result.deck).items.single.card;
+      expect(card.attributes['trigger'], 'heal');
     });
 
     test('an imported deck can be checked against the rules', () async {

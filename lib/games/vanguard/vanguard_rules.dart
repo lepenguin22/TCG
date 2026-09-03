@@ -158,20 +158,53 @@ List<ValidationIssue> validateVanguard(DeckView view) {
   final allowedSeries = formatSeries[formatId];
   if (allowedSeries != null) {
     final undated = <DeckItem>[];
+    final ambiguous = <DeckItem>[];
     for (final item in [...ride, ...main, ...gZone]) {
       final series = item.card.attribute('series');
-      if (series == null) {
-        undated.add(item);
+      if (series != null) {
+        // Every letter is an era the card was actually printed in, so one of
+        // them being in the pool makes the card legal.
+        if (!series.split('').any(allowedSeries.contains)) {
+          issues.add(
+            ValidationIssue.error(
+              '"${item.card.name}" is not a ${view.format.name} card. '
+              '${_seriesSentence(series)}',
+            ),
+          );
+        }
         continue;
       }
-      if (!series.split('').any(allowedSeries.contains)) {
-        issues.add(
-          ValidationIssue.error(
-            '"${item.card.name}" is not a ${view.format.name} card. '
-            '${_seriesSentence(series)}',
-          ),
-        );
+
+      // Here the letters are eras the card *might* be from, so the reading is
+      // the other way round: legal only if every one of them is in the pool,
+      // illegal if none is, and unknown in between.
+      final possible = item.card.attribute('possibleSeries')?.split('');
+      if (possible != null && possible.isNotEmpty) {
+        if (!possible.any(allowedSeries.contains)) {
+          issues.add(
+            ValidationIssue.error(
+              '"${item.card.name}" is not a ${view.format.name} card. It is '
+              'from before the D-series.',
+            ),
+          );
+        } else if (!possible.every(allowedSeries.contains)) {
+          ambiguous.add(item);
+        }
+        continue;
       }
+
+      undated.add(item);
+    }
+    if (ambiguous.isNotEmpty) {
+      final names = _nameList([for (final item in ambiguous) item.card.name]);
+      issues.add(
+        ValidationIssue.warning(
+          '$names could not be checked against the ${view.format.name} card '
+          'pool. ${ambiguous.length == 1 ? 'It predates' : 'They predate'} the '
+          'D-series, but the app cannot tell which of the older eras '
+          '${ambiguous.length == 1 ? 'it is' : 'they are'} from.',
+        ),
+      );
     }
     if (undated.isNotEmpty) {
       // Naming them matters: a count alone leaves the user with no way to tell
@@ -377,8 +410,8 @@ List<ValidationIssue> validateVanguard(DeckView view) {
     issues.add(
       ValidationIssue.warning(
         '$unknownIcons trigger ${unknownIcons == 1 ? 'unit has' : 'units have'} '
-        'no trigger set, so the heal and over limits cannot be checked. Tap '
-        'one and choose Edit card details to say which trigger it is.',
+        'no trigger set, so the heal and over limits cannot be checked. Use '
+        'Set trigger icons in the deck menu to fill them in.',
       ),
     );
   }

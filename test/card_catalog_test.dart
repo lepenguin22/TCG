@@ -296,6 +296,44 @@ void main() {
       expect(dated / cards.length, greaterThan(0.97));
     });
 
+    test('every card is either dated or at least placed before the D-series', () {
+      // Old PR promos carry no era in their number. Their clan still rules the
+      // D-series out, which is enough to check them against Standard.
+      final unplaced = cards
+          .where(
+            (c) =>
+                (c.attributes['series'] ?? '').isEmpty &&
+                (c.attributes['possibleSeries'] ?? '').isEmpty,
+          )
+          .toList();
+      expect(
+        unplaced.length,
+        lessThan(5),
+        reason: 'unplaced: ${unplaced.map((c) => c.name).take(10).toList()}',
+      );
+    });
+
+    test('a narrowed era never claims the D-series', () {
+      // The whole point of 'possibleSeries' is that the card predates it.
+      for (final entry in cards) {
+        final possible = entry.attributes['possibleSeries'];
+        if (possible == null) continue;
+        expect(possible, isNot(contains('d')), reason: entry.name);
+        expect(entry.attributes['series'], isNull, reason: entry.name);
+      }
+    });
+
+    test('a "Standard" promo carrying a clan is dated to the V-series', () {
+      // The D-series replaced clans with nations, so a clan on a VGS promo is
+      // a V-series card however recent the event was. A year cutoff got this
+      // wrong for the 2021 handover.
+      final gengan = cards.firstWhere(
+        (c) => c.name == 'Stealth Dragon, Gengan',
+      );
+      expect(gengan.attributes['series'], isNot(contains('d')));
+      expect(gengan.attributes['clan'], 'Nubatama');
+    });
+
     test('the Standard pool is a real subset, not everything', () {
       final standard = cards
           .where((c) => (c.attributes['series'] ?? '').contains('d'))

@@ -5,6 +5,11 @@ import '../import/decklog.dart';
 import '../models/deck.dart';
 import 'deck_store.dart';
 
+/// The trigger already on a catalogue card, if any. Only the over triggers
+/// carry one, so this is nearly always blank.
+String? attributesTriggerType(CatalogCard? match) =>
+    match?.attributes['trigger'];
+
 /// A ride deck is four units, one of each grade 0-3, plus at most one crest.
 const _rideDeckLimit = 5;
 
@@ -180,6 +185,13 @@ Future<DecklogImportResult> importDecklogDeck(
     final attributes = <String, String>{
       ...?match?.attributes,
       if (card.cardNumber != null && match == null) 'cardNo': card.cardNumber!,
+      // The card database knows a card is a trigger unit but not which
+      // trigger, so if Deck Log said, that answer is worth keeping -- it is
+      // one the user would otherwise have to give by hand.
+      if (card.trigger != null &&
+          (attributesTriggerType(match) ?? '').isEmpty &&
+          (match?.attributes['cardType'] ?? '') == 'trigger')
+        'trigger': card.trigger!,
     };
 
     final libraryCard = store.ensureCard(

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../games/game_definition.dart';
 import '../games/games.dart';
+import '../games/vanguard/vanguard_rules.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
 import '../utils/deck_text.dart';
@@ -16,6 +17,7 @@ import 'add_cards_screen.dart';
 import 'card_editor_screen.dart';
 import 'deck_settings_screen.dart';
 import 'deck_stats_screen.dart';
+import 'trigger_icons_screen.dart';
 
 class DeckScreen extends StatefulWidget {
   const DeckScreen({super.key, required this.deckId});
@@ -185,6 +187,18 @@ class _DeckScreenState extends State<DeckScreen> {
           icon: deck.favorite ? Icons.star_border : Icons.star,
           onPressed: () => store.toggleFavorite(deck.id),
         ),
+        // Only offered where it means something: another game may have no
+        // trigger units at all.
+        if (view.items.any((item) => isTrigger(item.card)))
+          SheetAction(
+            label: 'Set trigger icons',
+            icon: Icons.bolt_outlined,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => TriggerIconsScreen(deckId: deck.id),
+              ),
+            ),
+          ),
         SheetAction(
           label: 'Copy as text',
           icon: Icons.copy_outlined,

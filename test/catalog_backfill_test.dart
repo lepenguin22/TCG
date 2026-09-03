@@ -224,4 +224,55 @@ void main() {
     expect(await backfillLibraryFromCatalog(store, seededCatalog()), 1);
     expect(store.needsCardBackfill, isFalse);
   });
+
+  test('a corrected era replaces what an older build wrote', () async {
+    // The era is worked out by the app, not entered by hand, so unlike every
+    // other attribute the catalogue's answer wins -- otherwise a card dated
+    // wrongly by an older build would stay wrong forever.
+    final store = DeckStore();
+    await store.load();
+    store.saveCard(
+      gameId: 'vanguard',
+      name: 'Stealth Dragon, Gengan',
+      attributes: {'cardNo': 'BSF2021/VGS01EN', 'series': 'd', 'grade': '2'},
+    );
+
+    final catalog = CardCatalog()
+      ..seed(_asset, [
+        CatalogCard.fromJson({
+          'n': 'Stealth Dragon, Gengan',
+          'no': 'BSF2021/VGS01EN',
+          'g': 2,
+          'sr': 'v',
+        }),
+      ]);
+    await backfillLibraryFromCatalog(store, catalog);
+
+    expect(store.cards.single.attributes['series'], 'v');
+  });
+
+  test('an era that can no longer be established is dropped', () async {
+    final store = DeckStore();
+    await store.load();
+    store.saveCard(
+      gameId: 'vanguard',
+      name: 'Old Promo',
+      attributes: {'cardNo': 'PR/0001EN', 'series': 'd', 'grade': '2'},
+    );
+
+    final catalog = CardCatalog()
+      ..seed(_asset, [
+        CatalogCard.fromJson({
+          'n': 'Old Promo',
+          'no': 'PR/0001EN',
+          'g': 2,
+          'sp': 'gopv',
+        }),
+      ]);
+    await backfillLibraryFromCatalog(store, catalog);
+
+    final card = store.cards.single;
+    expect(card.attributes['series'], isNull);
+    expect(card.attributes['possibleSeries'], 'gopv');
+  });
 }

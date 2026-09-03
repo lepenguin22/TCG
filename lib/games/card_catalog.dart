@@ -41,6 +41,7 @@ class CatalogCard {
     'e': 'effect',
     'i': 'imageUrl',
     'sr': 'series',
+    'sp': 'possibleSeries',
   };
 
   /// [imageBase] is the shared prefix the catalog strips from image URLs to

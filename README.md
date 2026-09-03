@@ -55,10 +55,9 @@ a real release key first if you ever go that way.
   the eras it has been printed in, so a card reprinted forward into the current
   pool stays legal, while a V-series card in a Standard deck is flagged. Where
   an era cannot be established the app names the cards it could not check
-  rather than guessing, and never reports an error it cannot stand behind.
-  That happens for a card missing from the database — an import the database
-  did not recognise, or one you typed in yourself — and for 196 old `PR/`
-  promos whose numbers carry no era and whose clans do not settle one.
+  rather than guessing, and never reports an error it cannot stand behind —
+  which now happens for exactly one card in the database, plus anything
+  missing from it.
 - **Zones** that match how the game is actually laid out — Ride Deck, Main Deck
   and G Zone — with cards grouped by grade and a quantity stepper on each row.
   The ride deck takes four units, one of each grade 0-3, plus the optional ride
@@ -115,6 +114,21 @@ flutter test test/card_catalog_test.dart
 Or run the **Refresh card database** workflow from the Actions tab, which does
 the same thing and opens a pull request.
 
+### Dating a card that carries no date
+
+Formats are eras, so every card needs one, and a few hundred old `PR/` promos
+carry nothing in their number to date them by. They can still be placed: the
+D-series replaced clans with nations, and the only clans on D-series cards
+belong to its collaboration sets, so a card carrying an ordinary clan predates
+the D-series. Which older era it is from stays unknown, and the database says
+so rather than picking one.
+
+That is enough to answer the question each format actually asks. Standard is
+D-series only, so such a card is a clear error. Premium takes every older era,
+so it is clearly legal. Only V Premium needs to know *which* older era, and
+there the app says it cannot tell. This took the undated count from 196 cards
+to one.
+
 ### The one thing the database cannot tell you
 
 The source data does not record which trigger a trigger unit is — critical,
@@ -123,7 +137,10 @@ rules text and are filled in automatically; the rest is not.
 
 So the app asks. The first time you add a trigger unit from the database, it
 shows one row of buttons and remembers your answer in your card library, for
-that card, forever.
+that card, forever. For a deck that arrived from an import, where nobody was
+asked anything, **Set trigger icons** in the deck menu puts every trigger unit
+in the deck on one screen to be answered in a single pass. And if Deck Log
+itself names the trigger, the import takes it and nothing needs answering.
 
 The two questions are kept apart, though, because only one of them needs an
 answer. Whether a card *is* a trigger unit is in the data, so the "exactly 16
@@ -212,7 +229,8 @@ lib/
   store/decklog_import.dart      turns a Deck Log deck into one of ours
   import/decklog.dart            the Deck Log client and payload reader
   screens/                       deck list, deck, add cards, card editor,
-                                 breakdown, deck settings, settings
+                                 breakdown, trigger icons, deck settings,
+                                 settings
   widgets/                       card rows, images, charts, chips, sheets
   utils/deck_text.dart           plain text export
   games/card_catalog.dart        loading and searching the bundled database
@@ -225,6 +243,7 @@ test/
   deck_store_test.dart           state, persistence, import and export
   card_catalog_test.dart         search, plus checks on the real asset
   catalog_backfill_test.dart     repairing old cards without losing edits
+  trigger_icons_test.dart        setting a deck's trigger icons in one pass
   decklog_import_test.dart       reading Deck Log links, payloads and decks
   decklog_screen_test.dart       the import screen, driven end to end
   catalog_flow_test.dart         searching and adding a card, end to end

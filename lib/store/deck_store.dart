@@ -19,7 +19,10 @@ const _backfillKey = 'tcgdecks.v1.backfill';
 /// cards that were saved before it existed. Cards entered before the catalog
 /// shipped have no series, card text or image; without those the rules engine
 /// cannot tell which format they belong to.
-const cardBackfillVersion = 1;
+/// Bumped whenever the catalogue's derived data changes in a way saved cards
+/// should pick up. Version 2 carries corrected eras and the new "known to
+/// predate the D-series" answer.
+const cardBackfillVersion = 2;
 
 /// How many decks and cards an import brought in.
 class ImportResult {
@@ -282,6 +285,17 @@ class DeckStore extends ChangeNotifier {
       final merged = Map<String, String>.from(match.attributes);
       for (final attribute in card.attributes.entries) {
         if (attribute.value.isNotEmpty) merged[attribute.key] = attribute.value;
+      }
+      // The era is worked out by the app rather than entered by hand, so the
+      // catalogue's answer replaces what an older build wrote -- and removes
+      // it when a card that used to be dated turns out not to be datable.
+      for (final key in const ['series', 'possibleSeries']) {
+        final value = match.attributes[key];
+        if (value == null || value.isEmpty) {
+          merged.remove(key);
+        } else {
+          merged[key] = value;
+        }
       }
       if (_sameAttributes(merged, card.attributes)) {
         updated.add(card);

@@ -78,15 +78,19 @@ String? _seriesOf(String number, [String setName = '', String? nation]) {
 
   // Event promos carry the format they were printed for in their number:
   // VGD is D-series, VGV is V Premium and VGP is Premium. VGS is "Standard",
-  // which only came to mean D-series in 2021; before that it meant V-series.
+  // which meant the V-series before the D-series took the name over.
   final promo = RegExp(r'^[A-Z]+(\d{4})\D*/VG([SVPD])').firstMatch(no);
   if (promo != null) {
-    final year = int.tryParse(promo.group(1)!) ?? 0;
     switch (promo.group(2)) {
       case 'D':
         return 'd';
       case 'S':
-        return year >= 2021 ? 'd' : 'v';
+        // Which era a "Standard" promo belongs to is settled by what the card
+        // is grouped under, not by the year it was handed out: the D-series
+        // replaced clans with nations, so a clan here is a V-series card. A
+        // year cutoff got this wrong for the 2021 handover itself, dating two
+        // clan cards as D-series.
+        return nation != null ? 'd' : 'v';
       case 'V':
         return 'v';
       case 'P':
@@ -105,6 +109,19 @@ String? _seriesOf(String number, [String setName = '', String? nation]) {
     'lyrical-monasterio',
   };
   if (dSeriesOnlyNations.contains(nation)) return 'd';
+
+  // A promo from 2022 or later grouped under any modern nation is D-series:
+  // the V-series was over by then, so the two names it shared with the
+  // D-series are no longer ambiguous.
+  // The year is anchored to the start of an event promo's number, as in
+  // BSF2025/01B. A word boundary would not do: there is none between the "F"
+  // and the "2".
+  final year = RegExp(r'^[A-Z]+(20\d{2})').firstMatch(no);
+  if (nation != null &&
+      year != null &&
+      (int.tryParse(year.group(1)!) ?? 0) >= 2022) {
+    return 'd';
+  }
 
   return null;
 }
@@ -176,6 +193,10 @@ void main() async {
   // says nothing, but another printing of the same card does.
   final seriesByName = <String, Set<String>>{};
 
+  /// Which eras each pre-D-series clan has been seen in. Used to work out
+  /// which clans belong to the old game rather than to a D-series collab.
+  final erasByClan = <String, Set<String>>{};
+
   /// The era of the printing currently held in [byName], used only to stop an
   /// older printing displacing a Standard legal one.
   final chosenSeries = <String, String?>{};
@@ -210,6 +231,9 @@ void main() async {
       final series = _seriesOf(number, setName, nation);
       if (series != null) {
         seriesByName.putIfAbsent(key, () => <String>{}).add(series);
+        if (nation == null && source.isNotEmpty && source != '-') {
+          erasByClan.putIfAbsent(source, () => <String>{}).add(series);
+        }
       }
 
       final shield = _asInt(raw['shield']);
@@ -240,9 +264,6 @@ void main() async {
       };
 
       // Later printings win, except that a D-series printing is never replaced
-      // by an older one: it is the printing a Standard player owns, so it is
-      // the number and artwork worth showing.
-      // Later printings win, except that a D-series printing is never replaced
       // by an older one: that is the printing a Standard player owns, so it is
       // the number and the artwork worth showing.
       if (byName[key] == null || chosenSeries[key] != 'd') {
@@ -258,12 +279,33 @@ void main() async {
 
   client.close();
 
+  // A clan that only ever appears on D-series cards belongs to one of its
+  // collaboration sets, not to the old game. Working the list out from the
+  // data rather than naming the collabs means a new one needs no code change.
+  const preD = {'v', 'g', 'o', 'p'};
+  final legacyClans = {
+    for (final entry in erasByClan.entries)
+      if (entry.value.any(preD.contains) && !entry.value.contains('d'))
+        entry.key,
+  };
+
   // Stamp each card with every era it has been printed in.
   var unknownSeries = 0;
+  var narrowedSeries = 0;
   for (final entry in byName.entries) {
     final eras = seriesByName[entry.key];
     if (eras == null || eras.isEmpty) {
-      unknownSeries += 1;
+      // The era is not known, but a clan can still rule the D-series out: the
+      // D-series replaced clans with nations, and every clan it does use
+      // belongs to a collab. So the card is from one of the older eras --
+      // which one is still unknown, and 'sp' says exactly that.
+      final clan = entry.value['c'];
+      if (clan is String && legacyClans.contains(clan)) {
+        entry.value['sp'] = (preD.toList()..sort()).join();
+        narrowedSeries += 1;
+      } else {
+        unknownSeries += 1;
+      }
       continue;
     }
     entry.value['sr'] = (eras.toList()..sort()).join();
@@ -287,7 +329,9 @@ void main() async {
         'n=name g=grade t=cardType tr=trigger na=nation c=clan p=power '
         's=shield no=cardNo e=effect i=image (relative to imageBase) '
         'sr=series (d=D-series v=V-series g=G-series o=original p=old promo; '
-        'one letter per era the card was printed in, absent when unknown)',
+        'one letter per era the card was printed in, absent when unknown) '
+        'sp=possible series (the same letters, but one of them rather than '
+        'all: the era is unknown and these are what it could be)',
     'cards': catalog,
   };
 
@@ -302,5 +346,6 @@ void main() async {
     )
     ..writeln('${catalog.length} distinct cards written to $_outputPath')
     ..writeln('$unknownSeries of them could not be dated to an era')
+    ..writeln('$narrowedSeries are known only to predate the D-series')
     ..writeln('${(await file.length() / 1024 / 1024).toStringAsFixed(2)} MB');
 }

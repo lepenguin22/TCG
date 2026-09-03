@@ -699,6 +699,72 @@ void main() {
       return slots;
     }
 
+    /// A card the app can only place before the D-series: it knows the era is
+    /// one of these, not that the card was printed in all of them.
+    CardDefinition preDSeriesCard(String name) => CardDefinition(
+      id: 'pre-d-$name',
+      gameId: 'vanguard',
+      name: name,
+      attributes: const {
+        'grade': '2',
+        'cardType': 'normal',
+        'possibleSeries': 'gopv',
+      },
+      createdAt: DateTime(2024),
+      updatedAt: DateTime(2024),
+    );
+
+    group('a card known only to predate the D-series', () {
+      test('is an error in Standard, which is D-series only', () {
+        final slots = legalStandardDeck();
+        named(slots, 'Grade 2 A').card = preDSeriesCard('Old Promo');
+        expect(
+          errorsOf(viewOf(formatStandard, slots)),
+          contains(
+            allOf(
+              contains('"Old Promo" is not a Standard card'),
+              contains('before the D-series'),
+            ),
+          ),
+        );
+      });
+
+      test('passes Premium in silence, which takes every older era', () {
+        final slots = legalStandardDeck()
+          ..removeWhere((slot) => slot.zoneId == zoneRide);
+        named(slots, 'Grade 2 A').card = preDSeriesCard('Old Promo');
+        final view = viewOf(formatPremium, slots);
+        expect(errorsOf(view), isEmpty);
+        expect(
+          warningsOf(view),
+          isNot(contains(contains('Old Promo'))),
+          reason: 'every era it could be from is in the pool',
+        );
+      });
+
+      test('is a warning in V Premium, where the era would matter', () {
+        // It could be a V-series card, or a G-series one. Saying either would
+        // be a guess, so the app says it cannot tell.
+        final slots = legalStandardDeck()
+          ..removeWhere((slot) => slot.zoneId == zoneRide);
+        for (final slot in slots) {
+          slot.card = card(slot.card.name, {
+            ...slot.card.attributes,
+            'series': 'v',
+          });
+        }
+        named(slots, 'Grade 2 A').card = preDSeriesCard('Old Promo');
+        final view = viewOf(formatVPremium, slots);
+        expect(errorsOf(view), isNot(contains(contains('Old Promo'))));
+        expect(
+          warningsOf(view),
+          contains(
+            allOf(contains('"Old Promo"'), contains('predates the D-series')),
+          ),
+        );
+      });
+    });
+
     test('an unchecked card is named, not just counted', () {
       // A bare count left no way to tell which cards were unchecked.
       expect(

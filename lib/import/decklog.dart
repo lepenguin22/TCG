@@ -27,6 +27,7 @@ class DecklogCard {
     required this.name,
     required this.quantity,
     this.cardNumber,
+    this.trigger,
     required this.section,
   });
 
@@ -36,6 +37,10 @@ class DecklogCard {
   /// The printed card number, when the payload carries one. It identifies a
   /// card far more reliably than its name.
   final String? cardNumber;
+
+  /// Which trigger this is, when the payload says so: one of `critical`,
+  /// `draw`, `front`, `heal`, `stand` or `over`.
+  final String? trigger;
 
   /// The payload key this card came from, kept verbatim.
   ///
@@ -184,11 +189,50 @@ List<DecklogCard> _readList(Object? raw, String section) {
         name: name,
         quantity: quantity,
         cardNumber: number.isEmpty ? null : number,
+        trigger: _triggerIn(entry),
         section: section,
       ),
     );
   }
   return cards;
+}
+
+/// A value that names a trigger on its own, or as one part of a filename or
+/// code, such as `heal` or `trigger_heal.png`.
+final _triggerValue = RegExp(
+  r'^(?:.*[_/-])?(critical|draw|front|heal|stand|over)(?:[._/-].*)?$',
+  caseSensitive: false,
+);
+
+/// Looks for the card's trigger icon anywhere in its payload entry.
+///
+/// The card data the app ships records that a card is a trigger unit but not
+/// which trigger, so the user is asked. Deck Log knows -- it draws the icons --
+/// but which key carries it is not documented and the endpoint cannot be
+/// reached from where this was written, so no key name is assumed.
+///
+/// Instead any short value that spells one of the six triggers is taken, and
+/// everything else ignored. Guessing a key wrongly therefore costs nothing: an
+/// unrecognised value yields no trigger at all, which is exactly where the app
+/// stands without it. Only a value that can only be a trigger is believed.
+String? _triggerIn(Map<String, dynamic> entry, {bool nested = false}) {
+  for (final field in entry.entries) {
+    // The name and the rules text are prose: "Draw" and "Critical" turn up in
+    // both, meaning something else.
+    if (const {'name', 'effect', 'ability', 'text'}.contains(field.key)) {
+      continue;
+    }
+    final value = field.value;
+    if (value is Map<String, dynamic> && !nested) {
+      final found = _triggerIn(value, nested: true);
+      if (found != null) return found;
+      continue;
+    }
+    if (value is! String || value.isEmpty || value.length > 32) continue;
+    final match = _triggerValue.firstMatch(value.trim());
+    if (match != null) return match.group(1)!.toLowerCase();
+  }
+  return null;
 }
 
 /// Fetches the raw payload for a deck code.
