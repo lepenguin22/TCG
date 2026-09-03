@@ -255,6 +255,10 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--from-expansion", type=int, default=243)
     parser.add_argument("--dump-type", default="")
+    # A handful of odd pages -- promo variants, oddly laid out specials -- are
+    # tolerated, because blocking six sets of updates over one card helps
+    # nobody. A site redesign breaks hundreds at once, which still fails.
+    parser.add_argument("--max-failures", type=int, default=5)
     args = parser.parse_args()
 
     if args.expansion:
@@ -351,7 +355,14 @@ def main() -> int:
         print(f"\n{len(failures)} cards could not be read:")
         for failure in failures[:20]:
             print(f"  {failure}")
-        return 1
+        if len(failures) > args.max_failures:
+            print(
+                f"that is more than {args.max_failures}, which means the "
+                "parser has stopped matching the site rather than tripping "
+                "over an odd card"
+            )
+            return 1
+        print("tolerated; the sets are still written")
     return 0
 
 
