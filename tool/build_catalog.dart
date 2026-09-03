@@ -128,6 +128,28 @@ const _cardTypes = <String, String>{
   'Ride Deck Crest': 'ride-deck-crest',
 };
 
+/// Sets read from the official card list, which the mirror does not have.
+Future<List<({String name, List<dynamic> cards})>> _readExtraSets() async {
+  final file = File('assets/cards/extra_sets.json');
+  if (!file.existsSync()) return const [];
+  final decoded = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+  return [
+    for (final entry in decoded.values.whereType<Map<String, dynamic>>())
+      (
+        name: entry['productName'] as String? ?? '',
+        cards: entry['cards'] as List? ?? const [],
+      ),
+  ];
+}
+
+const _triggerNames = {'critical', 'draw', 'front', 'heal', 'stand', 'over'};
+
+/// The trigger the card list printed, when the source carries one.
+String? _triggerOf(Map<String, dynamic> raw) {
+  final value = (raw['trigger'] as String? ?? '').trim().toLowerCase();
+  return _triggerNames.contains(value) ? value : null;
+}
+
 /// Fetches one JSON document, retrying a few times.
 ///
 /// A dropped request used to be skipped with a warning, which quietly produced
@@ -194,15 +216,26 @@ void main() async {
   var printings = 0;
   var skipped = 0;
 
-  for (var i = 0; i < sets.length; i += 1) {
-    final set = sets[i];
-    final cardsUrl = set['cardsUrl'] as String?;
-    if (cardsUrl == null) continue;
-    final setName = set['name'] as String? ?? '';
+  // The community mirror stopped scraping at DZ-BT09, so the sets after it are
+  // read from the official card list by tool/scrape_cardlist.py and committed
+  // here. Both are read; the mirror is a fixed record of everything older.
+  final extra = await _readExtraSets();
+  final sources = <({String name, List<dynamic> cards})>[
+    for (final set in sets)
+      if (set['cardsUrl'] != null)
+        (
+          name: set['name'] as String? ?? '',
+          // Any failure here stops the run: a partial catalog that still exits
+          // zero would look like a successful rebuild that dropped cards.
+          cards: await _getJson(client, set['cardsUrl']! as String) as List,
+        ),
+    ...extra,
+  ];
+  stdout.writeln('${sets.length} mirrored sets, ${extra.length} from the site');
 
-    // Any failure here stops the run: a partial catalog that still exits zero
-    // would look like a successful rebuild that dropped cards.
-    final cards = await _getJson(client, cardsUrl) as List;
+  for (var i = 0; i < sources.length; i += 1) {
+    final setName = sources[i].name;
+    final cards = sources[i].cards;
 
     for (final raw in cards.whereType<Map<String, dynamic>>()) {
       printings += 1;
@@ -242,7 +275,11 @@ void main() async {
         // zero when the source leaves it out.
         if (cardType != 'ride-deck-crest') 'g': _asInt(raw['grade']) ?? 0,
         't': isSentinel ? 'sentinel' : cardType,
-        if (cardType == 'trigger' && isOver) 'tr': 'over',
+        // The official card list prints the trigger; the mirror never did,
+        // which is why the app asks the user for it. Where it is known, it is
+        // kept and nobody has to be asked.
+        if (cardType == 'trigger')
+          'tr': ?(_triggerOf(raw) ?? (isOver ? 'over' : null)),
         'na': ?nation,
         if (nation == null && source.isNotEmpty && source != '-') 'c': source,
         'p': ?_asInt(raw['power']),
@@ -263,7 +300,9 @@ void main() async {
     }
 
     if ((i + 1) % 40 == 0) {
-      stdout.writeln('  ${i + 1}/${sets.length} sets, ${byName.length} cards');
+      stdout.writeln(
+        '  ${i + 1}/${sources.length} sets, ${byName.length} cards',
+      );
     }
   }
 
