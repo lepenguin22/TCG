@@ -1,11 +1,23 @@
 name: Release APK
 
-# Tag a commit to publish a downloadable APK on the repository's Releases page:
+# Publishes a downloadable APK on the repository's Releases page, which is a
+# nicer link to open from a phone than a build artifact -- and unlike an
+# artifact, it does not expire.
+#
+# Either tag a commit:
 #   git tag v1.0.0 && git push origin v1.0.0
+# or run this from the Actions tab and give it the version, which creates the
+# tag here. That second way exists because pushing a tag needs credentials
+# that a branch-scoped checkout does not have.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Version to release, e.g. v1.0.0
+        required: true
+        default: v1.0.0
 
 permissions:
   contents: write
@@ -34,12 +46,15 @@ jobs:
         run: flutter build apk --release --build-number=${{ github.run_number }}
 
       - name: Name the APK after the tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk \
-             "dist/tcg-decks-${GITHUB_REF_NAME}.apk"
+             "dist/tcg-decks-${TAG}.apk"
 
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: dist/*.apk
           generate_release_notes: true
