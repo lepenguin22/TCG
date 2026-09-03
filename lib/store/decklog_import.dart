@@ -16,13 +16,23 @@ import 'deck_store.dart';
 String decklogNumberKey(String raw) =>
     raw.trim().toLowerCase().replaceFirst(RegExp(r'en(?=$|[^a-z0-9])'), '');
 
-/// The same, with a printing's variant marker dropped too: the `-W` of an
-/// alternate art, or the ` SGR` of a rarity. Two printings of one card can
-/// share this key, so it is only ever used where it picks out a single card.
-String decklogLooseNumberKey(String raw) =>
-    decklogNumberKey(raw)
-        .replaceFirst(RegExp(r'\s+\S+$'), '')
-        .replaceFirst(RegExp(r'-[a-z]$'), '');
+/// The same, reduced further to the set and the printed number, with every
+/// letter after the digits dropped.
+///
+/// This is what bridges a Japanese number to an English one. Where the English
+/// printing carries EN, the Japanese one carries its rarity in the same place:
+/// `DZ-SS14/001R` and `DZ-SS14/001EN` are the same card, and only stripping
+/// both down to `dz-ss14/001` finds it. Variant markers go too -- the `-W` of
+/// an alternate art, the ` SGR` of a rarity.
+///
+/// Two printings can share this key, so it is only ever used where it picks
+/// out a single card.
+String decklogLooseNumberKey(String raw) => raw
+    .trim()
+    .toLowerCase()
+    .replaceFirst(RegExp(r'\s+\S+$'), '')
+    .replaceFirst(RegExp(r'-[a-z]$'), '')
+    .replaceFirstMapped(RegExp(r'^(.*\d)[a-z]+$'), (match) => match[1]!);
 
 /// A card image reduced to what identifies the card: the filename, without its
 /// folder, extension or the EN some English printings carry.
@@ -109,7 +119,10 @@ String? _rideDeckSection(
   // Cards that place themselves say nothing about what their section is for.
   final sections = <String, List<DecklogCard>>{};
   for (final card in cards) {
+    // A card the payload or the database has already placed says nothing
+    // about what its section is for.
     if (_zoneFromCard(matches[card]) != null) continue;
+    if (card.isRideDeck || card.isCrest) continue;
     sections.putIfAbsent(card.section, () => []).add(card);
   }
 
@@ -151,7 +164,9 @@ int _rideDeckScore(
   // grade is not evidence against, only the absence of evidence for.
   final grades = <int>{};
   for (final card in group) {
-    final grade = int.tryParse(matches[card]?.attributes['grade'] ?? '');
+    final grade = int.tryParse(
+      matches[card]?.attributes['grade'] ?? card.grade ?? '',
+    );
     if (grade == null) continue;
     if (grade > 3 || !grades.add(grade)) return 0;
   }
@@ -281,6 +296,15 @@ Future<DecklogImportResult> importDecklogDeck(
           (attributesTriggerType(match) ?? '').isEmpty &&
           (match?.attributes['cardType'] ?? '') == 'trigger')
         'trigger': card.trigger!,
+      // Deck Log carries a grade and a card type for every card, which is most
+      // of what the rules need. For a card the database has never seen -- and
+      // a Japanese deck is full of them -- it is the difference between a deck
+      // that can be checked and one that cannot.
+      if (match == null) ...{
+        'grade': ?card.grade,
+        if (card.isCrest) 'cardType': 'ride-deck-crest',
+        if (card.isOver) ...{'cardType': 'trigger', 'trigger': 'over'},
+      },
     };
 
     final libraryCard = store.ensureCard(
@@ -288,9 +312,13 @@ Future<DecklogImportResult> importDecklogDeck(
       name: match?.name ?? card.name,
       attributes: attributes,
     );
+    // What the card is wins, then what Deck Log filed it as, and only then
+    // the shape of the section it arrived in.
     final zone =
         _zoneFromCard(match) ??
-        (card.section == rideSection ? zoneRide : zoneMain);
+        (card.isCrest || card.isRideDeck
+            ? zoneRide
+            : (card.section == rideSection ? zoneRide : zoneMain));
     store.addToDeck(deck.id, libraryCard.id, zone, quantity: card.quantity);
     cardsAdded += card.quantity;
     zoneCounts[zone] = (zoneCounts[zone] ?? 0) + card.quantity;

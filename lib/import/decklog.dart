@@ -70,6 +70,10 @@ class DecklogCard {
     this.cardNumber,
     this.trigger,
     this.image,
+    this.grade,
+    this.isRideDeck = false,
+    this.isCrest = false,
+    this.isOver = false,
     required this.section,
   });
 
@@ -89,6 +93,23 @@ class DecklogCard {
   /// the two languages even where nothing else does.
   final String? image;
 
+  /// The card's grade, straight from the payload. Worth having even when the
+  /// card is not in the database: an imported Japanese deck is full of cards
+  /// too new to be, and a grade is most of what the rules need.
+  final String? grade;
+
+  /// Whether the payload files this card in the ride deck. Deck Log marks its
+  /// ride deck entries with a card type of its own, which beats working the
+  /// section out from its shape.
+  final bool isRideDeck;
+
+  /// Whether this is the ride deck crest: Deck Log gives it a slot of its own
+  /// and no grade.
+  final bool isCrest;
+
+  /// Whether the payload calls this an over trigger.
+  final bool isOver;
+
   /// The payload key this card came from, kept verbatim.
   ///
   /// Deck Log serves every game it hosts through the same endpoint, so its
@@ -98,6 +119,9 @@ class DecklogCard {
   /// out later, from the cards themselves.
   final String section;
 }
+
+/// The card type Deck Log gives a ride deck entry.
+const _decklogRideDeckType = 3;
 
 /// The sections Deck Log is known to use. Any other key holding cards is read
 /// too, so a section we have not seen before is not silently dropped.
@@ -244,6 +268,13 @@ List<DecklogCard> _readList(Object? raw, String section) {
     final number = '${entry['card_number'] ?? entry['cardno'] ?? ''}'.trim();
     final image =
         '${entry['img'] ?? entry['image'] ?? entry['image_url'] ?? ''}'.trim();
+
+    // Deck Log files each card with a type and a slot: type 3 is the ride
+    // deck, and its crest sits in a slot of its own with a grade of "-".
+    final grade = '${entry['grade'] ?? ''}'.trim();
+    final slot = '${entry['slot'] ?? ''}'.trim().toLowerCase();
+    final type = int.tryParse('${entry['type'] ?? ''}');
+
     cards.add(
       DecklogCard(
         name: name,
@@ -251,6 +282,11 @@ List<DecklogCard> _readList(Object? raw, String section) {
         cardNumber: number.isEmpty ? null : number,
         trigger: _triggerIn(entry),
         image: image.isEmpty ? null : image,
+        grade: RegExp(r'^\d$').hasMatch(grade) ? grade : null,
+        isRideDeck: type == _decklogRideDeckType || slot.startsWith('grade_'),
+        isCrest:
+            slot.startsWith('grade_p') || (slot.isNotEmpty && grade == '-'),
+        isOver: entry['is_over'] == true,
         section: section,
       ),
     );

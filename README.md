@@ -164,6 +164,13 @@ JSON endpoint that takes the same code, and that endpoint is what the app reads
 site travels with its code and only that site is asked; a bare code with no
 site to go on tries the English one and then the Japanese one.
 
+The payload files each card with a type, a slot and a grade of its own, so the
+ride deck is read from what Deck Log says rather than guessed at: type 3 is the
+ride deck, and the crest sits in a slot of its own with no grade. Where a
+payload carries none of that, the older reading still applies — the section
+whose shape fits a ride deck, being four or five cards, one copy each, no two
+of a grade.
+
 Paste a link, a link with text around it, or the bare code. Paste several, one
 per line, and they all come across in one go — fetched one at a time, in order,
 with the same deck pasted twice imported once. One bad code does not cost the
@@ -181,6 +188,10 @@ marker bridges the languages and the deck arrives in English. Where an English
 printing adds a variant marker (`EB10/021EN-W`, `G-CB04/001EN SGR`) a second,
 looser key drops that too, and is used only where it picks out a single card.
 
+A Japanese number carries its rarity where the English one carries `EN` —
+`DZ-SS14/001R` against `DZ-SS14/001EN` — so the looser key strips every letter
+after the digits.
+
 Then the **card image**, which is the backstop: both sites draw a card's artwork
 from the same filename, so `dbt02/dbt02_001.png` finds the card even when the
 number is written in a shape the app does not recognise, or is not in the
@@ -189,9 +200,10 @@ numbers collide with nothing, and image filenames identify 11,137 of 11,139
 cards, the two that clash being dropped rather than guessed at.
 
 A card with no English printing yet keeps its Japanese name and is still
-imported, so a deck ahead of the English releases is never short. Its card
-number still dates it, so it is checked against the format properly instead of
-reporting that it could not be. The import screen lists what it could not match
+imported, so a deck ahead of the English releases is never short. It keeps the
+grade Deck Log gave it and is dated by its card number, so it is checked
+against the format and counted in the curve properly rather than reporting that
+it could not be. The import screen lists what it could not match
 **with each card's number**, which is what distinguishes a set the English
 release has not reached from a number the app failed to read. A card the database does not know is still imported, with the name and count
 Deck Log gave, and the import screen lists what it could not match rather than

@@ -239,12 +239,43 @@ void main() {
       expect(decklogNumberKey('G-CB04/001EN SGR'), 'g-cb04/001 sgr');
     });
 
-    test('the looser key drops the variant marker', () {
+    test('the looser key drops the variant marker and the rarity', () {
       expect(decklogLooseNumberKey('EB10/021EN-W'), 'eb10/021');
       expect(decklogLooseNumberKey('G-CB04/001EN SGR'), 'g-cb04/001');
-      // A promo whose letter is part of the number keeps it: BSF2025/01A and
-      // /01B are two different cards.
-      expect(decklogLooseNumberKey('BSF2025/01B'), 'bsf2025/01b');
+      // Stripping every letter after the digits does collapse the two halves
+      // of a split promo -- BSF2025/01A and /01B are different cards. That is
+      // why a key shared by two cards is dropped from the index rather than
+      // matched: they stay reachable by their exact number instead.
+      expect(
+        decklogLooseNumberKey('BSF2025/01A'),
+        decklogLooseNumberKey('BSF2025/01B'),
+      );
+      expect(
+        decklogNumberKey('BSF2025/01A'),
+        isNot(decklogNumberKey('BSF2025/01B')),
+      );
+    });
+
+    test('a card whose looser key is shared is not mismatched', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()
+        ..seed(_asset, [
+          _card('Split Promo A', {'g': 0, 't': 'normal', 'no': 'BSF2025/01A'}),
+          _card('Split Promo B', {'g': 0, 't': 'normal', 'no': 'BSF2025/01B'}),
+        ]);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(list: [entry('Split Promo B', 1, 'BSF2025/01B')]),
+          code: 'X',
+        ),
+      );
+      expect(
+        store.viewOf(result.deck).items.single.card.name,
+        'Split Promo B',
+        reason: 'the exact number still finds it',
+      );
     });
 
     test('a Japanese deck comes across in English', () async {
@@ -486,6 +517,166 @@ void main() {
             payload(list: [entry('Dragonic Overlord', 4, 'D-BT02/001EN')]),
       );
       expect(loads.map((load) => load.deck?.code), ['7K3X', '19RVZ6']);
+    });
+  });
+
+  group('a real Japanese payload', () {
+    // Taken from what decklog.bushiroad.com actually returned for the deck
+    // 19RVZ6, rather than from what its fields were assumed to be. Every
+    // field named here was observed: `list` is the fifty card main deck,
+    // `p_list` the ride deck, each entry carrying its own type, slot and
+    // grade, and a Japanese card number ending in its rarity where the
+    // English printing would carry EN.
+    Map<String, Object?> row(
+      String number,
+      int num,
+      String name,
+      String grade,
+      String img, {
+      int type = 1,
+      Object slot = 0,
+    }) => {
+      'card_number': number,
+      'num': num,
+      '_num': num,
+      'type': type,
+      'slot': slot,
+      'img': img,
+      'card_kind': 1,
+      'rare': 'TDR',
+      'name': name,
+      'grade': grade,
+      'is_over': false,
+      'add_ride': false,
+      'max': 4,
+    };
+
+    String realPayload() => jsonEncode({
+      'id': 4791048,
+      'deck_id': '19RVZ6',
+      'title': 'ドロイヤル5',
+      'game_title_id': 1,
+      'deck_param1': 'D',
+      'deck_param2': 'ケテルサンクチュアリ',
+      'list': [
+        row('D-BT02/001R', 4, 'ドラゴニック・オーバーロード', '3', 'D-BT02/dbt02_001.png'),
+        row('DZ-SS14/006R', 4, 'ソウルセイバー・ドラゴン', '3', 'DZ-SS14/dzss14_012.png'),
+      ],
+      'sub_list': [],
+      'p_list': [
+        row(
+          'D-BT01/031R',
+          1,
+          'リザードソルジャー コンロー',
+          '0',
+          'DZ-SS14/dzss14_020.png',
+          type: 3,
+          slot: 'grade_0',
+        ),
+        row(
+          'DZ-SS14/004R',
+          1,
+          'ブラスター・ブレード',
+          '2',
+          'DZ-SS14/dzss14_004.png',
+          type: 3,
+          slot: 'grade_2',
+        ),
+        row(
+          'DZ-SS14/009R',
+          1,
+          'クレスト',
+          '-',
+          'DZ-SS14/dzss14_009.png',
+          type: 3,
+          slot: 'grade_p2',
+        ),
+      ],
+    });
+
+    test('the deck name and game are read', () {
+      final deck = parseDecklogPayload(realPayload(), code: '19RVZ6');
+      expect(deck.name, 'ドロイヤル5');
+      expect(
+        deck.isVanguard,
+        isTrue,
+        reason: 'game_title_id arrives as an int',
+      );
+    });
+
+    test('a Japanese number ending in its rarity finds the English card', () {
+      // DZ-SS14/001R and DZ-SS14/001EN are the same card.
+      expect(
+        decklogLooseNumberKey('DZ-SS14/001R'),
+        decklogLooseNumberKey('DZ-SS14/001EN'),
+      );
+      expect(decklogLooseNumberKey('D-BT02/001R'), 'd-bt02/001');
+    });
+
+    test('cards land in the zones Deck Log filed them under', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(realPayload(), code: '19RVZ6'),
+      );
+
+      final view = store.viewOf(result.deck);
+      expect(view.zoneCount(zoneMain), 8);
+      expect(view.zoneCount(zoneRide), 3, reason: 'p_list is the ride deck');
+    });
+
+    test('the rarity suffix no longer costs a match', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(realPayload(), code: '19RVZ6'),
+      );
+      // D-BT02/001R and D-BT01/031R are in the fixture database as EN cards.
+      expect(
+        store.viewOf(result.deck).items.map((item) => item.card.name),
+        containsAll(['Dragonic Overlord', 'Lizard Soldier, Conroe']),
+      );
+    });
+
+    test('the crest is recognised, so the ride deck is legal', () async {
+      // The crest has no grade and a slot of its own. Read as a fifth unit it
+      // made every imported ride deck illegal.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(realPayload(), code: '19RVZ6'),
+      );
+
+      final crest = store
+          .viewOf(result.deck)
+          .items
+          .firstWhere((item) => item.card.name == 'クレスト');
+      expect(crest.card.attributes['cardType'], 'ride-deck-crest');
+      expect(crest.entry.zoneId, zoneRide);
+    });
+
+    test('a card too new for the database keeps its grade', () async {
+      // Japanese sets run ahead, so these are the common case, not the edge.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(realPayload(), code: '19RVZ6'),
+      );
+
+      final unseen = store
+          .viewOf(result.deck)
+          .items
+          .firstWhere((item) => item.card.name == 'ソウルセイバー・ドラゴン');
+      expect(unseen.card.attributes['grade'], '3');
+      expect(unseen.card.attributes['series'], 'd', reason: 'from its number');
     });
   });
 
