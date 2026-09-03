@@ -56,24 +56,34 @@ def strip_tags(html: str) -> str:
 
 
 def main() -> None:
-    _, listing = get(
-        "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=257", BROWSER
-    )
-    _, detail = get(
-        "https://en.cf-vanguard.com/cardlist/?cardno=DZ-BT15/002EN&view=text",
-        BROWSER,
-    )
-
-    print("=== ONE ENTRY ON THE SET PAGE (raw) ===")
-    anchor = listing.find("DZ-BT15/002EN")
-    chunk = listing[max(0, anchor - 1200) : anchor + 400]
-    opening = chunk.find("<li")
-    print(chunk[opening if opening >= 0 else 0 :][:1400])
-
-    print("\n=== THE CARD'S OWN PAGE (text only) ===")
-    text = strip_tags(detail)
-    where = text.find("DZ-BT15/002EN")
-    print(text[max(0, where - 2600) : where + 200])
+    # A spread across one set, to see how the field block varies by card type
+    # -- and above all whether a trigger unit's page names its trigger, which
+    # no source used so far has.
+    for number in (
+        "DZ-BT15/001EN",
+        "DZ-BT15/020EN",
+        "DZ-BT15/035EN",
+        "DZ-BT15/045EN",
+        "DZ-BT15/055EN",
+        "DZ-BT15/065EN",
+        "DZ-BT15/070EN",
+        "DZ-BT15/075EN",
+    ):
+        _, html = get(
+            f"https://en.cf-vanguard.com/cardlist/?cardno={number}&view=text",
+            BROWSER,
+        )
+        text = strip_tags(html)
+        start_at = text.find("[VGE-")
+        end_at = text.find("[CONT]", start_at)
+        if end_at < 0:
+            end_at = text.find("[AUTO]", start_at)
+        if end_at < 0:
+            end_at = start_at + 400
+        block = text[start_at:end_at].splitlines()[1:12]
+        print(f"=== {number}")
+        for line in block:
+            print(f"    {line[:70]}")
 
 
 if __name__ == "__main__":
