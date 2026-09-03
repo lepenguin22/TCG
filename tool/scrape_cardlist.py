@@ -217,6 +217,7 @@ def main() -> int:
     parser.add_argument("--expansion", type=int, action="append")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--from-expansion", type=int, default=243)
+    parser.add_argument("--dump-type", default="")
     args = parser.parse_args()
 
     if args.expansion:
@@ -246,6 +247,15 @@ def main() -> int:
                 break
             page = fetch(f"{SITE}/cardlist/?cardno={cardno}&view=text")
             card = parse_card(cardno, name, image, page or "")
+            if args.dump_type and card.get("type") == args.dump_type:
+                lines = strip_tags(page or "")
+                at = next(
+                    (i for i, l in enumerate(lines) if l.startswith("[VGE-")), 0
+                )
+                print(f"    --- {cardno} block ---")
+                for line in lines[at : at + 22]:
+                    print(f"      {line[:80]}")
+                args.dump_type = ""
             if not card:
                 print(f"    could not read {cardno}")
                 continue

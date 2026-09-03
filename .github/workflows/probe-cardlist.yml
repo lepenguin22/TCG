@@ -10,5 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Read one whole set
-        run: python3 tool/scrape_cardlist.py --expansion 257
+      - name: What does a trigger unit's page look like?
+        run: |
+          python3 tool/scrape_cardlist.py --expansion 257 \
+            --dump-type "Trigger Unit" | head -40
