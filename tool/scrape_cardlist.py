@@ -57,8 +57,13 @@ NATIONS = {
 ABILITY_WORDS = ("Boost", "Intercept", "Twin Drive", "Triple Drive", "Sentinel")
 
 
-def fetch(url: str, attempts: int = 3) -> str:
-    """Fetches a page, retrying: a dropped request must not lose a whole set."""
+def fetch(url: str, attempts: int = 3, missing_ok: bool = False) -> str | None:
+    """Fetches a page, retrying: a dropped request must not lose a whole set.
+
+    With [missing_ok], a 404 comes back as None rather than an error. Asking
+    for a page past the last one is how the end of a set is found, and that is
+    an answer rather than a failure.
+    """
     for attempt in range(attempts):
         try:
             request = urllib.request.Request(url, headers=HEADERS)
@@ -67,6 +72,12 @@ def fetch(url: str, attempts: int = 3) -> str:
                 if response.headers.get("Content-Encoding") == "gzip":
                     raw = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
                 return raw.decode("utf-8", "replace")
+        except urllib.error.HTTPError as error:
+            if error.code == 404 and missing_ok:
+                return None
+            if attempt == attempts - 1:
+                raise RuntimeError(f"could not read {url}: {error}") from error
+            time.sleep(2 * (attempt + 1))
         except (urllib.error.URLError, OSError) as error:
             if attempt == attempts - 1:
                 raise RuntimeError(f"could not read {url}: {error}") from error
@@ -85,7 +96,7 @@ def strip_tags(html: str) -> list[str]:
 
 def expansions() -> dict[int, str]:
     """Every set the card list offers, as {expansion number: product name}."""
-    html = fetch(INDEX)
+    html = fetch(INDEX) or ""
     found: dict[int, str] = {}
     for match in re.finditer(
         r'href="[^"]*cardsearch/\?expansion=(\d+)"[^>]*>([^<]*)', html
@@ -103,7 +114,12 @@ def card_numbers(expansion: int) -> list[tuple[str, str, str]]:
     """The (number, name, image) of every card in a set, across its pages."""
     seen: dict[str, tuple[str, str, str]] = {}
     for page in range(1, 40):
-        html = fetch(f"{SITE}/cardlist/cardsearch/?expansion={expansion}&page={page}")
+        html = fetch(
+            f"{SITE}/cardlist/cardsearch/?expansion={expansion}&page={page}",
+            missing_ok=True,
+        )
+        if html is None:
+            break
         fresh = 0
         for match in re.finditer(
             r'href="/cardlist/\?cardno=([^"&]+)[^"]*"[^>]*>\s*'
@@ -228,12 +244,8 @@ def main() -> int:
         for index, (cardno, name, image) in enumerate(listing):
             if args.limit and index >= args.limit:
                 break
-            card = parse_card(
-                cardno,
-                name,
-                image,
-                fetch(f"{SITE}/cardlist/?cardno={cardno}&view=text"),
-            )
+            page = fetch(f"{SITE}/cardlist/?cardno={cardno}&view=text")
+            card = parse_card(cardno, name, image, page or "")
             if not card:
                 print(f"    could not read {cardno}")
                 continue
