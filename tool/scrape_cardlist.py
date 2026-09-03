@@ -149,56 +149,65 @@ def card_numbers(expansion: int) -> list[tuple[str, str, str]]:
 def parse_card(number: str, name: str, image: str, html: str) -> dict[str, object]:
     """Reads one card's own page.
 
-    The block runs: name, card type, then nation, race and clan in whatever
-    combination the card has, then the labelled stats, an ability marker, and
-    the rules text. Anchoring on the Grade line is what makes the variable
-    middle safe to read.
+    The block runs: product, name, card type, then a nation, a race and a clan
+    in whatever combination the card has, then labelled stats, an ability
+    marker, the rules text, the flavour text, and finally the format the card
+    is legal in followed by its number.
+
+    Anchoring on that format-and-number pair at the end, rather than on the
+    stats, is what lets a ride deck crest through: a crest has no grade, no
+    power and no shield, and anchoring on the grade dropped every one of them.
     """
     lines = strip_tags(html)
     start = next((i for i, line in enumerate(lines) if line.startswith("[VGE-")), -1)
     if start < 0:
         return {}
+    product = lines[start]
     block = lines[start + 1 :]
 
-    grade_at = next(
-        (i for i, line in enumerate(block[:14]) if re.fullmatch(r"Grade \d+", line)),
-        -1,
-    )
-    if grade_at < 0:
+    # The format line, identified by the card's own number following it.
+    end_at = -1
+    for index, line in enumerate(block[:-1]):
+        if re.fullmatch(r"Standard|Premium|V Premium", line) and (
+            block[index + 1] == number
+        ):
+            end_at = index
+            break
+    if end_at < 2:
         return {}
 
-    card_type = block[1] if grade_at > 1 else ""
-    middle = block[2:grade_at]
+    card_type = block[1]
+
+    # The stats, wherever they start, and whatever subset the card has.
+    values: dict[str, str] = {}
+    stats_at = end_at
+    for index in range(2, end_at):
+        match = re.fullmatch(r"(Grade|Power|Critical|Shield)\s*(.*)", block[index])
+        if match:
+            stats_at = min(stats_at, index)
+            values[match.group(1).lower()] = match.group(2).strip()
+
+    # Between the card type and the stats sit the nation, the race and the
+    # clan. Prose is not one of those, which is what bounds the region on a
+    # card that has no stats at all.
+    middle = [
+        line
+        for line in block[2:stats_at]
+        if len(line) <= 40 and not line.startswith("[")
+    ]
     nation = next((line for line in middle if line in NATIONS), "")
-    # Whatever is left that is not the nation or the race is the clan. The
-    # race is always first after the nation, so the clan is anything after it.
     rest = [line for line in middle if line != nation]
     clan = rest[1] if len(rest) > 1 else ""
 
-    values: dict[str, str] = {}
-    tail_at = grade_at
-    for index in range(grade_at, min(grade_at + 6, len(block))):
-        line = block[index]
-        match = re.fullmatch(r"(Grade|Power|Critical|Shield)\s*(.*)", line)
-        if not match:
-            tail_at = index
-            break
-        values[match.group(1).lower()] = match.group(2).strip()
-        tail_at = index + 1
-
-    # An ability marker, then the rules text, then the flavour, then the
-    # format the card is legal in.
     rules: list[str] = []
     trigger = ""
-    for line in block[tail_at:]:
-        if line == number or re.fullmatch(r"Standard|Premium|V Premium", line):
-            break
+    for line in block[stats_at:end_at]:
+        if re.fullmatch(r"(Grade|Power|Critical|Shield)\s*(.*)", line):
+            continue
         if line.startswith(ABILITY_WORDS) or line.startswith("Persona Ride"):
             continue
         # "Critical Trigger +10000": the icon, then what it gives.
-        match = re.match(
-            r"(Critical|Draw|Front|Heal|Stand|Over) Trigger\b", line
-        )
+        match = re.match(r"(Critical|Draw|Front|Heal|Stand|Over) Trigger\b", line)
         if match:
             trigger = match.group(1).lower()
             continue
@@ -210,7 +219,7 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
     return {
         "name": name or block[0],
         "number": number,
-        "url": f"{SITE}/cardlist/?cardno={number}&view=text",
+        "url": card_url(number),
         "image_url": f"{SITE}{image}" if image.startswith("/") else image,
         "image_file_type": image.rsplit(".", 1)[-1] if "." in image else "",
         "effect": "\n".join(rules).strip(),
@@ -223,6 +232,7 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
         "shield": values.get("shield", ""),
         "critical": values.get("critical", ""),
         "trigger": trigger,
+        "productName": product,
     }
 
 
@@ -281,14 +291,16 @@ def main() -> int:
             if not card:
                 failures.append(f"{cardno}: page did not parse")
                 continue
-            card["productName"] = product
             cards.append(card)
             types[str(card["type"])] = types.get(str(card["type"]), 0) + 1
             if card["trigger"]:
                 triggers[str(card["trigger"])] = (
                     triggers.get(str(card["trigger"]), 0) + 1
                 )
-        sets[str(number)] = {"productName": product, "cards": cards}
+        sets[str(number)] = {
+            "productName": (cards[0]["productName"] if cards else product),
+            "cards": cards,
+        }
         print(f"  expansion={number} {product[:50]}: {len(cards)} cards")
         sys.stdout.flush()
 
