@@ -46,47 +46,41 @@ def get(url: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
 
 
 def main() -> None:
-    latest = "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=257"
+    print("=== the shape of one entry on a set page")
+    status, body = get(
+        "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=257", BROWSER
+    )
+    print(f"    http={status} bytes={len(body)}")
+    anchor = body.find("DZ-BT15/002EN")
+    if anchor > 0:
+        print("--- raw html around the second card ---")
+        print(body[max(0, anchor - 1800) : anchor + 700])
 
-    print("=== how many cards does a set page render, and is there more?")
-    status, body = get(latest, BROWSER)
-    numbers = sorted(set(re.findall(r"DZ-BT15/\d+EN", body)))
-    print(f"    http={status} bytes={len(body)} distinct numbers={len(numbers)}")
-    print(f"    {numbers[:3]} ... {numbers[-3:]}")
-
-    print("\n=== pagination hints")
-    for pattern in (
-        r'page=\d+', r'"[^"]*page[^"]*"', r'data-[a-z-]+="[^"]{0,60}"',
-    ):
-        found = sorted(set(re.findall(pattern, body)))[:10]
-        print(f"    {pattern}: {found}")
-
-    print("\n=== scripts and anything endpoint shaped")
-    for hint in sorted(set(re.findall(r'(?:src|href)="([^"]*\.js[^"]*)"', body))):
-        print(f"    script: {hint}")
-    for hint in sorted(set(re.findall(r'["\'](/[^"\']*(?:ajax|api|json|php)[^"\']*)["\']', body)))[:15]:
-        print(f"    path: {hint}")
-
-    print("\n=== try asking for a later page")
-    for extra in ("&page=2", "&p=2", "&offset=20"):
-        status, page = get(latest + extra, BROWSER)
-        found = sorted(set(re.findall(r"DZ-BT15/\d+EN", page)))
-        overlap = set(found) & set(numbers)
-        print(
-            f"    {extra:10} http={status} numbers={len(found)} "
-            f"new={len(set(found) - set(numbers))}"
+    print("\n\n=== how many pages does a set have?")
+    seen: set[str] = set()
+    for page in range(1, 8):
+        _, html = get(
+            "https://en.cf-vanguard.com/cardlist/cardsearch/"
+            f"?expansion=257&page={page}",
+            BROWSER,
         )
+        found = set(re.findall(r"DZ-BT15/\d+EN", html))
+        fresh = found - seen
+        seen |= found
+        print(f"    page={page} numbers={len(found)} new={len(fresh)} total={len(seen)}")
+        if not fresh:
+            break
 
-    print("\n=== does a single card page carry its details?")
-    card = "https://en.cf-vanguard.com/cardlist/?cardno=DZ-BT15/001EN&view=text"
-    status, page = get(card, BROWSER)
-    print(f"    http={status} bytes={len(page)}")
-    text = re.sub(r"<[^>]+>", " ", page)
-    text = re.sub(r"\s+", " ", text)
-    for label in ("Grade", "Power", "Shield", "Nation", "Card Type", "Trigger"):
-        found = re.search(rf"{label}[^A-Za-z0-9]{{0,8}}([^ ]{{0,40}})", text)
-        print(f"    {label}: {found.group(1) if found else 'not found'}")
-    print(f"    excerpt: {text[:400]}")
+    print("\n=== everything a card's own page says")
+    _, page = get(
+        "https://en.cf-vanguard.com/cardlist/?cardno=DZ-BT15/002EN&view=text",
+        BROWSER,
+    )
+    start_at = page.find("cardlist-Detail")
+    if start_at < 0:
+        start_at = page.find("DZ-BT15/002EN")
+    print("--- raw html of the detail block ---")
+    print(page[max(0, start_at - 200) : start_at + 3000])
 
 
 if __name__ == "__main__":
