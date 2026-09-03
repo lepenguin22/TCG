@@ -184,7 +184,10 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
             break
         if line.startswith(ABILITY_WORDS) or line.startswith("Persona Ride"):
             continue
-        match = re.fullmatch(r"(Critical|Draw|Front|Heal|Stand|Over) Trigger", line)
+        # "Critical Trigger +10000": the icon, then what it gives.
+        match = re.match(
+            r"(Critical|Draw|Front|Heal|Stand|Over) Trigger\b", line
+        )
         if match:
             trigger = match.group(1).lower()
             continue

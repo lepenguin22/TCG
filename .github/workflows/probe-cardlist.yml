@@ -1,16 +1,28 @@
-# Iterating on the scraper: the site is unreachable from where it is written,
-# so a runner tries it and the log is the feedback. Removed once it is proven.
+# Reads the sets the mirror never had, and commits them. Becomes the refresh
+# workflow once it has proven itself.
 name: Probe card list
 
 on:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: What does a trigger unit's page look like?
+      - name: Read every set the mirror is missing
+        run: python3 tool/scrape_cardlist.py --from-expansion 243
+      - name: Commit what it read
         run: |
-          python3 tool/scrape_cardlist.py --expansion 257 \
-            --dump-type "Trigger Unit" | head -40
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/cards/extra_sets.json
+          git diff --cached --quiet && echo "nothing new" && exit 0
+          git commit -m "Add the sets read from the official card list
+
+          Scraped by tool/scrape_cardlist.py, which runs here because the
+          site is unreachable from where the code is written."
+          git push
