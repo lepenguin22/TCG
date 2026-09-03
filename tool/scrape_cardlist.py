@@ -265,6 +265,18 @@ def main() -> int:
     print(f"\n{total} cards written to {OUT} ({OUT.stat().st_size / 1024:.0f} KB)")
     print(f"card types: {sorted(types.items(), key=lambda kv: -kv[1])}")
     print(f"triggers:   {sorted(triggers.items(), key=lambda kv: -kv[1])}")
+
+    # A field left empty is a parser that has drifted, so it is counted rather
+    # than discovered later as a gap in the app.
+    everything = [
+        card for entry in sets.values() for card in entry["cards"]  # type: ignore[index]
+    ]
+    for field in ("name", "type", "grade", "clan", "effect", "image_url"):
+        missing = [c for c in everything if not c.get(field)]
+        print(f"  without {field}: {len(missing)}  {[c['number'] for c in missing][:5]}")
+    if everything:
+        sample = everything[len(everything) // 2]
+        print("  sample:", json.dumps(sample, ensure_ascii=False)[:420])
     return 0
 
 
