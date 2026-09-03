@@ -24,6 +24,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 SITE = "https://en.cf-vanguard.com"
@@ -55,6 +56,16 @@ NATIONS = {
 # Lines that are an ability marker rather than a value, so a parser walking
 # the block knows where the stats stop.
 ABILITY_WORDS = ("Boost", "Intercept", "Twin Drive", "Triple Drive", "Sentinel")
+
+
+def card_url(number: str) -> str:
+    """A card's own page.
+
+    Some card numbers carry characters a URL cannot take raw -- a full width
+    plus among them -- so the number is encoded rather than pasted in.
+    """
+    quoted = urllib.parse.quote(number, safe="/-")
+    return f"{SITE}/cardlist/?cardno={quoted}&view=text"
 
 
 def fetch(url: str, attempts: int = 3, missing_ok: bool = False) -> str | None:
@@ -239,6 +250,7 @@ def main() -> int:
 
     types: dict[str, int] = {}
     triggers: dict[str, int] = {}
+    failures: list[str] = []
     for number, product in sorted(wanted.items()):
         listing = card_numbers(number)
         if not listing:
@@ -248,7 +260,14 @@ def main() -> int:
         for index, (cardno, name, image) in enumerate(listing):
             if args.limit and index >= args.limit:
                 break
-            page = fetch(f"{SITE}/cardlist/?cardno={cardno}&view=text")
+            try:
+                page = fetch(card_url(cardno))
+            except (RuntimeError, UnicodeError) as error:
+                # One unreadable card should not cost the other few thousand,
+                # but it must not pass unnoticed either: the run fails at the
+                # end with every one of them listed.
+                failures.append(f"{cardno}: {error}")
+                continue
             card = parse_card(cardno, name, image, page or "")
             if args.dump_type and card.get("type") == args.dump_type:
                 lines = strip_tags(page or "")
@@ -260,7 +279,7 @@ def main() -> int:
                     print(f"      {line[:80]}")
                 args.dump_type = ""
             if not card:
-                print(f"    could not read {cardno}")
+                failures.append(f"{cardno}: page did not parse")
                 continue
             card["productName"] = product
             cards.append(card)
@@ -271,6 +290,7 @@ def main() -> int:
                 )
         sets[str(number)] = {"productName": product, "cards": cards}
         print(f"  expansion={number} {product[:50]}: {len(cards)} cards")
+        sys.stdout.flush()
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(sets, ensure_ascii=False), encoding="utf-8")
@@ -290,6 +310,12 @@ def main() -> int:
     if everything:
         sample = everything[len(everything) // 2]
         print("  sample:", json.dumps(sample, ensure_ascii=False)[:420])
+
+    if failures:
+        print(f"\n{len(failures)} cards could not be read:")
+        for failure in failures[:20]:
+            print(f"  {failure}")
+        return 1
     return 0
 
 
