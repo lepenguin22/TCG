@@ -62,6 +62,11 @@ final _catalog = [
     'na': 'keter-sanctuary',
     'no': 'D-BT05/005EN',
     'no2': ['DZ-SS13/002EN', 'V-TD01/004EN'],
+    // The shown printing's own art, plus DZ-SS13's -- different artwork for
+    // a different printing. V-TD01 has none recorded, so it falls back to
+    // the shown printing's art, same as an unknown number would.
+    'i': 'blaster-blade-d-bt05.jpg',
+    'i2': {'DZ-SS13/002EN': 'blaster-blade-dz-ss13.jpg'},
     'p': 10000,
     'sr': 'dv',
   }),
@@ -722,6 +727,24 @@ void main() {
       expect(printedNumberFor(blaster, 'DZ-BT99/001EN'), 'DZ-BT99/001EN');
     });
 
+    test('a printing with its own art shows that art', () {
+      expect(blaster.imageFor('DZ-SS13/002EN'), 'blaster-blade-dz-ss13.jpg');
+    });
+
+    test('a printing that reuses the shown art falls back to it', () {
+      // V-TD01/004EN is one of Blaster Blade's printings, but has no art of
+      // its own recorded -- it shares the shown printing's.
+      expect(blaster.imageFor('V-TD01/004EN'), 'blaster-blade-d-bt05.jpg');
+    });
+
+    test('no printing given shows the printing the catalogue shows', () {
+      expect(blaster.imageFor(null), 'blaster-blade-d-bt05.jpg');
+    });
+
+    test('a printing the database has never seen shows the shown art', () {
+      expect(blaster.imageFor('DZ-BT99/001EN'), 'blaster-blade-d-bt05.jpg');
+    });
+
     test('an imported deck keeps the printing it named', () async {
       final store = await loadedStore();
       final catalog = CardCatalog()..seed(_asset, _catalog);
@@ -740,8 +763,29 @@ void main() {
       // And it is still the right card, filled in from the database.
       expect(card.attributes['grade'], '2');
       expect(card.attributes['power'], '10000');
+      // The art of the printing named, not of whichever printing the
+      // catalogue shows for Blaster Blade -- this was the bug: the number
+      // and the abilities were right, but the artwork was D-BT05/005's.
+      expect(card.attributes['imageUrl'], 'blaster-blade-dz-ss13.jpg');
       expect(result.matched, 1);
       expect(result.unmatched, isEmpty);
+    });
+
+    test('a printing with no art of its own keeps the shown art', () async {
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(list: [entry('Blaster Blade', 4, 'V-TD01/004EN')]),
+          code: '6XDWK',
+        ),
+      );
+
+      final card = store.viewOf(result.deck).items.single.card;
+      expect(card.attributes['cardNo'], 'V-TD01/004EN');
+      expect(card.attributes['imageUrl'], 'blaster-blade-d-bt05.jpg');
     });
   });
 

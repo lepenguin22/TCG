@@ -17,6 +17,7 @@ class CatalogCard {
     required this.attributes,
     required this.searchText,
     this.otherNumbers = const [],
+    this.otherImages = const {},
   });
 
   final String name;
@@ -42,6 +43,25 @@ class CatalogCard {
     if (cardNo != null && cardNo!.isNotEmpty) cardNo!,
     ...otherNumbers,
   ];
+
+  /// The artwork of other printings, by number, where it differs from
+  /// [attributes]'s own `imageUrl`. Most reprints reuse the same art, so this
+  /// is usually empty even for a card with several [otherNumbers].
+  final Map<String, String> otherImages;
+
+  /// The artwork for the printing named [number].
+  ///
+  /// A deck can name any printing of a card, and different printings can
+  /// carry different art -- so showing the printing the catalogue happens to
+  /// prefer is wrong whenever a deck names a different one. Falls back to the
+  /// card's own image when [number] is null, unknown, or shares its art.
+  String? imageFor(String? number) {
+    if (number != null) {
+      final alternate = otherImages[number];
+      if (alternate != null) return alternate;
+    }
+    return attributes['imageUrl'];
+  }
 
   static const _aliases = <String, String>{
     'g': 'grade',
@@ -69,9 +89,17 @@ class CatalogCard {
     final others = [
       for (final number in json['no2'] as List? ?? const []) '$number',
     ];
+    final images = json['i2'] as Map? ?? const {};
+    final otherImages = <String, String>{
+      for (final entry in images.entries)
+        '${entry.key}': '$imageBase${entry.value}',
+    };
     final attributes = <String, String>{};
     for (final entry in json.entries) {
-      if (entry.key == 'n' || entry.key == 'no2' || entry.value == null) {
+      if (entry.key == 'n' ||
+          entry.key == 'no2' ||
+          entry.key == 'i2' ||
+          entry.value == null) {
         continue;
       }
       final key = _aliases[entry.key] ?? entry.key;
@@ -86,6 +114,7 @@ class CatalogCard {
       attributes: attributes,
       searchText: cardNo.isEmpty ? lowerName : '$lowerName $cardNo',
       otherNumbers: others,
+      otherImages: otherImages,
     );
   }
 }

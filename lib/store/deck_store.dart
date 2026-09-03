@@ -300,6 +300,15 @@ class DeckStore extends ChangeNotifier {
           merged[key] = value;
         }
       }
+      // The artwork follows from the printing, not from hand entry either --
+      // recomputed the same way an import would, so a card saved before
+      // printings had their own images self-heals here.
+      final image = match.imageFor(card.attributes['cardNo']?.trim());
+      if (image == null || image.isEmpty) {
+        merged.remove('imageUrl');
+      } else {
+        merged['imageUrl'] = image;
+      }
       if (_sameAttributes(merged, card.attributes)) {
         updated.add(card);
         continue;

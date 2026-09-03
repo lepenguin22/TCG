@@ -293,6 +293,8 @@ void main() {
           'n': 'Blaster Blade',
           'no': 'D-BT05/005EN',
           'no2': ['DZ-SS13/002EN'],
+          'i': 'blaster-blade-d-bt05.jpg',
+          'i2': {'DZ-SS13/002EN': 'blaster-blade-dz-ss13.jpg'},
           'g': 2,
           'p': 10000,
           'sr': 'dv',
@@ -308,5 +310,8 @@ void main() {
       'DZ-SS13/002EN',
       reason: 'the printing the user has is not overwritten',
     );
+    // Not D-BT05's art, which the catalogue shows for this card by default --
+    // the user's own printing's art.
+    expect(card.attributes['imageUrl'], 'blaster-blade-dz-ss13.jpg');
   });
 }

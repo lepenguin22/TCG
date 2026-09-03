@@ -243,6 +243,13 @@ void main() async {
   /// looking a card up.
   final numbersByCard = <String, Set<String>>{};
 
+  /// Each printing's own image, keyed by its number. The shown printing's
+  /// image already ends up in the entry itself; this is for the others --
+  /// without it every alternate printing showed the shown one's artwork,
+  /// which is wrong whenever a deck names a different printing than the one
+  /// the catalogue prefers to display.
+  final imagesByNumber = <String, Map<String, String>>{};
+
   /// The era of the printing currently held in [byName], used only to stop an
   /// older printing displacing a Standard legal one.
   final chosenSeries = <String, String?>{};
@@ -262,6 +269,7 @@ void main() async {
           String? series,
           String number,
           String? trigger,
+          String image,
           Map<String, Object?> entry,
         })
       >[];
@@ -345,6 +353,10 @@ void main() async {
           ? (_triggerOf(raw) ?? (isOver ? 'over' : null))
           : null;
 
+      final relativeImage = image.startsWith(_imageBase)
+          ? image.substring(_imageBase.length)
+          : '';
+
       final entry = <String, Object?>{
         'n': name,
         // A ride deck crest has no grade at all; everything else defaults to
@@ -358,8 +370,7 @@ void main() async {
         's': ?shield,
         if (number.isNotEmpty) 'no': number,
         if (effect.isNotEmpty) 'e': effect,
-        if (image.startsWith(_imageBase))
-          'i': image.substring(_imageBase.length),
+        if (relativeImage.isNotEmpty) 'i': relativeImage,
       };
 
       records.add((
@@ -373,6 +384,7 @@ void main() async {
         series: series,
         number: number,
         trigger: trigger,
+        image: relativeImage,
         entry: entry,
       ));
     }
@@ -404,6 +416,7 @@ void main() async {
       String? series,
       String number,
       String? trigger,
+      String image,
       Map<String, Object?> entry,
     })
     record,
@@ -427,6 +440,12 @@ void main() async {
     }
     if (record.number.isNotEmpty) {
       numbersByCard.putIfAbsent(key, () => <String>{}).add(record.number);
+      if (record.image.isNotEmpty) {
+        imagesByNumber.putIfAbsent(
+          key,
+          () => <String, String>{},
+        )[record.number] = record.image;
+      }
     }
     // Later printings win, except that a D-series printing is never replaced
     // by an older one: that is the printing a Standard player owns, so it is
@@ -487,6 +506,7 @@ void main() async {
   // number and fell back to matching by name, which is what put the wrong
   // card in front of the user.
   var withAlternates = 0;
+  var withAlternateImages = 0;
   for (final entry in byName.entries) {
     final numbers = numbersByCard[entry.key] ?? const <String>{};
     final others = numbers.where((n) => n != entry.value['no']).toList()
@@ -494,6 +514,21 @@ void main() async {
     if (others.isEmpty) continue;
     entry.value['no2'] = others;
     withAlternates += 1;
+
+    // Each alternate printing's own artwork, where it differs from the one
+    // shown. A deck can name any of these printings, and showing it the
+    // artwork of a different one -- which is what happened before this
+    // existed -- is as wrong as showing it a different card's stats.
+    final images = imagesByNumber[entry.key];
+    if (images == null) continue;
+    final shown = entry.value['i'];
+    final alternates = <String, String>{
+      for (final number in others)
+        if (images[number] case final image? when image != shown) number: image,
+    };
+    if (alternates.isEmpty) continue;
+    entry.value['i2'] = alternates;
+    withAlternateImages += 1;
   }
 
   final catalog = byName.values.toList()
@@ -517,7 +552,9 @@ void main() async {
         'one letter per era the card was printed in, absent when unknown) '
         'sp=possible series (the same letters, but one of them rather than '
         'all: the era is unknown and these are what it could be) '
-        'no2=the numbers of this card\'s other printings',
+        'no2=the numbers of this card\'s other printings '
+        'i2=the images of those printings, by number, where a printing\'s '
+        'art differs from the one shown',
     'cards': catalog,
   };
 
@@ -535,5 +572,6 @@ void main() async {
     ..writeln('$narrowedSeries are known only to predate the D-series')
     ..writeln('$withTrigger trigger units know which trigger they are')
     ..writeln('$withAlternates carry the numbers of their other printings')
+    ..writeln('$withAlternateImages of those also carry a differing image')
     ..writeln('${(await file.length() / 1024 / 1024).toStringAsFixed(2)} MB');
 }

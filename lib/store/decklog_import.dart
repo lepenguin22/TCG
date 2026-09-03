@@ -307,13 +307,15 @@ Future<DecklogImportResult> importDecklogDeck(
     final numberEra = match == null && card.cardNumber != null
         ? seriesFromCardNumber(card.cardNumber!)
         : null;
+    // The printing the deck names, not the one the database happens to show
+    // for this card -- its number and its artwork both follow from it.
+    final printedNo = match == null
+        ? card.cardNumber?.trim()
+        : printedNumberFor(match, card.cardNumber);
     final attributes = <String, String>{
       ...?match?.attributes,
-      // The printing the deck names, not the one the database happens to
-      // show for this card.
-      'cardNo': ?(match == null
-          ? card.cardNumber?.trim()
-          : printedNumberFor(match, card.cardNumber)),
+      'cardNo': ?printedNo,
+      if (match != null) 'imageUrl': ?match.imageFor(printedNo),
       // A card the database has never seen still has a number, and the number
       // says which era it is from. Japanese sets run ahead of the English
       // ones, so an imported Japanese deck is full of these -- without this
