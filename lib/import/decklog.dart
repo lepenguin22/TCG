@@ -69,6 +69,7 @@ class DecklogCard {
     required this.quantity,
     this.cardNumber,
     this.trigger,
+    this.image,
     required this.section,
   });
 
@@ -82,6 +83,11 @@ class DecklogCard {
   /// Which trigger this is, when the payload says so: one of `critical`,
   /// `draw`, `front`, `heal`, `stand` or `over`.
   final String? trigger;
+
+  /// The card's image, as the payload names it. Both of Deck Log's sites draw
+  /// the same artwork from the same filename, so this identifies a card across
+  /// the two languages even where nothing else does.
+  final String? image;
 
   /// The payload key this card came from, kept verbatim.
   ///
@@ -236,12 +242,15 @@ List<DecklogCard> _readList(Object? raw, String section) {
     if (name.isEmpty || quantity <= 0) continue;
 
     final number = '${entry['card_number'] ?? entry['cardno'] ?? ''}'.trim();
+    final image =
+        '${entry['img'] ?? entry['image'] ?? entry['image_url'] ?? ''}'.trim();
     cards.add(
       DecklogCard(
         name: name,
         quantity: quantity,
         cardNumber: number.isEmpty ? null : number,
         trigger: _triggerIn(entry),
+        image: image.isEmpty ? null : image,
         section: section,
       ),
     );

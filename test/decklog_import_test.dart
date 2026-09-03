@@ -21,6 +21,7 @@ final _catalog = [
     'na': 'dragon-empire',
     'no': 'D-BT02/001EN',
     'sr': 'd',
+    'i': 'dbt02/dbt02_001.png',
   }),
   _card('Embodiment of Armor, Bahr', {
     'g': 1,
@@ -318,10 +319,152 @@ void main() {
           code: '19RVZ6',
         ),
       );
-      expect(result.unmatched, ['未発売のカード']);
+      expect(result.unmatched, ['未発売のカード (DZ-BT99/001)']);
       expect(result.cardsAdded, 4);
       expect(store.viewOf(result.deck).zoneCount(zoneMain), 4);
     });
+
+    test('the ride deck is found with nothing matched to read', () async {
+      // A Japanese deck of cards the English database has never seen has no
+      // grades to read, so every candidate section used to tie and the first
+      // one encountered won. Size decides instead: a ride deck is four cards.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(
+            list: [entry('未発売のカード', 50, 'DZ-BT99/001')],
+            // A stray one-card section that also fits the shape...
+            subList: [entry('マーカー', 1, 'DZ-BT99/900')],
+            // ...and the real ride deck, four cards, one of each.
+            pList: [
+              entry('ライド0', 1, 'DZ-BT99/010'),
+              entry('ライド1', 1, 'DZ-BT99/011'),
+              entry('ライド2', 1, 'DZ-BT99/012'),
+              entry('ライド3', 1, 'DZ-BT99/013'),
+            ],
+          ),
+          code: '19RVZ6',
+        ),
+      );
+      expect(store.viewOf(result.deck).zoneCount(zoneRide), 4);
+    });
+
+    test('an unmatched card is still dated by its number', () async {
+      // Japanese sets run ahead of the English ones, so an imported Japanese
+      // deck is full of cards the database has never seen. The number still
+      // says which era they are from, and without that every one of them
+      // reported that it could not be checked against the format.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(list: [entry('未発売のカード', 4, 'DZ-BT99/001')]),
+          code: '19RVZ6',
+        ),
+      );
+
+      final card = store.viewOf(result.deck).items.single.card;
+      expect(card.attributes['series'], 'd');
+      const game = VanguardGame();
+      expect(
+        game.validate(store.viewOf(result.deck)).map((i) => i.message),
+        isNot(contains(contains('could not be checked'))),
+      );
+    });
+
+    test('an unmatched card is reported with its number', () async {
+      // The number is what says why a card was missed: a set the English
+      // release has not reached yet reads very differently from a number in a
+      // shape the app failed to handle.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(list: [entry('未発売のカード', 4, 'DZ-BT99/001')]),
+          code: '19RVZ6',
+        ),
+      );
+      expect(result.unmatched, ['未発売のカード (DZ-BT99/001)']);
+    });
+
+    test('the image filename identifies a card across the two sites', () {
+      // Both sites draw a card's artwork from the same filename, and the
+      // English one does not always mark it with EN.
+      expect(decklogImageKey('dbt02/dbt02_001.png'), 'dbt02_001');
+      expect(
+        decklogImageKey(
+          'https://en.cf-vanguard.com/wordpress/wp-content/images/cardlist/'
+          'gbt03/GBT03_070EN.jpg',
+        ),
+        'gbt03_070',
+      );
+    });
+
+    test('a card with no usable number is matched on its image', () async {
+      // The image is the one field a Deck Log card row is known to always
+      // carry, so it is the backstop when the number is absent or written in
+      // a shape the app does not recognise.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          jsonEncode({
+            'game_title_id': '1',
+            'list': [
+              {
+                'name': 'ドラゴニック・オーバーロード',
+                'num': 4,
+                'img': 'dbt02/dbt02_001.png',
+              },
+            ],
+          }),
+          code: '19RVZ6',
+        ),
+      );
+
+      expect(result.matched, 1);
+      expect(
+        store.viewOf(result.deck).items.single.card.name,
+        'Dragonic Overlord',
+      );
+    });
+
+    test(
+      'a number in an unexpected shape falls through to the image',
+      () async {
+        final store = await loadedStore();
+        final catalog = CardCatalog()..seed(_asset, _catalog);
+        final result = await importDecklogDeck(
+          store,
+          catalog,
+          parseDecklogPayload(
+            jsonEncode({
+              'game_title_id': '1',
+              'list': [
+                {
+                  'name': 'ドラゴニック・オーバーロード',
+                  'num': 4,
+                  'card_number': 'D-BT02/001 RRR 【ドラゴンエンパイア】',
+                  'img': 'dbt02/dbt02_001.png',
+                },
+              ],
+            }),
+            code: '19RVZ6',
+          ),
+        );
+        expect(result.matched, 1);
+        expect(result.unmatched, isEmpty);
+      },
+    );
 
     test('a Japanese link is fetched from the Japanese site', () async {
       final asked = <String>[];
@@ -752,7 +895,7 @@ void main() {
         ),
       );
 
-      expect(result.unmatched, ['Card From Next Week']);
+      expect(result.unmatched, ['Card From Next Week (DZ-BT99/001EN)']);
       expect(result.cardsAdded, 4, reason: 'the deck is not left short');
       final view = store.viewOf(result.deck);
       expect(view.zoneCount(zoneMain), 4);

@@ -1,6 +1,7 @@
 import '../games/card_catalog.dart';
 import '../games/games.dart';
 import '../games/vanguard/vanguard_data.dart';
+import '../games/vanguard/vanguard_numbers.dart';
 import '../import/decklog.dart';
 import '../models/deck.dart';
 import 'deck_store.dart';
@@ -22,6 +23,19 @@ String decklogLooseNumberKey(String raw) =>
     decklogNumberKey(raw)
         .replaceFirst(RegExp(r'\s+\S+$'), '')
         .replaceFirst(RegExp(r'-[a-z]$'), '');
+
+/// A card image reduced to what identifies the card: the filename, without its
+/// folder, extension or the EN some English printings carry.
+///
+/// Both of Deck Log's sites draw the same artwork for a card from the same
+/// filename, so this bridges the two languages even when nothing else does --
+/// the image is the one field a Deck Log card row is known to always have.
+String decklogImageKey(String raw) {
+  final base = raw.trim().split('?').first.split('/').last.toLowerCase();
+  return base
+      .replaceFirst(RegExp(r'\.[a-z0-9]+$'), '')
+      .replaceFirst(RegExp(r'en$'), '');
+}
 
 /// The trigger already on a catalogue card, if any. Only the over triggers
 /// carry one, so this is nearly always blank.
@@ -51,8 +65,11 @@ class DecklogImportResult {
   /// Total copies added across every zone.
   final int cardsAdded;
 
-  /// Names of cards the database did not recognise. They are still added, from
-  /// the name and count Deck Log gave, so the deck is never silently short.
+  /// Cards the database did not recognise, named as Deck Log gave them and
+  /// followed by their card number where there is one. They are still added,
+  /// so the deck is never silently short, and the number is what says why a
+  /// card was missed -- a set the English release has not reached yet reads
+  /// very differently from a number in a shape the app failed to handle.
   final List<String> unmatched;
 
   /// How many cards landed in each zone, so the import can show where the deck
@@ -109,30 +126,42 @@ String? _rideDeckSection(
       .key;
 
   String? best;
-  var bestGrades = -1;
+  var bestScore = 0;
   for (final entry in sections.entries) {
     if (entry.key == mainSection) continue;
-    final group = entry.value;
-    if (total(group) > _rideDeckLimit) continue;
-    if (group.any((card) => card.quantity != 1)) continue;
-
-    // A card the database does not know raises no objection: an unreadable
-    // grade is not evidence against, only the absence of evidence for.
-    final grades = <int>{};
-    var ruledOut = false;
-    for (final card in group) {
-      final grade = int.tryParse(matches[card]?.attributes['grade'] ?? '');
-      if (grade == null) continue;
-      if (grade > 3 || !grades.add(grade)) ruledOut = true;
-    }
-    if (ruledOut) continue;
-
-    if (grades.length > bestGrades) {
-      bestGrades = grades.length;
+    final score = _rideDeckScore(entry.value, matches);
+    if (score > bestScore) {
+      bestScore = score;
       best = entry.key;
     }
   }
   return best;
+}
+
+/// How much a section looks like a ride deck. Zero rules it out.
+int _rideDeckScore(
+  List<DecklogCard> group,
+  Map<DecklogCard, CatalogCard?> matches,
+) {
+  final total = group.fold(0, (sum, card) => sum + card.quantity);
+  if (total == 0 || total > _rideDeckLimit) return 0;
+  if (group.any((card) => card.quantity != 1)) return 0;
+
+  // A card the database does not know raises no objection: an unreadable
+  // grade is not evidence against, only the absence of evidence for.
+  final grades = <int>{};
+  for (final card in group) {
+    final grade = int.tryParse(matches[card]?.attributes['grade'] ?? '');
+    if (grade == null) continue;
+    if (grade > 3 || !grades.add(grade)) return 0;
+  }
+
+  // Known grades are the strongest evidence, and a full four or five cards
+  // the next best. Size matters most for a deck imported from the Japanese
+  // site, where a card the English database has never seen has no grade to
+  // read: without it every candidate section used to tie, and the first one
+  // encountered won -- which is not the same as the right one.
+  return grades.length * 10 + (total == 4 || total == 5 ? 5 : 0) + total;
 }
 
 /// Builds a deck in the library from a Deck Log payload.
@@ -160,6 +189,8 @@ Future<DecklogImportResult> importDecklogDeck(
   // away rather than matching one of them arbitrarily.
   final byLooseNumber = <String, CatalogCard>{};
   final looseCounts = <String, int>{};
+  final byImage = <String, CatalogCard>{};
+  final imageCounts = <String, int>{};
   for (final entry in entries) {
     final number = entry.cardNo?.trim();
     if (number != null && number.isNotEmpty) {
@@ -168,9 +199,16 @@ Future<DecklogImportResult> importDecklogDeck(
       looseCounts[loose] = (looseCounts[loose] ?? 0) + 1;
       byLooseNumber.putIfAbsent(loose, () => entry);
     }
+    final image = entry.attributes['imageUrl'];
+    if (image != null && image.isNotEmpty) {
+      final key = decklogImageKey(image);
+      imageCounts[key] = (imageCounts[key] ?? 0) + 1;
+      byImage.putIfAbsent(key, () => entry);
+    }
     byName.putIfAbsent(entry.lowerName, () => entry);
   }
   byLooseNumber.removeWhere((key, _) => (looseCounts[key] ?? 0) > 1);
+  byImage.removeWhere((key, _) => (imageCounts[key] ?? 0) > 1);
 
   /// Number first and name second. For a Japanese deck the number is the only
   /// thing that can match at all, since the names arrive in Japanese.
@@ -180,6 +218,13 @@ Future<DecklogImportResult> importDecklogDeck(
       final match =
           byNumber[decklogNumberKey(number)] ??
           byLooseNumber[decklogLooseNumberKey(number)];
+      if (match != null) return match;
+    }
+    // Then the image, which identifies a card even where the number is
+    // written differently, or is not in the payload at all.
+    final image = card.image;
+    if (image != null && image.isNotEmpty) {
+      final match = byImage[decklogImageKey(image)];
       if (match != null) return match;
     }
     return byName[card.name.trim().toLowerCase()];
@@ -211,14 +256,24 @@ Future<DecklogImportResult> importDecklogDeck(
     if (match != null) {
       matched += 1;
     } else {
-      unmatched.add(card.name);
+      final number = card.cardNumber?.trim() ?? '';
+      unmatched.add(number.isEmpty ? card.name : '${card.name} ($number)');
     }
 
     // An unmatched card still goes in, carrying whatever Deck Log knew, so the
     // deck has the right number of cards and can be corrected by hand.
+    final numberEra = match == null && card.cardNumber != null
+        ? seriesFromCardNumber(card.cardNumber!)
+        : null;
     final attributes = <String, String>{
       ...?match?.attributes,
       if (card.cardNumber != null && match == null) 'cardNo': card.cardNumber!,
+      // A card the database has never seen still has a number, and the number
+      // says which era it is from. Japanese sets run ahead of the English
+      // ones, so an imported Japanese deck is full of these -- without this
+      // every one of them reported that it could not be checked against the
+      // format, which is not true when the number is right there.
+      'series': ?numberEra,
       // The card database knows a card is a trigger unit but not which
       // trigger, so if Deck Log said, that answer is worth keeping -- it is
       // one the user would otherwise have to give by hand.

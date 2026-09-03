@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tcg_decks/games/card_catalog.dart';
+import 'package:tcg_decks/store/decklog_import.dart';
 import 'package:tcg_decks/games/vanguard/vanguard_game.dart';
 
 CatalogCard card(String name, Map<String, Object> extra) =>
@@ -321,6 +322,39 @@ void main() {
         expect(possible, isNot(contains('d')), reason: entry.name);
         expect(entry.attributes['series'], isNull, reason: entry.name);
       }
+    });
+
+    test('image filenames identify cards almost uniquely', () {
+      // The image is what an imported Japanese card is matched on when its
+      // number cannot be read, so a key that pointed at two cards would be a
+      // silent mismatch. The few that do are dropped rather than guessed at,
+      // but there must not be many.
+      final counts = <String, int>{};
+      for (final entry in cards) {
+        final image = entry.attributes['imageUrl'];
+        if (image == null || image.isEmpty) continue;
+        final key = decklogImageKey(image);
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      final shared = counts.values.where((count) => count > 1).length;
+      expect(shared, lessThan(10), reason: 'shared image keys: $shared');
+      expect(counts.length, greaterThan(cards.length * 0.99));
+    });
+
+    test('card numbers survive the trip to a Japanese number', () {
+      // Stripping the EN is what lets a Japanese deck find English cards, so
+      // it must not make two cards look like one.
+      final keys = <String, String>{};
+      final clashes = <String>[];
+      for (final entry in cards) {
+        final number = entry.cardNo;
+        if (number == null || number.isEmpty) continue;
+        final key = decklogNumberKey(number);
+        final seen = keys[key];
+        if (seen != null && seen != entry.name) clashes.add(key);
+        keys[key] = entry.name;
+      }
+      expect(clashes, isEmpty);
     });
 
     test('a "Standard" promo carrying a clan is dated to the V-series', () {

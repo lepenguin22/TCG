@@ -19,6 +19,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:tcg_decks/games/vanguard/vanguard_numbers.dart';
+
 const _indexUrl =
     'https://raw.githubusercontent.com/dragogodev/cgs/master/Cardfight%20Vanguard/AllSets.json';
 
@@ -71,31 +73,19 @@ String? _seriesOf(String number, [String setName = '', String? nation]) {
   }
 
   final no = number.toUpperCase();
-  if (RegExp(r'^DZ?-').hasMatch(no)) return 'd';
-  if (no.startsWith('V-')) return 'v';
-  if (no.startsWith('G-')) return 'g';
-  if (RegExp(r'^(BT|EB|TD|FC|MT|SP)\d').hasMatch(no)) return 'o';
 
-  // Event promos carry the format they were printed for in their number:
-  // VGD is D-series, VGV is V Premium and VGP is Premium. VGS is "Standard",
-  // which meant the V-series before the D-series took the name over.
-  final promo = RegExp(r'^[A-Z]+(\d{4})\D*/VG([SVPD])').firstMatch(no);
-  if (promo != null) {
-    switch (promo.group(2)) {
-      case 'D':
-        return 'd';
-      case 'S':
-        // Which era a "Standard" promo belongs to is settled by what the card
-        // is grouped under, not by the year it was handed out: the D-series
-        // replaced clans with nations, so a clan here is a V-series card. A
-        // year cutoff got this wrong for the 2021 handover itself, dating two
-        // clan cards as D-series.
-        return nation != null ? 'd' : 'v';
-      case 'V':
-        return 'v';
-      case 'P':
-        return 'p';
-    }
+  // Everything the number alone can settle, shared with the app so an
+  // imported card the database has never seen can be dated the same way.
+  final fromNumber = seriesFromCardNumber(no);
+  if (fromNumber != null) return fromNumber;
+
+  // A "Standard" promo is the one case the number cannot settle by itself.
+  // Which era it belongs to is decided by what the card is grouped under, not
+  // by the year it was handed out: the D-series replaced clans with nations,
+  // so a clan here is a V-series card. A year cutoff got this wrong for the
+  // 2021 handover itself, dating two clan cards as D-series.
+  if (RegExp(r'^[A-Z]+\d{4}\D*/VGS').hasMatch(no)) {
+    return nation != null ? 'd' : 'v';
   }
 
   // Last resort for a promo whose number says nothing: these four nations were

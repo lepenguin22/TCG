@@ -180,9 +180,20 @@ carry — `D-BT02/001` and `D-BT02/001EN` are the same card — so dropping that
 marker bridges the languages and the deck arrives in English. Where an English
 printing adds a variant marker (`EB10/021EN-W`, `G-CB04/001EN SGR`) a second,
 looser key drops that too, and is used only where it picks out a single card.
-Both keys are checked against the whole database for collisions by a test.
-A Japanese card with no English printing yet keeps its Japanese name and is
-still imported, so a deck ahead of the English releases is never short. A card the database does not know is still imported, with the name and count
+
+Then the **card image**, which is the backstop: both sites draw a card's artwork
+from the same filename, so `dbt02/dbt02_001.png` finds the card even when the
+number is written in a shape the app does not recognise, or is not in the
+payload at all. All three keys are checked against the whole database by tests —
+numbers collide with nothing, and image filenames identify 11,137 of 11,139
+cards, the two that clash being dropped rather than guessed at.
+
+A card with no English printing yet keeps its Japanese name and is still
+imported, so a deck ahead of the English releases is never short. Its card
+number still dates it, so it is checked against the format properly instead of
+reporting that it could not be. The import screen lists what it could not match
+**with each card's number**, which is what distinguishes a set the English
+release has not reached from a number the app failed to read. A card the database does not know is still imported, with the name and count
 Deck Log gave, and the import screen lists what it could not match rather than
 quietly leaving the deck short.
 
