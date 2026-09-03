@@ -205,6 +205,14 @@ void main() async {
   // says nothing, but another printing of the same card does.
   final seriesByName = <String, Set<String>>{};
 
+  /// The trigger each card name has, gathered across every printing.
+  ///
+  /// A trigger belongs to the card, not to the printing, and only the official
+  /// card list prints it -- so a card reprinted into a newer set arrives with
+  /// its trigger there and without it in the mirror's older entry. Gathering
+  /// by name means whichever printing knows it tells the others.
+  final triggerByName = <String, String>{};
+
   /// Which eras each pre-D-series clan has been seen in. Used to work out
   /// which clans belong to the old game rather than to a D-series collab.
   final erasByClan = <String, Set<String>>{};
@@ -269,17 +277,18 @@ void main() async {
       final isSentinel = effect.contains('[CONT]:Sentinel');
       final isOver = effect.contains('[Over] trigger') || shield == 50000;
 
+      final trigger = cardType == 'trigger'
+          ? (_triggerOf(raw) ?? (isOver ? 'over' : null))
+          : null;
+      if (trigger != null) triggerByName.putIfAbsent(key, () => trigger);
+
       final entry = <String, Object?>{
         'n': name,
         // A ride deck crest has no grade at all; everything else defaults to
         // zero when the source leaves it out.
         if (cardType != 'ride-deck-crest') 'g': _asInt(raw['grade']) ?? 0,
         't': isSentinel ? 'sentinel' : cardType,
-        // The official card list prints the trigger; the mirror never did,
-        // which is why the app asks the user for it. Where it is known, it is
-        // kept and nobody has to be asked.
-        if (cardType == 'trigger')
-          'tr': ?(_triggerOf(raw) ?? (isOver ? 'over' : null)),
+        // Stamped after every printing has been read, from triggerByName.
         'na': ?nation,
         if (nation == null && source.isNotEmpty && source != '-') 'c': source,
         'p': ?_asInt(raw['power']),
@@ -340,6 +349,17 @@ void main() async {
     entry.value['sr'] = (eras.toList()..sort()).join();
   }
 
+  // The official card list prints the trigger; the mirror never did, which is
+  // why the app has to ask the user for it. Where any printing knows it, it is
+  // kept and nobody has to be asked.
+  var withTrigger = 0;
+  for (final entry in byName.entries) {
+    final trigger = triggerByName[entry.key];
+    if (trigger == null || entry.value['t'] != 'trigger') continue;
+    entry.value['tr'] = trigger;
+    withTrigger += 1;
+  }
+
   final catalog = byName.values.toList()
     ..sort(
       (a, b) => (a['n']! as String).toLowerCase().compareTo(
@@ -371,10 +391,11 @@ void main() async {
   stdout
     ..writeln('')
     ..writeln(
-      '$printings printings read, $skipped skipped (tokens, crests, untyped)',
+      '$printings printings read, $skipped skipped (tokens, markers, untyped)',
     )
     ..writeln('${catalog.length} distinct cards written to $_outputPath')
     ..writeln('$unknownSeries of them could not be dated to an era')
     ..writeln('$narrowedSeries are known only to predate the D-series')
+    ..writeln('$withTrigger trigger units know which trigger they are')
     ..writeln('${(await file.length() / 1024 / 1024).toStringAsFixed(2)} MB');
 }
