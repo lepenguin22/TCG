@@ -1,0 +1,48 @@
+# A one-off diagnostic, not part of the build.
+#
+# The card database is generated from a community mirror that has stopped at
+# DZ-BT09, so newer sets are missing. The official card list is unreachable
+# from the environment this was written in, but a CI runner is not behind that
+# proxy -- this run finds out what the official site looks like from here, so
+# the scraper that replaces the mirror can be written against facts.
+name: Probe card list
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Can we reach the official card list at all?
+        run: |
+          for url in \
+            "https://en.cf-vanguard.com/cardlist/" \
+            "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=242"; do
+            echo "=== $url"
+            curl -sS -m 30 -o /tmp/page.html -w "http=%{http_code} bytes=%{size_download}\n" "$url" || echo "FAILED"
+          done
+
+      - name: Which expansion numbers exist?
+        run: |
+          echo "known highest is 242 (DZ-BT09); looking for what comes after"
+          curl -sS -m 60 -o /tmp/index.html "https://en.cf-vanguard.com/cardlist/" || true
+          grep -o 'expansion=[0-9]*' /tmp/index.html | sort -u -t= -k2 -n | tail -20 || true
+
+      - name: Does a set page carry card data without JavaScript?
+        run: |
+          for n in 242 243 244 245 246 247 248 249 250 251 252; do
+            curl -sS -m 45 -o /tmp/set.html \
+              "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=$n" || continue
+            title=$(grep -o '<title>[^<]*</title>' /tmp/set.html | head -1)
+            cards=$(grep -o 'DZ-BT[0-9]*/[0-9]*EN' /tmp/set.html | sort -u | head -3 | tr '\n' ' ')
+            echo "expansion=$n bytes=$(stat -c%s /tmp/set.html) $title cards: ${cards:-none in raw html}"
+          done
+
+      - name: Is there an endpoint behind the page?
+        run: |
+          curl -sS -m 45 -o /tmp/set.html \
+            "https://en.cf-vanguard.com/cardlist/cardsearch/?expansion=242" || true
+          echo "--- script srcs and any api-looking paths ---"
+          grep -oE '(src|href)="[^"]*\.(js|json)[^"]*"' /tmp/set.html | sort -u | head -20 || true
+          grep -oiE '"[^"]*(api|ajax|search)[^"]*"' /tmp/set.html | sort -u | head -20 || true
