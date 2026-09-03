@@ -300,8 +300,13 @@ void main() {
     });
 
     test('a known card has the abilities from its printing', () {
-      final overlord = cards.firstWhere((c) => c.name == 'Dragonic Overlord');
-      expect(overlord.attributes['effect'], contains('[AUTO](VC)'));
+      // By number, not by name: three different cards are called Dragonic
+      // Overlord -- the D-series one and two older Kagero ones -- and taking
+      // whichever happened to hold the name was reading a different card.
+      final overlord = cards.firstWhere(
+        (c) => c.allNumbers.contains('D-BT02/001EN'),
+      );
+      expect(overlord.attributes['effect'], contains('[CONT](VC/RC)'));
     });
 
     test('series letters are ones the rules engine understands', () {
@@ -520,10 +525,26 @@ void main() {
     });
 
     test('known cards resolve with the right attributes', () {
-      final overlord = cards.firstWhere((c) => c.name == 'Dragonic Overlord');
+      final overlord = cards.firstWhere(
+        (c) => c.allNumbers.contains('D-BT02/001EN'),
+      );
+      expect(overlord.name, 'Dragonic Overlord');
       expect(overlord.attributes['grade'], '3');
+      expect(overlord.attributes['power'], '13000');
       expect(overlord.attributes['nation'], 'dragon-empire');
       expect(overlord.attributes['cardType'], 'normal');
+
+      // The older Kagero cards of the same name are their own entries, and
+      // keep their own stats rather than being overwritten by this one.
+      final older = cards.where(
+        (c) =>
+            c.name == 'Dragonic Overlord' && c.attributes['clan'] == 'Kagero',
+      );
+      expect(older, isNotEmpty);
+      for (final entry in older) {
+        expect(entry.attributes['power'], '11000');
+        expect(entry.attributes['nation'], isNull);
+      }
     });
 
     test('searching the real catalog finds a card by name', () {
