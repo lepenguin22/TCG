@@ -267,6 +267,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void addCritical(PlaytestSide side, Circle circle, int amount) {
+    engine.addCritical(side, circle, amount);
+    _sync();
+  }
+
   void toggleRest(PlaytestSide side, Circle circle) {
     engine.toggleRest(side, circle);
     _sync();

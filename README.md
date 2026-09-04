@@ -374,8 +374,11 @@ placed on (VC), [COST][Counter-Blast 1], choose one of your opponent's
 rear-guards, and retire it" — and there is no encoding of them for a program to
 follow. Rather than pretend otherwise, the board runs everything around them and
 leaves the abilities to you: tap any unit to read its text and apply what it
-says, with controls there for power, standing and resting, retiring, drawing,
-energy and damage, and every zone above open for the costs. It is a patient
+says, with controls there for power, critical, standing and resting, retiring,
+drawing, energy and damage, and every zone above open for the costs. Power and
+critical are the two things an ability gives a unit, and both wear off at end
+of turn the way the game says they do — a unit carrying more than its one
+critical, or reduced below it, says so on the board. It is a patient
 paper opponent, not a rules engine.
 
 That still answers the questions a deck list cannot. Does it ride through grade

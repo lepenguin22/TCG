@@ -824,6 +824,26 @@ class PlaytestEngine {
     );
   }
 
+  /// Gives a unit critical, for an ability that says to.
+  ///
+  /// Critical is how many damage a hit on the vanguard deals, so this is the
+  /// other half of what an ability does to a unit besides power -- and, like
+  /// power, it lasts the turn and goes at the end of it. A unit cannot be put
+  /// below nought critical, which is what a card reducing it aims at.
+  void addCritical(PlaytestSide side, Circle circle, int amount) {
+    final unit = side.field[circle];
+    if (unit == null) return;
+    final before = unit.critical;
+    unit.criticalBonus = (unit.criticalBonus + amount).clamp(-1, 98);
+    final gained = unit.critical - before;
+    if (gained == 0) return;
+    state.note(
+      '${unit.card.name} gets ${gained >= 0 ? '+' : ''}$gained critical '
+      '(now ${unit.critical}).',
+      by: side,
+    );
+  }
+
   /// Stands or rests a unit by hand, for the same reason.
   void toggleRest(PlaytestSide side, Circle circle) {
     final unit = side.field[circle];

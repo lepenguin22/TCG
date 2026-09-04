@@ -522,6 +522,115 @@ void main() {
     );
   });
 
+  group('critical given by an ability', () {
+    /// A game in battle with a grade 2 vanguard on each side.
+    (PlaytestEngine, PlaytestSide, PlaytestSide) ready(
+      DeckStore store,
+      Deck deck,
+    ) {
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+      for (final side in [you, foe]) {
+        while (engine.rideDeckOption(side) != null &&
+            (side.vanguard?.card.grade ?? 0) < 2) {
+          engine.ride(side, engine.rideDeckOption(side)!, fromRideDeck: true);
+        }
+      }
+      engine.state.phase = PlaytestPhase.battle;
+      return (engine, you, foe);
+    }
+
+    test('a unit starts on one critical', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+      expect(you.vanguard!.critical, 1);
+      expect(you.vanguard!.criticalBonus, 0);
+    });
+
+    test('critical can be given by hand', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.addCritical(you, Circle.vanguard, 1);
+      expect(you.vanguard!.critical, 2);
+      engine.addCritical(you, Circle.vanguard, 2);
+      expect(you.vanguard!.critical, 4);
+    });
+
+    test('the extra critical is extra damage', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = ready(store, deck);
+
+      engine.addCritical(you, Circle.vanguard, 2);
+      engine.addPower(you, Circle.vanguard, 50000);
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.resolveAttack();
+
+      expect(foe.damageCount, 3, reason: 'one base plus the two given');
+    });
+
+    test('it can be taken away, but not below none', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.addCritical(you, Circle.vanguard, 1);
+      engine.addCritical(you, Circle.vanguard, -1);
+      expect(you.vanguard!.critical, 1);
+
+      engine.addCritical(you, Circle.vanguard, -1);
+      expect(you.vanguard!.critical, 0, reason: 'a card can remove the last');
+      engine.addCritical(you, Circle.vanguard, -5);
+      expect(you.vanguard!.critical, 0, reason: 'and no further');
+    });
+
+    test('a unit on no critical deals no damage', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = ready(store, deck);
+
+      engine.addCritical(you, Circle.vanguard, -1);
+      engine.addPower(you, Circle.vanguard, 50000);
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.resolveAttack();
+
+      expect(foe.damageCount, 0);
+    });
+
+    test('it wears off at end of turn, as power does', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.addCritical(you, Circle.vanguard, 2);
+      expect(you.vanguard!.critical, 3);
+
+      engine.endTurn();
+      expect(you.vanguard!.critical, 1);
+      expect(you.vanguard!.criticalBonus, 0);
+    });
+
+    test('a critical trigger stacks on top of it', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.addCritical(you, Circle.vanguard, 1);
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheck();
+
+      // Every card in this deck's trigger slot is a critical trigger, so the
+      // check adds one more on top of the one the ability gave.
+      expect(you.vanguard!.critical, greaterThanOrEqualTo(2));
+    });
+
+    test('an empty circle is left alone', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+      // No unit there, so nothing to give critical to and nothing to crash on.
+      engine.addCritical(you, Circle.backRight, 1);
+      expect(you.field[Circle.backRight], isNull);
+    });
+  });
+
   group('drive and damage checks', () {
     test('a grade 3 vanguard twin drives', () async {
       final (store, deck) = await buildDeck();

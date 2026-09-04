@@ -501,6 +501,31 @@ void main() {
       expect(find.textContaining('Swap with'), findsNothing);
     });
 
+    testWidgets('a unit can be given critical by hand', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      expect(find.text('+1 critical'), findsOneWidget);
+      expect(find.text('-1 critical'), findsOneWidget);
+
+      await tester.tap(find.text('+1 critical'));
+      await tester.pumpAndSettle();
+
+      // Close the sheet by tapping the barrier above it.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      // The unit now wears its critical on the board, where one critical --
+      // the default -- would not be shown at all.
+      expect(find.textContaining('★2'), findsOneWidget);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

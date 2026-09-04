@@ -1139,12 +1139,16 @@ class _UnitTile extends StatelessWidget {
                         : Colors.white,
                   ),
                 ),
-                if (unit.criticalBonus > 0)
+                // One critical is the default and not worth the space; a
+                // unit carrying more, or reduced to none, is.
+                if (unit.criticalBonus != 0)
                   Text(
                     ' ★${unit.critical}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
-                      color: AppColors.warning,
+                      color: unit.criticalBonus > 0
+                          ? AppColors.warning
+                          : AppColors.textFaint,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1690,6 +1694,18 @@ void _showUnitSheet(
                       '${amount > 0 ? '+' : ''}${amount ~/ 1000}k power',
                     ),
                   ),
+                // Critical is the other half of what an ability gives a unit:
+                // how many damage a hit on the vanguard is worth.
+                OutlinedButton(
+                  onPressed: () => game.addCritical(side, circle, 1),
+                  child: const Text('+1 critical'),
+                ),
+                OutlinedButton(
+                  onPressed: unit.critical <= 0
+                      ? null
+                      : () => game.addCritical(side, circle, -1),
+                  child: const Text('-1 critical'),
+                ),
                 OutlinedButton(
                   onPressed: () => game.toggleRest(side, circle),
                   child: Text(unit.rested ? 'Stand' : 'Rest'),
