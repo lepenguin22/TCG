@@ -386,6 +386,130 @@ void main() {
     });
   });
 
+  group('calling from somewhere other than hand', () {
+    (PlaytestEngine, PlaytestSide) ready(DeckStore store, Deck deck) {
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      while (engine.rideDeckOption(you) != null &&
+          (you.vanguard?.card.grade ?? 0) < 2) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      engine.state.phase = PlaytestPhase.main;
+      return (engine, you);
+    }
+
+    test('a unit can be called straight out of the deck', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = ready(store, deck);
+
+      final wanted = you.deck.firstWhere((c) => c.name == 'Beater');
+      final before = you.deck.length;
+      engine.call(you, wanted, Circle.frontLeft);
+
+      expect(you.field[Circle.frontLeft]!.card, wanted);
+      expect(you.deck.contains(wanted), isFalse);
+      expect(you.deck.length, before - 1);
+      expect(you.hand.contains(wanted), isFalse, reason: 'it never went there');
+    });
+
+    test('calling out of the deck shuffles it', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = ready(store, deck);
+
+      // Looking through the deck to find a card means shuffling afterwards.
+      final orderBefore = [...you.deck];
+      final wanted = you.deck.firstWhere((c) => c.name == 'Beater');
+      engine.call(you, wanted, Circle.frontLeft);
+
+      final remaining = orderBefore.where((c) => c != wanted).toList();
+      expect(you.deck.toSet(), remaining.toSet(), reason: 'same cards');
+      expect(
+        you.deck.map((c) => c.instanceId).toList(),
+        isNot(remaining.map((c) => c.instanceId).toList()),
+        reason: 'but not in the same order',
+      );
+    });
+
+    test('a unit can be called back out of the drop zone', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = ready(store, deck);
+
+      final pitched = you.hand.firstWhere((c) => c.grade <= 2 && c.isUnit);
+      engine.discard(you, pitched);
+      expect(you.drop, contains(pitched));
+
+      engine.call(you, pitched, Circle.backLeft);
+      expect(you.field[Circle.backLeft]!.card, pitched);
+      expect(you.drop.contains(pitched), isFalse);
+    });
+
+    test('a unit can be called out of the soul', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = ready(store, deck);
+
+      // Riding puts the unit ridden over into the soul.
+      final inSoul = you.soul.first;
+      engine.call(you, inSoul, Circle.backRight);
+
+      expect(you.field[Circle.backRight]!.card, inSoul);
+      expect(you.soul.contains(inSoul), isFalse);
+    });
+
+    test('the grade limit still applies wherever it came from', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      // Vanguard is still grade 0, so a grade 2 cannot be called from
+      // anywhere at all.
+      final beater = you.deck.firstWhere((c) => c.name == 'Beater');
+      expect(engine.canCall(you, beater, Circle.frontLeft), isFalse);
+    });
+
+    test('a card in no zone at all calls nothing', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = ready(store, deck);
+
+      final stranger = GameCard(
+        920,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Not in the game',
+          attributes: {'grade': '1', 'cardType': 'normal', 'power': '8000'},
+        ),
+      );
+      engine.call(you, stranger, Circle.frontRight);
+      expect(you.field[Circle.frontRight], isNull);
+    });
+
+    test('calling over a unit still drops the old one', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = ready(store, deck);
+
+      final first = you.hand.firstWhere((c) => c.grade <= 2 && c.isUnit);
+      engine.call(you, first, Circle.frontLeft);
+      final fromDeck = you.deck.firstWhere((c) => c.name == 'Beater');
+      engine.call(you, fromDeck, Circle.frontLeft);
+
+      expect(you.field[Circle.frontLeft]!.card, fromDeck);
+      expect(you.drop, contains(first));
+    });
+
+    test('a unit called mid-battle can attack from the front row', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = ready(store, deck);
+      engine.state.phase = PlaytestPhase.battle;
+
+      // The abilities this exists for fire during the battle phase.
+      final fromDeck = you.deck.firstWhere((c) => c.name == 'Beater');
+      engine.call(you, fromDeck, Circle.frontLeft);
+
+      expect(engine.attackers(you), contains(Circle.frontLeft));
+      expect(you.field[Circle.frontLeft]!.rested, isFalse);
+    });
+  });
+
   group('the board', () {
     test('only the front row can attack or be attacked', () {
       expect(Circle.vanguard.isFrontRow, isTrue);

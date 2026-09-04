@@ -663,6 +663,87 @@ void main() {
       expect(find.text('TRIGGER'), findsOneWidget);
     });
 
+    testWidgets('a unit can be called out of the deck mid-battle', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // Ride to grade 1 so something in the deck is callable, then go all
+      // the way to the battle phase, which is when these abilities fire.
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      // The deck offers a call as well as a search to hand. The top of the
+      // deck is whatever the shuffle left there, so scroll down the sheet
+      // until a card the vanguard's grade allows comes into view.
+      await tapOnBoard(tester, find.text('Deck').last);
+      expect(find.text('To hand'), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.text('Call').first,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('Call'), findsWidgets);
+
+      await tester.tap(find.text('Call').first);
+      await tester.pumpAndSettle();
+
+      // The board is now waiting for a circle, in the battle phase.
+      expect(find.textContaining('Tap a circle to call'), findsOneWidget);
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+
+      // And the called unit is standing on the field. A tap in the battle
+      // phase picks an attacker, so the unit's own sheet comes up on a long
+      // press instead.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('circle-You-frontLeft')),
+          matching: find.text('—'),
+        ),
+        findsNothing,
+        reason: 'the circle is filled',
+      );
+      await tester.longPress(
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('+1 critical'), findsOneWidget, reason: 'a unit here');
+    });
+
+    testWidgets('the drop zone offers a call too', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      // Discard something so the drop has a unit in it.
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.textContaining('Drop zone'), findsOneWidget);
+      expect(find.text('Call'), findsWidgets);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

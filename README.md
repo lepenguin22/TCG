@@ -375,6 +375,13 @@ come into it, so they are on the board and tappable rather than left as numbers:
 - **Deck** shuffles, and lists itself so an ability that searches can be played —
   it reshuffles after a search. It is there for the cards that tell you to look.
 - **Drop** hands a card back where something returns one.
+
+Calling is not tied to your hand, and not tied to the main phase. Plenty of
+abilities call a unit out of the deck, the drop or the soul, and plenty of them
+fire mid-battle, so each of those piles offers a **Call** beside its own action
+for any unit the vanguard's grade allows, and a circle takes it in the battle
+phase as readily as in the main one. A call out of the deck shuffles it
+afterwards, the way looking through it always does.
 - **Crest** appears for a deck that brings one, greyed until it reaches the
   crest zone on your first ride, and showing the energy it has charged.
 - **G zone** appears only for a deck that has one. With a grade 3 vanguard and

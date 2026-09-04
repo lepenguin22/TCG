@@ -495,9 +495,18 @@ class PlaytestEngine {
     return card.grade <= vanguardGrade;
   }
 
-  /// Calls [card] to [circle]. A unit already there is retired to make room.
+  /// Calls [card] to [circle], from wherever it currently is.
+  ///
+  /// Most calls come out of hand, but plenty of abilities call from the deck,
+  /// the drop zone or the soul, so the card is taken from whichever zone
+  /// holds it rather than from hand alone. A call out of the deck shuffles
+  /// it afterwards, the way looking through it always does.
+  ///
+  /// A unit already on the circle is retired to make room.
   void call(PlaytestSide side, GameCard card, Circle circle) {
-    side.hand.remove(card);
+    final from = _takeForCall(side, card);
+    if (from == null) return;
+
     final existing = side.field[circle];
     if (existing != null) {
       side.drop.add(existing.card);
@@ -507,7 +516,22 @@ class PlaytestEngine {
       );
     }
     side.field[circle] = FieldUnit(card);
-    state.note('${side.name} calls ${card.name} to ${circle.label}.', by: side);
+    state.note(
+      '${side.name} calls ${card.name} to ${circle.label}'
+      '${from == 'hand' ? '' : ' from the $from'}.',
+      by: side,
+    );
+    if (from == 'deck') side.deck.shuffle(_random);
+  }
+
+  /// Takes [card] out of the zone holding it, naming that zone. Null when the
+  /// card is nowhere it could be called from.
+  String? _takeForCall(PlaytestSide side, GameCard card) {
+    if (side.hand.remove(card)) return 'hand';
+    if (side.deck.remove(card)) return 'deck';
+    if (side.drop.remove(card)) return 'drop zone';
+    if (side.soul.remove(card)) return 'soul';
+    return null;
   }
 
   /// The circle a rear-guard may move to: the other row of its own column.

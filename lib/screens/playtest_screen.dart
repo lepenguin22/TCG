@@ -428,8 +428,9 @@ class _ZoneRail extends StatelessWidget {
             side,
             title: 'Drop zone',
             cards: side.drop,
-            actionLabel: 'Return to hand',
+            actionLabel: 'To hand',
             onAction: (card) => game.returnFromDrop(side, card),
+            callable: true,
           ),
         ),
         _Pile(
@@ -571,6 +572,7 @@ void _showPileSheet(
   String? actionLabel,
   void Function(GameCard card)? onAction,
   List<Widget> Function(BuildContext sheetContext)? header,
+  bool callable = false,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -604,15 +606,32 @@ void _showPileSheet(
                   fontSize: 12,
                 ),
               ),
-              trailing: onAction == null
-                  ? null
-                  : TextButton(
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Abilities call out of the deck, the drop and the soul as
+                  // readily as out of hand, so every pile offers it for a
+                  // unit that could legally be called.
+                  if (callable &&
+                      side == game.you &&
+                      game.engine.canCall(game.you, card, Circle.frontLeft))
+                    TextButton(
+                      onPressed: () {
+                        game.hold(card);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('Call'),
+                    ),
+                  if (onAction != null)
+                    TextButton(
                       onPressed: () {
                         onAction(card);
                         Navigator.of(sheetContext).pop();
                       },
                       child: Text(actionLabel ?? 'Move'),
                     ),
+                ],
+              ),
             ),
         ],
       ),
@@ -689,6 +708,7 @@ void _showSoulSheet(
     cards: side.soul,
     actionLabel: 'Soul-blast',
     onAction: (card) => game.soulBlast(side, card),
+    callable: true,
     header: (sheetContext) => [
       OutlinedButton(
         onPressed: () {
@@ -716,11 +736,13 @@ void _showDeckSheet(
     cards: side.deck,
     actionLabel: 'To hand',
     onAction: (card) => game.searchDeck(side, card),
+    callable: true,
     header: (sheetContext) => [
       const Text(
         'The whole deck is listed here so an ability that searches can be '
-        'played. It shuffles itself after a search. Only look when a card '
-        'tells you to.',
+        'played: take a card to hand, or call it straight to a circle where '
+        'the card says to. It shuffles itself either way. Only look when a '
+        'card tells you to.',
         style: TextStyle(color: AppColors.textMuted, fontSize: 12),
       ),
       const SizedBox(height: 10),
@@ -1014,11 +1036,15 @@ class _CircleSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final unit = side.field[circle];
     final held = game.holding;
+    // Calling is offered in the battle phase as well as the main one: the
+    // abilities that call out of a deck fire mid-battle, and a board that
+    // only allowed it before the fight could not play them.
     final canPlace =
         isYours &&
         held != null &&
         game.engine.canCall(game.you, held, circle) &&
-        game.state.phase == PlaytestPhase.main &&
+        (game.state.phase == PlaytestPhase.main ||
+            game.state.phase == PlaytestPhase.battle) &&
         game.state.yourTurn;
 
     // Highlight what this tap would do right now: a place, an attack, or a
@@ -1636,7 +1662,9 @@ class _Controls extends StatelessWidget {
                       'rear-guard to move it up or back.'
                 : 'Tap a circle to call ${game.holding!.name}.',
           PlaytestPhase.battle =>
-            game.selectedAttacker == null
+            game.holding != null
+                ? 'Tap a circle to call ${game.holding!.name}.'
+                : game.selectedAttacker == null
                 ? 'Battle — tap one of your front row units to attack with.'
                 : game.availableBooster == null
                 ? 'Tap the unit to attack.'
@@ -1773,7 +1801,8 @@ void _showHandSheet(
             _CardHeading(card: card),
             const SizedBox(height: 12),
             if (game.state.yourTurn &&
-                game.state.phase == PlaytestPhase.main &&
+                (game.state.phase == PlaytestPhase.main ||
+                    game.state.phase == PlaytestPhase.battle) &&
                 card.isUnit)
               _SheetAction(
                 icon: Icons.add_circle_outline,
