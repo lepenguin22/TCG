@@ -1,0 +1,1185 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/deck.dart';
+import '../playtest/playtest_controller.dart';
+import '../playtest/playtest_state.dart';
+import '../store/deck_store.dart';
+import '../theme.dart';
+import '../widgets/card_image.dart';
+import '../widgets/common.dart';
+
+/// The playtest board.
+///
+/// Laid out the way the game sits on a table: the opponent's field across the
+/// top, yours below it, your hand along the bottom. What you can do is driven
+/// by the phase, so the screen only ever offers legal moves and the buttons
+/// tell you what the rules are waiting for.
+class PlaytestScreen extends StatefulWidget {
+  const PlaytestScreen({
+    super.key,
+    required this.yourDeck,
+    required this.opponentDeck,
+  });
+
+  final Deck yourDeck;
+  final Deck opponentDeck;
+
+  @override
+  State<PlaytestScreen> createState() => _PlaytestScreenState();
+}
+
+class _PlaytestScreenState extends State<PlaytestScreen> {
+  PlaytestController? _controller;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller ??= PlaytestController(
+      store: context.read<DeckStore>(),
+      yourDeck: widget.yourDeck,
+      opponentDeck: widget.opponentDeck,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (controller == null) return const SizedBox.shrink();
+
+    return ChangeNotifierProvider<PlaytestController>.value(
+      value: controller,
+      child: Consumer<PlaytestController>(
+        builder: (context, game, _) {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(
+                game.stage == PlaytestStage.mulligan
+                    ? 'Opening hand'
+                    : 'Turn ${game.state.turn} · '
+                          '${game.state.yourTurn ? 'You' : 'CPU'}',
+              ),
+              actions: [
+                IconButton(
+                  tooltip: 'Game log',
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  onPressed: () => _showLog(context, game),
+                ),
+                IconButton(
+                  tooltip: 'Restart',
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => _restart(context),
+                ),
+              ],
+            ),
+            body: SafeArea(
+              child: game.stage == PlaytestStage.mulligan
+                  ? _Mulligan(game: game)
+                  : _Board(game: game),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _restart(BuildContext context) {
+    setState(() {
+      _controller?.dispose();
+      _controller = PlaytestController(
+        store: context.read<DeckStore>(),
+        yourDeck: widget.yourDeck,
+        opponentDeck: widget.opponentDeck,
+      );
+    });
+  }
+
+  static void _showLog(BuildContext context, PlaytestController game) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        builder: (_, scrollController) => ListView.builder(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          itemCount: game.state.log.length,
+          itemBuilder: (_, index) {
+            final entry = game.state.log[game.state.log.length - 1 - index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                entry.text,
+                style: TextStyle(
+                  color: entry.text.startsWith('---')
+                      ? AppColors.text
+                      : AppColors.textMuted,
+                  fontWeight: entry.text.startsWith('---')
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                  fontSize: 13,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// --------------------------------------------------------------------- mulligan
+
+class _Mulligan extends StatelessWidget {
+  const _Mulligan({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    final hand = game.you.hand;
+    return Column(
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 4),
+          child: Text(
+            'Tap the cards you want to put back, then keep the rest. '
+            'They are shuffled away and replaced.',
+            style: TextStyle(color: AppColors.textMuted, height: 1.4),
+          ),
+        ),
+        Expanded(
+          child: GridView.count(
+            padding: const EdgeInsets.all(16),
+            crossAxisCount: 3,
+            childAspectRatio: cardAspectRatio,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            children: [
+              for (final card in hand)
+                _HandCard(
+                  card: card,
+                  selected: game.mulliganPicks.contains(card),
+                  onTap: () => game.togglePick(card),
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: game.confirmMulligan,
+              child: Text(
+                game.mulliganPicks.isEmpty
+                    ? 'Keep this hand'
+                    : 'Put ${game.mulliganPicks.length} back',
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HandCard extends StatelessWidget {
+  const _HandCard({
+    required this.card,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final GameCard card;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? AppColors.accent : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Opacity(
+          opacity: selected ? 0.55 : 1,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CardImage(url: card.imageUrl, width: 200),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    'G${card.grade} · ${card.name}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------------ board
+
+class _Board extends StatelessWidget {
+  const _Board({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Column(
+              children: [
+                _SideSummary(side: game.cpu, game: game),
+                const SizedBox(height: 8),
+                _Field(game: game, side: game.cpu, isYours: false),
+                const SizedBox(height: 10),
+                _Middle(game: game),
+                const SizedBox(height: 10),
+                _Field(game: game, side: game.you, isYours: true),
+                const SizedBox(height: 8),
+                _SideSummary(side: game.you, game: game),
+              ],
+            ),
+          ),
+        ),
+        _Hand(game: game),
+        _Controls(game: game),
+      ],
+    );
+  }
+}
+
+/// The damage, hand size, deck size and energy for one player.
+class _SideSummary extends StatelessWidget {
+  const _SideSummary({required this.side, required this.game});
+
+  final PlaytestSide side;
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    // A Wrap rather than a Row: six counters do not fit across a narrow
+    // phone, and a summary that runs off the edge of the board is worse than
+    // one that takes a second line.
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 10,
+      runSpacing: 2,
+      children: [
+        Text(
+          side.name,
+          style: const TextStyle(
+            color: AppColors.text,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
+        _Pip(
+          label: 'Dmg',
+          value: '${side.damageCount}/6',
+          danger: side.damageCount >= 5,
+        ),
+        _Pip(label: 'Hand', value: '${side.hand.length}'),
+        _Pip(label: 'Deck', value: '${side.deck.length}'),
+        _Pip(label: 'Soul', value: '${side.soul.length}'),
+        _Pip(label: 'Drop', value: '${side.drop.length}'),
+        // Energy is only ever gained by an ability, so it is a counter the
+        // player keeps rather than something the board can work out. Tap to
+        // add one, hold to take one away.
+        GestureDetector(
+          onTap: () => game.setEnergy(side, side.energy + 1),
+          onLongPress: () => game.setEnergy(side, side.energy - 1),
+          child: _Pip(label: 'Energy', value: '${side.energy}', tappable: true),
+        ),
+      ],
+    );
+  }
+}
+
+class _Pip extends StatelessWidget {
+  const _Pip({
+    required this.label,
+    required this.value,
+    this.danger = false,
+    this.tappable = false,
+  });
+
+  final String label;
+  final String value;
+  final bool danger;
+  final bool tappable;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$label ',
+          style: const TextStyle(color: AppColors.textFaint, fontSize: 11),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: danger
+                ? AppColors.danger
+                : (tappable ? AppColors.accent : AppColors.text),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One player's six circles, back row nearer the middle for the opponent so
+/// the two boards face each other the way they would on a table.
+class _Field extends StatelessWidget {
+  const _Field({required this.game, required this.side, required this.isYours});
+
+  final PlaytestController game;
+  final PlaytestSide side;
+  final bool isYours;
+
+  @override
+  Widget build(BuildContext context) {
+    const front = [Circle.frontLeft, Circle.vanguard, Circle.frontRight];
+    const back = [Circle.backLeft, Circle.backCenter, Circle.backRight];
+    final rows = isYours ? [front, back] : [back, front];
+
+    return Column(
+      children: [
+        for (final row in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                for (final circle in row)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: _CircleSlot(
+                        game: game,
+                        side: side,
+                        circle: circle,
+                        isYours: isYours,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CircleSlot extends StatelessWidget {
+  const _CircleSlot({
+    required this.game,
+    required this.side,
+    required this.circle,
+    required this.isYours,
+  });
+
+  final PlaytestController game;
+  final PlaytestSide side;
+  final Circle circle;
+  final bool isYours;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = side.field[circle];
+    final held = game.holding;
+    final canPlace =
+        isYours &&
+        held != null &&
+        game.engine.canCall(game.you, held, circle) &&
+        game.state.phase == PlaytestPhase.main &&
+        game.state.yourTurn;
+
+    // Highlight what this tap would do right now: a place, an attack, or a
+    // target for the attack you are making.
+    final isAttackTarget =
+        !isYours &&
+        game.state.yourTurn &&
+        game.state.phase == PlaytestPhase.battle &&
+        game.selectedAttacker != null &&
+        circle.isFrontRow &&
+        unit != null;
+    final isAttacker =
+        isYours &&
+        game.state.yourTurn &&
+        game.state.phase == PlaytestPhase.battle &&
+        unit != null &&
+        !unit.rested &&
+        circle.isFrontRow;
+
+    final borderColour = canPlace || isAttackTarget
+        ? AppColors.accent
+        : (game.selectedAttacker == circle && isYours
+              ? AppColors.warning
+              : AppColors.border);
+
+    return GestureDetector(
+      onTap: () => _onTap(context, canPlace, isAttackTarget, isAttacker),
+      onLongPress: unit == null
+          ? null
+          : () => _showUnitSheet(context, game, side, circle, unit),
+      child: AspectRatio(
+        aspectRatio: 1.05,
+        child: Container(
+          decoration: BoxDecoration(
+            color: unit == null ? AppColors.surface : AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: borderColour,
+              width: borderColour == AppColors.border ? 1 : 2,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: unit == null
+              ? Center(
+                  child: Text(
+                    circle == Circle.vanguard ? 'VG' : '—',
+                    style: const TextStyle(
+                      color: AppColors.textFaint,
+                      fontSize: 11,
+                    ),
+                  ),
+                )
+              : _UnitTile(unit: unit, circle: circle),
+        ),
+      ),
+    );
+  }
+
+  void _onTap(
+    BuildContext context,
+    bool canPlace,
+    bool isAttackTarget,
+    bool isAttacker,
+  ) {
+    if (canPlace) {
+      game.placeHeld(circle);
+      return;
+    }
+    if (isAttackTarget) {
+      game.attackWithSelected(circle);
+      return;
+    }
+    if (isAttacker) {
+      game.selectAttacker(circle);
+      return;
+    }
+    final unit = side.field[circle];
+    if (unit != null) _showUnitSheet(context, game, side, circle, unit);
+  }
+}
+
+class _UnitTile extends StatelessWidget {
+  const _UnitTile({required this.unit, required this.circle});
+
+  final FieldUnit unit;
+  final Circle circle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(
+          opacity: unit.rested ? 0.45 : 1,
+          child: CardImage(url: unit.card.imageUrl, width: 140),
+        ),
+        if (unit.rested)
+          const Center(
+            child: Icon(Icons.rotate_right, size: 18, color: Colors.white70),
+          ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            color: Colors.black.withValues(alpha: 0.7),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${unit.power}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: unit.powerBonus > 0
+                        ? AppColors.success
+                        : Colors.white,
+                  ),
+                ),
+                if (unit.criticalBonus > 0)
+                  Text(
+                    ' ★${unit.critical}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The strip between the two boards: whatever the game is waiting on.
+class _Middle extends StatelessWidget {
+  const _Middle({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    final attack = game.state.attack;
+    final checks = game.lastChecks;
+
+    if (attack == null && checks.isEmpty) {
+      return Container(height: 1, color: AppColors.border);
+    }
+
+    return Panel(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (attack != null)
+            Text(
+              '${attack.attacker.card.name} → '
+              '${attack.target.card.name}   '
+              '${attack.attackPower} vs ${attack.defence}'
+              '${attack.perfectGuarded ? '  (perfect guard)' : ''}',
+              style: TextStyle(
+                color: attack.connects ? AppColors.danger : AppColors.success,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          if (checks.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 64,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final card in checks)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Column(
+                        children: [
+                          CardImage(url: card.imageUrl, width: 34),
+                          if (card.trigger != null)
+                            Text(
+                              card.trigger!,
+                              style: const TextStyle(
+                                fontSize: 8,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Your hand, and what tapping a card does in the phase you are in.
+class _Hand extends StatelessWidget {
+  const _Hand({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    final guarding = game.stage == PlaytestStage.guarding;
+    final hand = game.you.hand;
+
+    return Container(
+      height: 108,
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: hand.isEmpty
+          ? const Center(
+              child: Text(
+                'No cards in hand',
+                style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+              ),
+            )
+          : ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              children: [
+                for (final card in hand)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _HandSlot(
+                      game: game,
+                      card: card,
+                      guarding: guarding,
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _HandSlot extends StatelessWidget {
+  const _HandSlot({
+    required this.game,
+    required this.card,
+    required this.guarding,
+  });
+
+  final PlaytestController game;
+  final GameCard card;
+  final bool guarding;
+
+  @override
+  Widget build(BuildContext context) {
+    final held = game.holding == card;
+    final usable = guarding
+        ? card.canGuard
+        : (game.state.yourTurn && !game.state.isOver);
+
+    return GestureDetector(
+      onTap: () {
+        if (guarding) {
+          if (card.canGuard) game.guardWith(card);
+          return;
+        }
+        _showHandSheet(context, game, card);
+      },
+      child: Opacity(
+        opacity: usable ? 1 : 0.4,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: held ? AppColors.accent : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: Stack(
+            children: [
+              CardImage(url: card.imageUrl, width: 58),
+              Positioned(
+                left: 0,
+                top: 0,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 3,
+                    vertical: 1,
+                  ),
+                  child: Text(
+                    guarding && card.canGuard
+                        ? (card.isSentinel ? 'PG' : '${card.shield ~/ 1000}k')
+                        : 'G${card.grade}',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The buttons that move the game on. What is here is always the thing the
+/// rules are waiting for.
+class _Controls extends StatelessWidget {
+  const _Controls({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(children: _buttons(context)),
+    );
+  }
+
+  List<Widget> _buttons(BuildContext context) {
+    final state = game.state;
+
+    if (state.isOver) {
+      return [
+        Expanded(
+          child: Text(
+            '${state.winner?.name ?? '—'} wins.',
+            style: const TextStyle(
+              color: AppColors.text,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
+        ),
+      ];
+    }
+
+    switch (game.stage) {
+      case PlaytestStage.guarding:
+        final attack = state.attack!;
+        return [
+          Expanded(
+            child: Text(
+              attack.connects
+                  ? 'Tap shields to guard — it hits for '
+                        '${attack.attacker.critical} otherwise.'
+                  : 'The attack is held off.',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          ),
+          FilledButton(
+            onPressed: game.confirmGuard,
+            child: const Text('Take it'),
+          ),
+        ];
+
+      case PlaytestStage.cpuAttack:
+        return [
+          const Expanded(
+            child: Text(
+              'The CPU\'s attack resolves.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          ),
+          FilledButton(
+            onPressed: game.resolveCpuAttack,
+            child: const Text('Continue'),
+          ),
+        ];
+
+      case PlaytestStage.yourAttack:
+        final attack = state.attack!;
+        final drove = game.lastChecks.isNotEmpty || !attack.isVanguardAttack;
+        return [
+          Expanded(
+            child: Text(
+              drove
+                  ? '${attack.attackPower} against ${attack.defence}.'
+                  : 'Drive check to see what you turn up.',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          ),
+          if (!drove)
+            FilledButton(
+              onPressed: game.driveCheck,
+              child: const Text('Drive check'),
+            )
+          else
+            FilledButton(
+              onPressed: game.resolveYourAttack,
+              child: const Text('Resolve'),
+            ),
+        ];
+
+      default:
+        return _yourTurnButtons(context);
+    }
+  }
+
+  List<Widget> _yourTurnButtons(BuildContext context) {
+    final state = game.state;
+    if (!state.yourTurn) {
+      return const [
+        Expanded(
+          child: Text(
+            'The CPU is playing.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      Expanded(
+        child: Text(switch (state.phase) {
+          PlaytestPhase.ride =>
+            state.ridden
+                ? 'Ridden. Move on to your main phase.'
+                : 'Ride phase — ride up a grade.',
+          PlaytestPhase.main =>
+            game.holding == null
+                ? 'Main phase — tap a card in hand to call it.'
+                : 'Tap a circle to call ${game.holding!.name}.',
+          PlaytestPhase.battle =>
+            game.selectedAttacker == null
+                ? 'Battle — tap one of your front row units to attack with.'
+                : 'Tap the unit to attack.',
+          _ => state.phase.label,
+        }, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+      ),
+      if (state.phase == PlaytestPhase.ride && !state.ridden)
+        TextButton(
+          onPressed: () => _showRideSheet(context, game),
+          child: const Text('Ride'),
+        ),
+      if (state.phase == PlaytestPhase.battle && game.selectedAttacker != null)
+        TextButton(
+          onPressed: () => game.selectAttacker(null),
+          child: const Text('Cancel'),
+        ),
+      FilledButton(
+        onPressed: game.nextPhase,
+        child: Text(state.phase == PlaytestPhase.battle ? 'End turn' : 'Next'),
+      ),
+    ];
+  }
+}
+
+// ----------------------------------------------------------------- sheets
+
+void _showRideSheet(BuildContext context, PlaytestController game) {
+  final fromDeck = game.engine.rideDeckOption(game.you);
+  final fromHand = game.engine.handRideOptions(game.you);
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    // A hand can hold several units of a rideable grade, so the list has to be
+    // free to scroll rather than run off the bottom of the sheet.
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              title: 'Ride',
+              caption: 'The unit you ride over goes to the soul.',
+            ),
+            if (fromDeck == null && fromHand.isEmpty)
+              const Text(
+                'Nothing to ride: the ride deck has no next grade and your '
+                'hand has nothing of the right grade.',
+                style: TextStyle(color: AppColors.textMuted),
+              ),
+            if (fromDeck != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CardImage(url: fromDeck.imageUrl, width: 36),
+                title: Text(
+                  fromDeck.name,
+                  style: const TextStyle(color: AppColors.text),
+                ),
+                subtitle: Text(
+                  'Ride deck · grade ${fromDeck.grade}',
+                  style: const TextStyle(color: AppColors.textMuted),
+                ),
+                onTap: () {
+                  game.ride(fromDeck, fromRideDeck: true);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+            for (final card in fromHand)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CardImage(url: card.imageUrl, width: 36),
+                title: Text(
+                  card.name,
+                  style: const TextStyle(color: AppColors.text),
+                ),
+                subtitle: Text(
+                  'From hand · grade ${card.grade}',
+                  style: const TextStyle(color: AppColors.textMuted),
+                ),
+                onTap: () {
+                  game.ride(card, fromRideDeck: false);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// What a card in hand can do, and what it says.
+void _showHandSheet(
+  BuildContext context,
+  PlaytestController game,
+  GameCard card,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _CardHeading(card: card),
+            const SizedBox(height: 12),
+            if (game.state.yourTurn &&
+                game.state.phase == PlaytestPhase.main &&
+                card.isUnit)
+              _SheetAction(
+                icon: Icons.add_circle_outline,
+                label: 'Call to a circle',
+                detail: 'Then tap the circle to put it on.',
+                onTap: () {
+                  game.hold(card);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+            if (game.state.yourTurn && !card.isUnit)
+              _SheetAction(
+                icon: Icons.bolt_outlined,
+                label: 'Play as an order',
+                detail: 'It goes to the drop zone; apply its text yourself.',
+                onTap: () {
+                  game.playOrder(card);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+            _SheetAction(
+              icon: Icons.delete_outline,
+              label: 'Discard',
+              detail: 'For a cost the card text asks for.',
+              onTap: () {
+                game.discard(card);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// A unit on the board: its text, and the hand-applied controls.
+void _showUnitSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+  Circle circle,
+  FieldUnit unit,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _CardHeading(card: unit.card, unit: unit, circle: circle),
+            const SizedBox(height: 14),
+            const Text(
+              'Applied by hand',
+              style: TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 11,
+                letterSpacing: 0.6,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final amount in [5000, 10000, -5000])
+                  OutlinedButton(
+                    onPressed: () => game.addPower(side, circle, amount),
+                    child: Text(
+                      '${amount > 0 ? '+' : ''}${amount ~/ 1000}k power',
+                    ),
+                  ),
+                OutlinedButton(
+                  onPressed: () => game.toggleRest(side, circle),
+                  child: Text(unit.rested ? 'Stand' : 'Rest'),
+                ),
+                if (circle != Circle.vanguard)
+                  OutlinedButton(
+                    onPressed: () {
+                      game.retire(side, circle);
+                      Navigator.of(sheetContext).pop();
+                    },
+                    child: const Text('Retire'),
+                  ),
+                OutlinedButton(
+                  onPressed: () => game.drawCard(side),
+                  child: const Text('Draw a card'),
+                ),
+                OutlinedButton(
+                  onPressed: () => game.dealDamage(side),
+                  child: const Text('Take damage'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _CardHeading extends StatelessWidget {
+  const _CardHeading({required this.card, this.unit, this.circle});
+
+  final GameCard card;
+  final FieldUnit? unit;
+  final Circle? circle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CardImage(url: card.imageUrl, width: 78),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                card.name,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  'Grade ${card.grade}',
+                  if (card.power > 0) '${unit?.power ?? card.power} power',
+                  if (card.shield > 0) '${card.shield} shield',
+                  if (card.trigger != null) '${card.trigger} trigger',
+                  if (circle != null) circle!.label,
+                ].join(' · '),
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+              if (card.effect.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  card.effect,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SheetAction extends StatelessWidget {
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: AppColors.textMuted),
+      title: Text(label, style: const TextStyle(color: AppColors.text)),
+      subtitle: Text(
+        detail,
+        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
+      onTap: onTap,
+    );
+  }
+}

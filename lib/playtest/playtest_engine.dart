@@ -1,0 +1,608 @@
+import 'dart:math';
+
+import '../games/game_definition.dart';
+import '../games/vanguard/vanguard_data.dart';
+import '../models/deck.dart';
+import '../store/deck_store.dart';
+import 'playtest_state.dart';
+
+/// The rules of a game of Vanguard, as far as they can be played without
+/// understanding what any individual card does.
+///
+/// The structure is all here and is enforced: riding in grade order, who may
+/// attack whom, how many drive checks a vanguard makes, what each trigger is
+/// worth, whether an attack got through, when the sixth damage ends it. What
+/// is deliberately absent is card abilities. They are English prose in the
+/// card database -- "[AUTO]:When this unit is placed on (VC), [COST][Counter-
+/// Blast 1], choose one of your opponent's rear-guards, and retire it" -- and
+/// nothing here can execute that. So the engine runs the game around them and
+/// the player reads the text and applies it by hand, which is also how a
+/// paper playtest against a patient opponent goes.
+class PlaytestEngine {
+  PlaytestEngine(this.state, {Random? random}) : _random = random ?? Random();
+
+  final PlaytestState state;
+  final Random _random;
+
+  /// Every card ever dealt gets a number, so two copies of one card are
+  /// separate pieces on the board.
+  static int _nextInstanceId = 1;
+
+  // ---------------------------------------------------------------- setting up
+
+  /// Builds a game from two decks in the library.
+  ///
+  /// [yourDeck] and [opponentDeck] may be the same deck: a mirror match is the
+  /// usual way to find out whether a deck simply works.
+  static PlaytestEngine start({
+    required DeckStore store,
+    required Deck yourDeck,
+    required Deck opponentDeck,
+    Random? random,
+  }) {
+    final rng = random ?? Random();
+    final state = PlaytestState(
+      you: PlaytestSide(name: 'You', isCpu: false),
+      opponent: PlaytestSide(name: 'CPU', isCpu: true),
+    );
+    final engine = PlaytestEngine(state, random: rng);
+
+    engine._deal(state.you, store.viewOf(yourDeck).items);
+    engine._deal(state.opponent, store.viewOf(opponentDeck).items);
+
+    // The first vanguard is the ride deck's grade 0, and it starts on the
+    // field rather than in the ride deck.
+    engine._standUpFirstVanguard(state.you);
+    engine._standUpFirstVanguard(state.opponent);
+
+    for (var i = 0; i < 5; i += 1) {
+      engine._draw(state.you);
+      engine._draw(state.opponent);
+    }
+
+    // The CPU decides its opening at once; yours waits for you.
+    engine._cpuMulligan(state.opponent);
+
+    state.note('Game on. Choose which cards to put back.');
+    return engine;
+  }
+
+  void _deal(PlaytestSide side, List<DeckItem> items) {
+    for (final item in items) {
+      for (var i = 0; i < item.entry.quantity; i += 1) {
+        final card = GameCard(_nextInstanceId++, item.card);
+        switch (item.entry.zoneId) {
+          case zoneRide:
+            side.rideDeck.add(card);
+          case zoneG:
+            // A G zone only matters to decks that stride, which is a
+            // Premium-era mechanic. Kept out of the way rather than shuffled
+            // into the main deck, where it would corrupt every draw.
+            continue;
+          default:
+            side.deck.add(card);
+        }
+      }
+    }
+    side.deck.shuffle(_random);
+    side.rideDeck.sort((a, b) => a.grade.compareTo(b.grade));
+  }
+
+  void _standUpFirstVanguard(PlaytestSide side) {
+    final crestIndex = side.rideDeck.indexWhere(
+      (c) => c.cardType == 'ride-deck-crest',
+    );
+    if (crestIndex >= 0) side.crest = side.rideDeck.removeAt(crestIndex);
+
+    final firstIndex = side.rideDeck.indexWhere((c) => c.grade == 0);
+    if (firstIndex < 0) return;
+    final first = side.rideDeck.removeAt(firstIndex);
+    side.field[Circle.vanguard] = FieldUnit(first);
+  }
+
+  // ------------------------------------------------------------------ mulligan
+
+  /// Puts [chosen] back, shuffles, and draws that many again.
+  void mulligan(PlaytestSide side, List<GameCard> chosen) {
+    for (final card in chosen) {
+      side.hand.remove(card);
+      side.deck.add(card);
+    }
+    side.deck.shuffle(_random);
+    for (var i = 0; i < chosen.length; i += 1) {
+      _draw(side);
+    }
+    if (chosen.isEmpty) {
+      state.note('${side.name} kept the opening hand.', by: side);
+    } else {
+      state.note('${side.name} put ${chosen.length} back.', by: side);
+    }
+  }
+
+  /// The CPU keeps its grade curve and pitches the rest.
+  void _cpuMulligan(PlaytestSide side) {
+    // A hand wants a grade 1 and a grade 2 to ride into; triggers and
+    // anything grade 3 or higher can wait.
+    final keep = <GameCard>[];
+    final back = <GameCard>[];
+    var ones = 0;
+    var twos = 0;
+    for (final card in side.hand) {
+      final wanted = switch (card.grade) {
+        1 => ones++ < 2,
+        2 => twos++ < 2,
+        0 => card.trigger != null,
+        _ => false,
+      };
+      (wanted ? keep : back).add(card);
+    }
+    mulligan(side, back);
+  }
+
+  /// Called once you have taken your own mulligan, to begin turn one.
+  void beginPlay() {
+    state.phase = PlaytestPhase.stand;
+    state.turn = 0;
+    state.yourTurn = true;
+    _beginTurn();
+  }
+
+  // --------------------------------------------------------------------- turns
+
+  void _beginTurn() {
+    state.turn += 1;
+    state.ridden = false;
+    final side = state.active;
+
+    for (final unit in side.units) {
+      unit.rested = false;
+    }
+    state.phase = PlaytestPhase.draw;
+    state.note('--- Turn ${state.turn}: ${side.name} ---', by: side);
+
+    // Both players draw on every turn of their own, the first included.
+    _draw(side);
+    if (_checkForEnd()) return;
+    state.phase = PlaytestPhase.ride;
+  }
+
+  /// Moves the game on to whatever comes after [state.phase].
+  void advancePhase() {
+    switch (state.phase) {
+      case PlaytestPhase.ride:
+        state.phase = PlaytestPhase.main;
+      case PlaytestPhase.main:
+        state.phase = PlaytestPhase.battle;
+      case PlaytestPhase.battle:
+        state.phase = PlaytestPhase.end;
+      case PlaytestPhase.end:
+        endTurn();
+      default:
+        break;
+    }
+  }
+
+  void endTurn() {
+    final side = state.active;
+    for (final unit in side.units) {
+      unit.clearTurnEffects();
+    }
+    for (final unit in state.inactive.units) {
+      unit.clearTurnEffects();
+    }
+    state.attack = null;
+    state.yourTurn = !state.yourTurn;
+    _beginTurn();
+  }
+
+  bool _checkForEnd() {
+    final winner = state.winner;
+    if (winner == null) return false;
+    state.phase = PlaytestPhase.over;
+    state.note('${winner.name} wins.');
+    return true;
+  }
+
+  // --------------------------------------------------------------------- cards
+
+  GameCard? _draw(PlaytestSide side) {
+    if (side.deck.isEmpty) return null;
+    final card = side.deck.removeLast();
+    side.hand.add(card);
+    return card;
+  }
+
+  /// Draws for the player, as an ability that says to.
+  void drawCard(PlaytestSide side) {
+    final card = _draw(side);
+    state.note(
+      card == null
+          ? '${side.name} has nothing left to draw.'
+          : '${side.name} draws a card.',
+      by: side,
+    );
+    _checkForEnd();
+  }
+
+  // ---------------------------------------------------------------------- ride
+
+  /// Which ride deck card may be ridden right now.
+  ///
+  /// The ride deck is climbed a grade at a time, so this is the one card whose
+  /// grade is exactly one above the vanguard's.
+  GameCard? rideDeckOption(PlaytestSide side) {
+    final current = side.vanguard?.card.grade ?? -1;
+    for (final card in side.rideDeck) {
+      if (card.grade == current + 1) return card;
+    }
+    return null;
+  }
+
+  /// Cards in hand that may be ridden: the same grade as the vanguard, or one
+  /// above it.
+  List<GameCard> handRideOptions(PlaytestSide side) {
+    final current = side.vanguard?.card.grade ?? -1;
+    return side.hand
+        .where(
+          (c) => c.isUnit && (c.grade == current || c.grade == current + 1),
+        )
+        .toList();
+  }
+
+  bool canRide(PlaytestSide side) =>
+      !state.ridden &&
+      state.phase == PlaytestPhase.ride &&
+      (rideDeckOption(side) != null || handRideOptions(side).isNotEmpty);
+
+  /// Rides [card], from the ride deck or from hand. The unit it replaces goes
+  /// to the soul, as a ridden-over vanguard always does.
+  void ride(PlaytestSide side, GameCard card, {required bool fromRideDeck}) {
+    if (fromRideDeck) {
+      side.rideDeck.remove(card);
+    } else {
+      side.hand.remove(card);
+    }
+    final previous = side.vanguard;
+    if (previous != null) side.soul.add(previous.card);
+    side.field[Circle.vanguard] = FieldUnit(card);
+    state.ridden = true;
+    state.note(
+      '${side.name} rides ${card.name} '
+      '(grade ${card.grade})${fromRideDeck ? ' from the ride deck' : ''}.',
+      by: side,
+    );
+  }
+
+  // ---------------------------------------------------------------------- call
+
+  /// Whether [card] may be called to [circle].
+  ///
+  /// A unit cannot be called above the vanguard's grade, which is what stops a
+  /// grade 3 hitting the field on turn one.
+  bool canCall(PlaytestSide side, GameCard card, Circle circle) {
+    if (circle == Circle.vanguard || !card.isUnit) return false;
+    final vanguardGrade = side.vanguard?.card.grade ?? 0;
+    return card.grade <= vanguardGrade;
+  }
+
+  /// Calls [card] to [circle]. A unit already there is retired to make room.
+  void call(PlaytestSide side, GameCard card, Circle circle) {
+    side.hand.remove(card);
+    final existing = side.field[circle];
+    if (existing != null) {
+      side.drop.add(existing.card);
+      state.note(
+        '${side.name} moves ${existing.card.name} to the drop zone.',
+        by: side,
+      );
+    }
+    side.field[circle] = FieldUnit(card);
+    state.note('${side.name} calls ${card.name} to ${circle.label}.', by: side);
+  }
+
+  /// Sends a unit on the field to the drop zone, as a retire cost or an
+  /// opponent's ability says to.
+  void retire(PlaytestSide side, Circle circle) {
+    final unit = side.field.remove(circle);
+    if (unit == null) return;
+    side.drop.add(unit.card);
+    state.note('${side.name} retires ${unit.card.name}.', by: side);
+  }
+
+  /// Plays an order: it does its work as text and goes straight to the drop.
+  void playOrder(PlaytestSide side, GameCard card) {
+    side.hand.remove(card);
+    side.drop.add(card);
+    state.note('${side.name} plays ${card.name}.', by: side);
+  }
+
+  /// Discards from hand, for a cost the card's text asks for.
+  void discard(PlaytestSide side, GameCard card) {
+    side.hand.remove(card);
+    side.drop.add(card);
+    state.note('${side.name} discards ${card.name}.', by: side);
+  }
+
+  // -------------------------------------------------------------------- attack
+
+  /// The units that could attack right now: standing, and in the front row.
+  /// The back row boosts rather than attacks.
+  List<Circle> attackers(PlaytestSide side) => [
+    for (final entry in side.field.entries)
+      if (entry.key.isFrontRow && !entry.value.rested) entry.key,
+  ];
+
+  /// What an attack may be aimed at: the vanguard, or a rear-guard standing in
+  /// the front row. A unit in the back row cannot be reached.
+  List<Circle> targets(PlaytestSide side) => [
+    for (final entry in side.field.entries)
+      if (entry.key.isFrontRow) entry.key,
+  ];
+
+  /// Declares an attack, resting the attacker and any booster behind it.
+  PendingAttack declareAttack({
+    required Circle from,
+    required Circle to,
+    bool boost = false,
+  }) {
+    final side = state.active;
+    final foe = state.inactive;
+    final attacker = side.field[from]!;
+    final target = foe.field[to]!;
+
+    FieldUnit? booster;
+    final boosterCircle = from.boostedBy;
+    if (boost && boosterCircle != null) {
+      final candidate = side.field[boosterCircle];
+      if (candidate != null && !candidate.rested) {
+        booster = candidate;
+        candidate.rested = true;
+      }
+    }
+    attacker.rested = true;
+
+    final pending = PendingAttack(
+      attacker: attacker,
+      attackerCircle: from,
+      target: target,
+      targetCircle: to,
+      booster: booster,
+    );
+    state.attack = pending;
+    state.note(
+      '${side.name} attacks ${target.card.name} with ${attacker.card.name}'
+      '${booster == null ? '' : ' boosted by ${booster.card.name}'} '
+      '(${pending.attackPower} power).',
+      by: side,
+    );
+    return pending;
+  }
+
+  /// Cards the defender could call to guard: they need a shield, or to be a
+  /// sentinel.
+  List<GameCard> guardOptions(PlaytestSide side) =>
+      side.hand.where((c) => c.canGuard).toList();
+
+  void addGuardian(GameCard card) {
+    final pending = state.attack;
+    if (pending == null) return;
+    final defender = state.inactive;
+    defender.hand.remove(card);
+    pending.guardians.add(card);
+    if (card.isSentinel) {
+      pending.perfectGuarded = true;
+      state.note(
+        '${defender.name} guards perfectly with ${card.name}.',
+        by: defender,
+      );
+    } else {
+      state.note(
+        '${defender.name} guards with ${card.name} (+${card.shield} shield).',
+        by: defender,
+      );
+    }
+  }
+
+  /// Runs the drive check, which only a vanguard's attack gets.
+  ///
+  /// A grade 3 vanguard twin drives and a grade 4 triple drives; everything
+  /// below checks once.
+  int driveCount(FieldUnit vanguard) => switch (vanguard.card.grade) {
+    >= 4 => 3,
+    3 => 2,
+    _ => 1,
+  };
+
+  /// Flips the drive checks into hand, returning what came off the top so the
+  /// screen can show it.
+  List<GameCard> driveCheck() {
+    final pending = state.attack;
+    final side = state.active;
+    if (pending == null || !pending.isVanguardAttack) return const [];
+
+    final flipped = <GameCard>[];
+    for (var i = 0; i < driveCount(pending.attacker); i += 1) {
+      if (side.deck.isEmpty) break;
+      final card = side.deck.removeLast();
+      side.hand.add(card);
+      flipped.add(card);
+      state.note('${side.name} drive checks ${card.name}.', by: side);
+      _applyTrigger(side, card, pending.attacker);
+    }
+    _checkForEnd();
+    return flipped;
+  }
+
+  /// Resolves the attack: a hit on a vanguard is damage, a hit on a rear-guard
+  /// retires it.
+  void resolveAttack() {
+    final pending = state.attack;
+    if (pending == null) return;
+    final side = state.active;
+    final foe = state.inactive;
+
+    for (final card in pending.guardians) {
+      foe.drop.add(card);
+    }
+
+    if (!pending.connects) {
+      state.note(
+        'The attack is stopped '
+        '(${pending.attackPower} against ${pending.defence}).',
+        by: side,
+      );
+      state.attack = null;
+      return;
+    }
+
+    if (pending.hitsVanguard) {
+      final hits = pending.attacker.critical;
+      state.note(
+        '${pending.target.card.name} is hit for $hits damage.',
+        by: side,
+      );
+      for (var i = 0; i < hits; i += 1) {
+        _damageCheck(foe);
+        if (foe.isDefeated) break;
+      }
+    } else {
+      foe.field.remove(pending.targetCircle);
+      foe.drop.add(pending.target.card);
+      state.note('${pending.target.card.name} is retired.', by: side);
+    }
+
+    state.attack = null;
+    _checkForEnd();
+  }
+
+  void _damageCheck(PlaytestSide side) {
+    if (side.deck.isEmpty) {
+      state.note('${side.name} has no cards left to check.', by: side);
+      return;
+    }
+    final card = side.deck.removeLast();
+    side.damage.add(card);
+    state.note(
+      '${side.name} damage checks ${card.name} '
+      '(${side.damageCount} damage).',
+      by: side,
+    );
+    // A trigger found in damage helps the player who took the hit, and its
+    // power goes to their vanguard since they are not attacking.
+    _applyTrigger(side, card, side.vanguard);
+  }
+
+  /// Applies a trigger's automatic half: the power, the critical, the heal.
+  ///
+  /// The draw and stand triggers move cards and units, so they are done here
+  /// too. What is left to the player is only ever a choice of which unit
+  /// benefits, and the engine takes the sensible default of the unit doing the
+  /// fighting.
+  void _applyTrigger(PlaytestSide side, GameCard card, FieldUnit? beneficiary) {
+    final trigger = card.trigger;
+    if (trigger == null) return;
+
+    final target = beneficiary ?? side.vanguard;
+    switch (trigger) {
+      case 'critical':
+        target?.powerBonus += 5000;
+        target?.criticalBonus += 1;
+        state.note('Critical trigger: +5000 power and +1 critical.', by: side);
+      case 'draw':
+        target?.powerBonus += 5000;
+        _draw(side);
+        state.note('Draw trigger: +5000 power and a card.', by: side);
+      case 'front':
+        for (final entry in side.field.entries) {
+          if (entry.key.isFrontRow) entry.value.powerBonus += 10000;
+        }
+        state.note('Front trigger: +10000 to the front row.', by: side);
+      case 'heal':
+        target?.powerBonus += 5000;
+        // Heal only works while you are not ahead on damage.
+        final foe = side == state.you ? state.opponent : state.you;
+        if (side.damageCount >= foe.damageCount && side.damage.isNotEmpty) {
+          side.drop.add(side.damage.removeLast());
+          state.note(
+            'Heal trigger: +5000 power and a damage healed.',
+            by: side,
+          );
+        } else {
+          state.note('Heal trigger: +5000 power, no heal.', by: side);
+        }
+      case 'stand':
+        target?.powerBonus += 5000;
+        final rested = side.units.where((u) => u.rested).toList();
+        if (rested.isNotEmpty) rested.first.rested = false;
+        state.note('Stand trigger: +5000 power and a unit stands.', by: side);
+      case 'over':
+        target?.powerBonus += 100000;
+        state.note(
+          'Over trigger: +100000 power. Read the card for the rest.',
+          by: side,
+        );
+      default:
+        break;
+    }
+  }
+
+  // ------------------------------------------------------- applied by the user
+
+  /// Gives a unit power, for an ability the player is applying by hand.
+  void addPower(PlaytestSide side, Circle circle, int amount) {
+    final unit = side.field[circle];
+    if (unit == null) return;
+    unit.powerBonus += amount;
+    state.note(
+      '${unit.card.name} gets ${amount >= 0 ? '+' : ''}$amount power.',
+      by: side,
+    );
+  }
+
+  /// Stands or rests a unit by hand, for the same reason.
+  void toggleRest(PlaytestSide side, Circle circle) {
+    final unit = side.field[circle];
+    if (unit == null) return;
+    unit.rested = !unit.rested;
+    state.note(
+      '${unit.card.name} is ${unit.rested ? 'rested' : 'stood'}.',
+      by: side,
+    );
+  }
+
+  /// Counter-blast, soul-blast, energy: costs the engine cannot read off a
+  /// card, so the player pays them here.
+  void setEnergy(PlaytestSide side, int value) {
+    side.energy = value.clamp(0, 99);
+  }
+
+  /// Deals damage directly, for an ability that says to.
+  void dealDamage(PlaytestSide side) {
+    _damageCheck(side);
+    _checkForEnd();
+  }
+}
+
+/// Decks that can actually be played out.
+///
+/// A playtest needs a first vanguard to stand up and cards to draw, so a deck
+/// still being built is not one you can take into a game.
+String? playtestBlocker(DeckView view) {
+  final ride = view.items.where((i) => i.entry.zoneId == zoneRide);
+  final main = view.items
+      .where((i) => i.entry.zoneId == zoneMain)
+      .fold(0, (sum, i) => sum + i.entry.quantity);
+
+  final hasFirstVanguard = ride.any(
+    (i) => (i.card.attributes['grade'] ?? '') == '0',
+  );
+  if (!hasFirstVanguard) {
+    return 'This deck has no grade 0 in its ride deck, so there is no unit to '
+        'start as the vanguard.';
+  }
+  if (main < 10) {
+    return 'This deck has only $main cards in its main deck. Add more before '
+        'playtesting it.';
+  }
+  return null;
+}

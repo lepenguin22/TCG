@@ -17,6 +17,7 @@ import 'add_cards_screen.dart';
 import 'card_editor_screen.dart';
 import 'deck_settings_screen.dart';
 import 'deck_stats_screen.dart';
+import 'playtest_setup_screen.dart';
 import 'trigger_icons_screen.dart';
 
 class DeckScreen extends StatefulWidget {
@@ -60,6 +61,15 @@ class _DeckScreenState extends State<DeckScreen> {
       appBar: AppBar(
         title: Text(deck.name, overflow: TextOverflow.ellipsis),
         actions: [
+          IconButton(
+            tooltip: 'Playtest',
+            icon: const Icon(Icons.play_circle_outline),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => PlaytestSetupScreen(deck: deck),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Breakdown',
             icon: const Icon(Icons.bar_chart),

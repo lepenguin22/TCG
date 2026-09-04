@@ -82,6 +82,10 @@ a real release key first if you ever go that way.
   its cards matched to the database, sorted into the right zones and ready to
   be checked against the rules. Paste several links, one per line, to import a
   whole collection at once.
+- **Playtest against a CPU.** Play a deck out against the computer — a mirror
+  match, or any other deck in the library — from the play button on the deck
+  screen. See [Playtesting](#playtesting) for what the board does and does not
+  run for you.
 - **Copy as text** to paste a list into a chat, and a JSON backup you can copy to
   the clipboard and import on another device.
 
@@ -281,6 +285,40 @@ out in the wrong place is visible immediately.
 
 If the request is ever refused, the endpoint can be opened in a browser and its
 JSON pasted into the same box — it is read the same way.
+
+## Playtesting
+
+The play button on a deck screen deals the deck out against the CPU. Pick a
+mirror match, or any other deck in the library to test a matchup against.
+
+The board runs the game the way it sits on a table: your opponent's six circles
+across the top, yours below, your hand along the bottom, and a control bar that
+only ever offers the move the rules are waiting for. It plays out an opening
+mulligan, the ride deck climbed a grade at a time, calling to the front and back
+rows, boosting from behind, attacks that only the front row can make or receive,
+drive checks sized to the vanguard's grade, damage checks, guarding with shields
+and perfect guards, and the sixth damage that ends it. Triggers resolve
+properly: critical adds power and a critical, draw draws, front lifts the front
+row, heal heals when you are not ahead on damage, stand stands a unit.
+
+### What it will not do for you
+
+It will not play your cards' abilities, and neither will the CPU.
+
+Abilities are English prose in the card database — "[AUTO]:When this unit is
+placed on (VC), [COST][Counter-Blast 1], choose one of your opponent's
+rear-guards, and retire it" — and there is no encoding of them for a program to
+follow. Rather than pretend otherwise, the board runs everything around them and
+leaves the abilities to you: tap any unit to read its text and apply what it
+says, with controls there for power, standing and resting, retiring, drawing,
+energy and damage. It is a patient paper opponent, not a rules engine.
+
+That still answers the questions a deck list cannot. Does it ride through grade
+3 reliably? Does the mulligan leave a workable hand? Are sixteen triggers enough
+to keep up in the damage race? How much shield is left in hand by turn four? The
+CPU climbs its ride deck, builds a board, boosts, swings at your vanguard and
+guards to save itself when a hit would be lethal, so those questions get asked
+under pressure rather than in a goldfish.
 
 ## Checks
 
