@@ -510,6 +510,61 @@ class PlaytestEngine {
     state.note('${side.name} calls ${card.name} to ${circle.label}.', by: side);
   }
 
+  /// The circle a rear-guard may move to: the other row of its own column.
+  ///
+  /// Only the left and right columns can do this. The middle column's front
+  /// circle is the vanguard's, and nothing moves onto that, so a unit in the
+  /// back centre has nowhere to go.
+  Circle? moveTargetOf(Circle circle) => switch (circle) {
+    Circle.frontLeft => Circle.backLeft,
+    Circle.backLeft => Circle.frontLeft,
+    Circle.frontRight => Circle.backRight,
+    Circle.backRight => Circle.frontRight,
+    _ => null,
+  };
+
+  /// Whether the unit on [circle] can move right now.
+  ///
+  /// Moving is a main phase action, so it cannot be used to shuffle the board
+  /// around mid-battle after seeing what an attack ran into.
+  bool canMove(PlaytestSide side, Circle circle) =>
+      state.phase == PlaytestPhase.main &&
+      side.field[circle] != null &&
+      moveTargetOf(circle) != null;
+
+  /// Moves a rear-guard between the rows of its column, swapping with
+  /// whatever is already there.
+  ///
+  /// The units keep everything about themselves -- a rested unit stays
+  /// rested, and the power an ability gave it travels with it. Only where
+  /// they stand changes, which is the point: a booster moves up to attack, or
+  /// an attacker drops back to boost.
+  void moveUnit(PlaytestSide side, Circle from) {
+    if (!canMove(side, from)) return;
+    final to = moveTargetOf(from);
+    if (to == null) return;
+
+    final moving = side.field[from];
+    if (moving == null) return;
+    final displaced = side.field[to];
+
+    side.field[to] = moving;
+    if (displaced == null) {
+      side.field.remove(from);
+      state.note(
+        '${side.name} moves ${moving.card.name} to ${to.label}.',
+        by: side,
+      );
+    } else {
+      side.field[from] = displaced;
+      state.note(
+        '${side.name} swaps ${moving.card.name} and '
+        '${displaced.card.name} between ${from.label} and ${to.label}.',
+        by: side,
+      );
+    }
+  }
+
   /// Sends a unit on the field to the drop zone, as a retire cost or an
   /// opponent's ability says to.
   void retire(PlaytestSide side, Circle circle) {

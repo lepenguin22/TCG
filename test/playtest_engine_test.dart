@@ -257,6 +257,135 @@ void main() {
     });
   });
 
+  group('moving between the rows of a column', () {
+    /// A game in the main phase with a grade 2 vanguard to call under.
+    (PlaytestEngine, PlaytestSide) inMain(DeckStore store, Deck deck) {
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      while (engine.rideDeckOption(you) != null &&
+          (you.vanguard?.card.grade ?? 0) < 2) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      engine.state.phase = PlaytestPhase.main;
+      return (engine, you);
+    }
+
+    test('the left and right columns pair front to back', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+
+      expect(engine.moveTargetOf(Circle.frontLeft), Circle.backLeft);
+      expect(engine.moveTargetOf(Circle.backLeft), Circle.frontLeft);
+      expect(engine.moveTargetOf(Circle.frontRight), Circle.backRight);
+      expect(engine.moveTargetOf(Circle.backRight), Circle.frontRight);
+    });
+
+    test('the middle column cannot move', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+
+      // Nothing moves onto the vanguard circle, so the unit behind it is
+      // stuck where it stands, and the vanguard itself never moves.
+      expect(engine.moveTargetOf(Circle.backCenter), isNull);
+      expect(engine.moveTargetOf(Circle.vanguard), isNull);
+    });
+
+    test('a unit moves into the empty circle of its column', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+
+      expect(engine.canMove(you, Circle.backLeft), isTrue);
+      engine.moveUnit(you, Circle.backLeft);
+
+      expect(you.field[Circle.frontLeft]!.card, unit);
+      expect(you.field[Circle.backLeft], isNull);
+    });
+
+    test('two units in a column swap places', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+
+      final front = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.frontRight),
+      );
+      engine.call(you, front, Circle.frontRight);
+      final back = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backRight),
+      );
+      engine.call(you, back, Circle.backRight);
+
+      engine.moveUnit(you, Circle.frontRight);
+      expect(you.field[Circle.frontRight]!.card, back);
+      expect(you.field[Circle.backRight]!.card, front);
+    });
+
+    test('a moved unit keeps everything about itself', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+      engine.addPower(you, Circle.backLeft, 5000);
+      you.field[Circle.backLeft]!.rested = true;
+
+      engine.moveUnit(you, Circle.backLeft);
+      final moved = you.field[Circle.frontLeft]!;
+      expect(moved.card, unit);
+      expect(moved.powerBonus, 5000, reason: 'the power travels with it');
+      expect(moved.rested, isTrue, reason: 'and moving does not stand it');
+    });
+
+    test('moving is a main phase action only', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+
+      engine.state.phase = PlaytestPhase.battle;
+      expect(engine.canMove(you, Circle.backLeft), isFalse);
+      engine.moveUnit(you, Circle.backLeft);
+      expect(
+        you.field[Circle.backLeft],
+        isNotNull,
+        reason: 'the board cannot be rearranged mid-battle',
+      );
+    });
+
+    test('an empty circle has nothing to move', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+      expect(engine.canMove(you, Circle.backRight), isFalse);
+    });
+
+    test('a moved unit can then attack from the front', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+      // Stuck in the back row, it is not an attacker.
+      engine.state.phase = PlaytestPhase.battle;
+      expect(engine.attackers(you), isNot(contains(Circle.backLeft)));
+
+      engine.state.phase = PlaytestPhase.main;
+      engine.moveUnit(you, Circle.backLeft);
+      engine.state.phase = PlaytestPhase.battle;
+      expect(engine.attackers(you), contains(Circle.frontLeft));
+    });
+  });
+
   group('the board', () {
     test('only the front row can attack or be attacked', () {
       expect(Circle.vanguard.isFrontRow, isTrue);
@@ -1159,6 +1288,72 @@ void main() {
       ai.guard(pending);
 
       expect(pending.perfectGuarded, isTrue, reason: 'it saved itself');
+    });
+  });
+
+  group('the CPU repositions', () {
+    test('it moves a stranded booster up to attack', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine);
+      engine.beginPlay();
+      final cpu = engine.state.opponent;
+
+      // A unit in the back row with nothing in front of it is boosting
+      // nobody, so it may as well be an attacker.
+      final unit = GameCard(
+        910,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Stranded',
+          attributes: {'grade': '1', 'cardType': 'normal', 'power': '9000'},
+        ),
+      );
+      cpu.field[Circle.backLeft] = FieldUnit(unit);
+      expect(cpu.field[Circle.frontLeft], isNull);
+
+      engine.endTurn();
+      // With nothing to call, moving is the only way the front row fills --
+      // given cards it would rather call a bigger unit in front and leave
+      // this one boosting it.
+      cpu.hand.clear();
+      ai.takeTurn();
+
+      expect(cpu.field[Circle.frontLeft], isNotNull);
+      expect(cpu.field[Circle.frontLeft]!.card, unit);
+    });
+
+    test('it leaves a booster alone when it has something to boost', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine);
+      engine.beginPlay();
+      final cpu = engine.state.opponent;
+
+      final booster = GameCard(
+        911,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Booster',
+          attributes: {'grade': '1', 'cardType': 'normal', 'power': '8000'},
+        ),
+      );
+      final attacker = GameCard(
+        912,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Attacker',
+          attributes: {'grade': '2', 'cardType': 'normal', 'power': '13000'},
+        ),
+      );
+      cpu.field[Circle.backLeft] = FieldUnit(booster);
+      cpu.field[Circle.frontLeft] = FieldUnit(attacker);
+
+      engine.endTurn();
+      ai.takeTurn();
+
+      expect(cpu.field[Circle.backLeft]!.card, booster, reason: 'left be');
+      expect(cpu.field[Circle.frontLeft]!.card, attacker);
     });
   });
 

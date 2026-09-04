@@ -306,6 +306,13 @@ properly: critical adds power and a critical, draw draws, front lifts the front
 row, heal heals when you are not ahead on damage, stand stands a unit. Both
 players draw on their own first turn; nobody skips it.
 
+Rear-guards move between the rows of their own column during your main phase,
+which is how a booster becomes an attacker or an attacker drops back to push.
+Tap one and the sheet offers the move, or the swap when its opposite number is
+occupied; the unit keeps its power and its rested state, since only where it
+stands has changed. The middle column has no move: nothing goes onto the
+vanguard circle, so the unit behind it stays where it is.
+
 Boosting is asked for rather than assumed. A booster behind the attacker shows
 up as a checkbox in the control bar, off until you tick it, because it is not
 always wanted — a unit that restands wants its booster kept back for the second
@@ -400,6 +407,10 @@ reasoning can be argued with rather than being buried in a magic number.
   body is not worth diverting an attack for.
 - **It holds cards back**, three or four depending on damage, instead of
   emptying its hand onto the board and then having nothing to guard with.
+- **It moves a stranded rear-guard up** when nothing is in front of it to
+  boost, turning a unit that was doing nothing into another attack. It does
+  this after calling rather than before, because given a card for that circle
+  the better board is the bigger unit in front with this one boosting it.
 - **It strides** where the deck has a G zone, paying with the fewest cards and
   never with the perfect guard.
 

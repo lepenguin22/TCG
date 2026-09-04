@@ -277,6 +277,12 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  /// Moves one of your rear-guards between the rows of its column.
+  void moveUnit(PlaytestSide side, Circle circle) {
+    engine.moveUnit(side, circle);
+    _sync();
+  }
+
   void setEnergy(PlaytestSide side, int value) {
     engine.setEnergy(side, value);
     _sync();

@@ -978,6 +978,9 @@ class _Field extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: _CircleSlot(
+                        // Named so a test can reach one circle in particular
+                        // rather than counting its way across the board.
+                        key: ValueKey('circle-${side.name}-${circle.name}'),
                         game: game,
                         side: side,
                         circle: circle,
@@ -995,6 +998,7 @@ class _Field extends StatelessWidget {
 
 class _CircleSlot extends StatelessWidget {
   const _CircleSlot({
+    super.key,
     required this.game,
     required this.side,
     required this.circle,
@@ -1250,6 +1254,7 @@ class _Hand extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: _HandSlot(
+                      key: ValueKey('hand-${card.instanceId}'),
                       game: game,
                       card: card,
                       guarding: guarding,
@@ -1263,6 +1268,7 @@ class _Hand extends StatelessWidget {
 
 class _HandSlot extends StatelessWidget {
   const _HandSlot({
+    super.key,
     required this.game,
     required this.card,
     required this.guarding,
@@ -1452,7 +1458,8 @@ class _Controls extends StatelessWidget {
                 : 'Ride phase — ride up a grade.',
           PlaytestPhase.main =>
             game.holding == null
-                ? 'Main phase — tap a card in hand to call it.'
+                ? 'Main phase — tap a card in hand to call it, or a '
+                      'rear-guard to move it up or back.'
                 : 'Tap a circle to call ${game.holding!.name}.',
           PlaytestPhase.battle =>
             game.selectedAttacker == null
@@ -1650,6 +1657,17 @@ void _showUnitSheet(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _CardHeading(card: unit.card, unit: unit, circle: circle),
+            // Moving between the rows of a column is a rule the engine keeps,
+            // not something applied by hand, so it sits above that line.
+            if (side == game.you && game.engine.canMove(side, circle)) ...[
+              const SizedBox(height: 14),
+              _MoveAction(
+                game: game,
+                side: side,
+                circle: circle,
+                onDone: () => Navigator.of(sheetContext).pop(),
+              ),
+            ],
             const SizedBox(height: 14),
             const Text(
               'Applied by hand',
@@ -1699,6 +1717,59 @@ void _showUnitSheet(
       ),
     ),
   );
+}
+
+/// Moving a rear-guard between the front and back of its own column.
+///
+/// A main phase action of the real game, and one the board had no way of
+/// doing: a booster that wants to attack had to stay where it was called.
+class _MoveAction extends StatelessWidget {
+  const _MoveAction({
+    required this.game,
+    required this.side,
+    required this.circle,
+    required this.onDone,
+  });
+
+  final PlaytestController game;
+  final PlaytestSide side;
+  final Circle circle;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final target = game.engine.moveTargetOf(circle);
+    if (target == null) return const SizedBox.shrink();
+    final occupant = side.field[target];
+    final forward = target.isFrontRow;
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        forward ? Icons.arrow_upward : Icons.arrow_downward,
+        color: AppColors.accent,
+      ),
+      title: Text(
+        occupant == null
+            ? 'Move to ${target.label.toLowerCase()}'
+            : 'Swap with ${occupant.card.name}',
+        style: const TextStyle(
+          color: AppColors.text,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        forward
+            ? 'Into the front row, where it can attack.'
+            : 'Into the back row, where it can boost.',
+        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
+      onTap: () {
+        game.moveUnit(side, circle);
+        onDone();
+      },
+    );
+  }
 }
 
 class _CardHeading extends StatelessWidget {

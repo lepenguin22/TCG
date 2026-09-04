@@ -39,6 +39,7 @@ class PlaytestAi {
     _ride();
     _stride();
     _callUnits();
+    _reposition();
     state.phase = PlaytestPhase.battle;
   }
 
@@ -147,6 +148,27 @@ class PlaytestAi {
         continue;
       }
       engine.call(me, best, circle);
+    }
+  }
+
+  /// Moves a rear-guard up out of the back row when there is nothing in front
+  /// of it to boost.
+  ///
+  /// A unit stood behind an empty circle is doing nothing at all: it cannot
+  /// attack from there and it has nobody to push. Moving it forward turns it
+  /// into another attack for free, and costs the boost it was not giving.
+  ///
+  /// Deliberately after calling rather than before. Given a card for that
+  /// empty front circle, the better board is the bigger unit in front with
+  /// this one boosting it -- so this only picks up what calling could not
+  /// fill, which is the board left over after an attacker was retired.
+  void _reposition() {
+    for (final back in [Circle.backLeft, Circle.backRight]) {
+      final unit = me.field[back];
+      if (unit == null) continue;
+      final front = engine.moveTargetOf(back);
+      if (front == null || me.field[front] != null) continue;
+      engine.moveUnit(me, back);
     }
   }
 

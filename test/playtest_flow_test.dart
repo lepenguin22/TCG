@@ -432,6 +432,75 @@ void main() {
       expect(find.textContaining('0 energy'), findsOneWidget);
     });
 
+    /// A card in hand of a grade low enough to call under a grade 1
+    /// vanguard. Hand tiles label themselves with their grade, which is the
+    /// only handle a widget test has on which card is which.
+    Finder callableHandCard() {
+      for (final label in ['G1', 'G0']) {
+        if (find.text(label).evaluate().isNotEmpty) return find.text(label);
+      }
+      return find.text('G1');
+    }
+
+    testWidgets('a rear-guard offers to move up its column', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // Ride into grade 1 so there is something to call under, then move on
+      // to the main phase.
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      // Call something into the back left circle.
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+
+      // Tapping it now offers the move up, because the front of its column
+      // is empty.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+      expect(find.textContaining('Move to front left'), findsOneWidget);
+      await tester.tap(find.textContaining('Move to front left'));
+      await tester.pumpAndSettle();
+
+      // It is in the front row now, and the offer has flipped the other way.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+      expect(find.textContaining('Move to back left'), findsOneWidget);
+    });
+
+    testWidgets('the vanguard is never offered a move', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      // Nothing moves onto or off the vanguard circle.
+      expect(find.textContaining('Move to'), findsNothing);
+      expect(find.textContaining('Swap with'), findsNothing);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
