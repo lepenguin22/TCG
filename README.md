@@ -339,10 +339,39 @@ paper opponent, not a rules engine.
 
 That still answers the questions a deck list cannot. Does it ride through grade
 3 reliably? Does the mulligan leave a workable hand? Are sixteen triggers enough
-to keep up in the damage race? How much shield is left in hand by turn four? The
-CPU climbs its ride deck, builds a board, boosts, swings at your vanguard and
-guards to save itself when a hit would be lethal, so those questions get asked
-under pressure rather than in a goldfish.
+to keep up in the damage race? How much shield is left in hand by turn four?
+
+### How the CPU decides
+
+Everything it does comes from what the engine can see — power, shield,
+critical, grade, the damage on each side, the cards in each hand — so its
+reasoning can be argued with rather than being buried in a magic number.
+
+- **It only makes attacks that achieve something.** An attack short of its
+  target's power is simply waved through, so it is not made. Over a run of
+  self-play games the previous version would have thrown 638 such swings; this
+  one makes none.
+- **It guards by what the trade is worth.** Early damage is cheap, and even
+  useful — it is a damage check and counter-blast fuel — so it takes those hits
+  and keeps its hand. Deeper in damage, and against a double critical, it
+  spends more. It answers about four in five of the attacks it could stop, and
+  takes the rest on purpose.
+- **It spends the fewest cards that do the job**, taking the biggest shields
+  first. Filling from the smallest up, as it used to, cost 2.19 cards a guard
+  against 1.12 now.
+- **It keeps the perfect guard** for the hit that would actually end the game,
+  rather than spending it on the first big attack.
+- **It picks rear-guard targets worth killing** — a real attacker, or the boost
+  under one — and otherwise keeps the pressure on the vanguard. A 5000 power
+  body is not worth diverting an attack for.
+- **It holds cards back**, three or four depending on damage, instead of
+  emptying its hand onto the board and then having nothing to guard with.
+- **It strides** where the deck has a G zone, paying with the fewest cards and
+  never with the perfect guard.
+
+The same policy can be pointed at both seats, so it plays itself and the
+results are measured rather than assumed: every game finishes, none stalls, and
+the numbers above come out of that run.
 
 ## Checks
 
