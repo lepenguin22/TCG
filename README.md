@@ -289,7 +289,11 @@ JSON pasted into the same box — it is read the same way.
 ## Playtesting
 
 The play button on a deck screen deals the deck out against the CPU. Pick a
-mirror match, or any other deck in the library to test a matchup against.
+mirror match, or any other deck in the library to test a matchup against, and
+choose who takes the first turn — you, the CPU, or a roll. Turn order is not a
+formality: whoever goes second is paid three energy by the crest to make up for
+being a turn behind on the board, so a deck is worth trying from both sides.
+Choosing the roll re-rolls it on every restart rather than fixing it once.
 
 The board runs the game the way it sits on a table: your opponent's six circles
 across the top, yours below, your hand along the bottom, and a control bar that
@@ -321,8 +325,8 @@ the card rather than out of a guess:
 [AUTO]: At the beginning of your ride phase, [Energy-Charge 3].
 ```
 
-Which settles the first turn, and it settles it by timing rather than by a
-special case. The charge happens at the *beginning* of the ride phase, and the
+Which settles the first turn — whichever player that turns out to be — and it
+settles it by timing rather than by a special case. The charge happens at the *beginning* of the ride phase, and the
 crest does not reach the crest zone until you actually ride — during that same
 phase, after the moment has passed. So whoever goes first charges nothing on
 turn one. Whoever goes second charges nothing at the beginning of theirs

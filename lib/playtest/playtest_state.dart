@@ -192,6 +192,22 @@ class PlaytestSide {
       field.entries.where((e) => e.key.isRearGuard);
 }
 
+/// Who takes the first turn.
+///
+/// It is a real decision rather than a formality: the player going second is
+/// paid three energy by the crest to make up for it, and the player going
+/// first gets to build a board a turn earlier. A real game settles it with
+/// rock-paper-scissors, which [random] stands in for.
+enum TurnOrder {
+  youFirst('You go first'),
+  cpuFirst('The CPU goes first'),
+  random('Decided at random');
+
+  const TurnOrder(this.label);
+
+  final String label;
+}
+
 enum PlaytestPhase {
   /// Both players are still deciding which opening cards to put back.
   mulligan('Mulligan'),

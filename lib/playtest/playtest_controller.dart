@@ -41,12 +41,14 @@ class PlaytestController extends ChangeNotifier {
     required DeckStore store,
     required Deck yourDeck,
     required Deck opponentDeck,
+    TurnOrder turnOrder = TurnOrder.youFirst,
     Random? random,
   }) {
     engine = PlaytestEngine.start(
       store: store,
       yourDeck: yourDeck,
       opponentDeck: opponentDeck,
+      turnOrder: turnOrder,
       random: random,
     );
     ai = PlaytestAi(engine);
@@ -100,6 +102,11 @@ class PlaytestController extends ChangeNotifier {
     mulliganPicks.clear();
     engine.beginPlay();
     stage = PlaytestStage.yours;
+    // The CPU may have won the roll, in which case turn one is its own and it
+    // plays straight through to its first attack before you get the board.
+    if (!state.yourTurn && !state.isOver) {
+      _runCpuTurn();
+    }
     _sync();
   }
 

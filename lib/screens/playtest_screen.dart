@@ -20,10 +20,15 @@ class PlaytestScreen extends StatefulWidget {
     super.key,
     required this.yourDeck,
     required this.opponentDeck,
+    this.turnOrder = TurnOrder.youFirst,
   });
 
   final Deck yourDeck;
   final Deck opponentDeck;
+
+  /// Who takes turn one. Kept as the choice rather than the outcome, so a
+  /// random order is rolled again on every restart.
+  final TurnOrder turnOrder;
 
   @override
   State<PlaytestScreen> createState() => _PlaytestScreenState();
@@ -39,6 +44,7 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
       store: context.read<DeckStore>(),
       yourDeck: widget.yourDeck,
       opponentDeck: widget.opponentDeck,
+      turnOrder: widget.turnOrder,
     );
   }
 
@@ -96,6 +102,7 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
         store: context.read<DeckStore>(),
         yourDeck: widget.yourDeck,
         opponentDeck: widget.opponentDeck,
+        turnOrder: widget.turnOrder,
       );
     });
   }
@@ -149,12 +156,27 @@ class _Mulligan extends StatelessWidget {
     final hand = game.you.hand;
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 8, 20, 4),
-          child: Text(
-            'Tap the cards you want to put back, then keep the rest. '
-            'They are shuffled away and replaced.',
-            style: TextStyle(color: AppColors.textMuted, height: 1.4),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                game.you.goesFirst
+                    ? 'You go first.'
+                    : 'The CPU goes first, so you are paid three energy.',
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Tap the cards you want to put back, then keep the rest. '
+                'They are shuffled away and replaced.',
+                style: TextStyle(color: AppColors.textMuted, height: 1.4),
+              ),
+            ],
           ),
         ),
         Expanded(

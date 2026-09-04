@@ -795,6 +795,81 @@ void main() {
     );
   });
 
+  group('who goes first', () {
+    test('you take turn one by default', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+
+      expect(engine.state.you.goesFirst, isTrue);
+      expect(engine.state.opponent.goesFirst, isFalse);
+      expect(engine.state.yourTurn, isTrue);
+    });
+
+    test('the CPU can be given the first turn instead', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = PlaytestEngine.start(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
+        random: Random(7),
+      );
+      engine.beginPlay();
+
+      expect(engine.state.opponent.goesFirst, isTrue);
+      expect(engine.state.you.goesFirst, isFalse);
+      expect(engine.state.yourTurn, isFalse, reason: 'turn one is the CPU\'s');
+      expect(engine.state.turn, 1);
+    });
+
+    test('the energy follows whoever actually went second', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = PlaytestEngine.start(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
+        random: Random(7),
+      );
+      engine.beginPlay();
+      final you = engine.state.you;
+      final cpu = engine.state.opponent;
+
+      // The CPU has turn one now, so it is the one that charges nothing.
+      engine.ride(cpu, engine.rideDeckOption(cpu)!, fromRideDeck: true);
+      expect(cpu.energy, 0);
+
+      engine.endTurn();
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      expect(you.energy, 3, reason: 'you went second this time');
+    });
+
+    test('random settles on one side or the other', () async {
+      var sawYouFirst = false;
+      var sawCpuFirst = false;
+      for (var seed = 0; seed < 20; seed += 1) {
+        final (store, deck) = await buildDeck();
+        final engine = PlaytestEngine.start(
+          store: store,
+          yourDeck: deck,
+          opponentDeck: deck,
+          turnOrder: TurnOrder.random,
+          random: Random(seed),
+        );
+        // Exactly one of them goes first, whichever way it fell.
+        expect(engine.state.you.goesFirst, !engine.state.opponent.goesFirst);
+        if (engine.state.you.goesFirst) {
+          sawYouFirst = true;
+        } else {
+          sawCpuFirst = true;
+        }
+      }
+      expect(sawYouFirst, isTrue);
+      expect(sawCpuFirst, isTrue);
+    });
+  });
+
   group('the G zone', () {
     final deckWithGZone = buildStrideDeck;
 

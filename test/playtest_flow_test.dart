@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:tcg_decks/playtest/playtest_controller.dart';
 import 'package:tcg_decks/playtest/playtest_state.dart';
 import 'package:tcg_decks/screens/playtest_screen.dart';
+import 'package:tcg_decks/screens/playtest_setup_screen.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
@@ -193,6 +194,29 @@ void main() {
       expect(game.boostSelected, isFalse);
     });
 
+    test('the CPU going first has already played when you take over', () async {
+      final (store, deck) = await buildDeck();
+      final game = PlaytestController(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
+        random: Random(4),
+      );
+      expect(game.stage, PlaytestStage.mulligan);
+
+      game.confirmMulligan();
+      // Turn one belongs to the CPU, so keeping your hand hands straight over
+      // to it rather than giving you a board you cannot act on.
+      expect(game.state.turn, 1);
+      expect(
+        game.stage,
+        anyOf(PlaytestStage.guarding, PlaytestStage.yours),
+        reason: 'it played its turn out',
+      );
+      expect(game.cpu.vanguard, isNotNull);
+    });
+
     test('a rear-guard attack skips the drive check', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(
@@ -217,6 +241,62 @@ void main() {
       game.attackWithSelected(Circle.vanguard);
       game.driveCheck();
       expect(game.lastChecks, isEmpty);
+    });
+  });
+
+  group('setting a game up', () {
+    Future<void> pumpSetup(WidgetTester tester, DeckStore store, deck) async {
+      await tester.pumpWidget(
+        ChangeNotifierProvider<DeckStore>.value(
+          value: store,
+          child: MaterialApp(
+            theme: buildTheme(),
+            home: PlaytestSetupScreen(deck: deck),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('turn order is offered, with you first to start', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pumpSetup(tester, store, deck);
+
+      expect(find.text('Turn order'), findsOneWidget);
+      expect(find.text('You'), findsOneWidget);
+      expect(find.text('CPU'), findsOneWidget);
+      expect(find.text('Random'), findsOneWidget);
+      expect(find.text('You go first'), findsOneWidget);
+    });
+
+    testWidgets('choosing the CPU deals it the first turn', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pumpSetup(tester, store, deck);
+
+      await tester.tap(find.text('CPU'));
+      await tester.pumpAndSettle();
+      expect(find.text('The CPU goes first'), findsOneWidget);
+
+      await tester.tap(find.text('Mirror match'));
+      await tester.pumpAndSettle();
+
+      // The board opens on the mulligan and says who has turn one.
+      expect(find.text('Opening hand'), findsOneWidget);
+      expect(find.textContaining('The CPU goes first'), findsOneWidget);
+    });
+
+    testWidgets('random says it is rolled again each restart', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pumpSetup(tester, store, deck);
+
+      await tester.tap(find.text('Random'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Rolled again every time you restart the board.'),
+        findsOneWidget,
+      );
     });
   });
 

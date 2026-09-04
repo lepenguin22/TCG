@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/deck.dart';
 import '../playtest/playtest_engine.dart';
+import '../playtest/playtest_state.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -13,10 +14,19 @@ import 'playtest_screen.dart';
 /// A mirror match is offered first and by name, because it is the question a
 /// deck usually needs answered: does this thing ride, draw and hold up at all.
 /// Any other deck in the library is a matchup test.
-class PlaytestSetupScreen extends StatelessWidget {
+class PlaytestSetupScreen extends StatefulWidget {
   const PlaytestSetupScreen({super.key, required this.deck});
 
   final Deck deck;
+
+  @override
+  State<PlaytestSetupScreen> createState() => _PlaytestSetupScreenState();
+}
+
+class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
+  TurnOrder _turnOrder = TurnOrder.youFirst;
+
+  Deck get deck => widget.deck;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +73,47 @@ class PlaytestSetupScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
+                const SectionHeader(
+                  title: 'Turn order',
+                  caption:
+                      'Going second is paid three energy by the crest, '
+                      'so it is worth testing from both sides.',
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<TurnOrder>(
+                    segments: const [
+                      ButtonSegment(
+                        value: TurnOrder.youFirst,
+                        label: Text('You'),
+                      ),
+                      ButtonSegment(
+                        value: TurnOrder.cpuFirst,
+                        label: Text('CPU'),
+                      ),
+                      ButtonSegment(
+                        value: TurnOrder.random,
+                        label: Text('Random'),
+                      ),
+                    ],
+                    selected: {_turnOrder},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (chosen) =>
+                        setState(() => _turnOrder = chosen.first),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _turnOrder == TurnOrder.random
+                      ? 'Rolled again every time you restart the board.'
+                      : _turnOrder.label,
+                  style: const TextStyle(
+                    color: AppColors.textFaint,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 const SectionHeader(title: 'Opponent'),
                 const SizedBox(height: 8),
                 _OpponentTile(
@@ -137,10 +188,14 @@ class PlaytestSetupScreen extends StatelessWidget {
     return '$total cards · ${view.format.name}';
   }
 
-  static void _start(BuildContext context, Deck yours, Deck theirs) {
+  void _start(BuildContext context, Deck yours, Deck theirs) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) => PlaytestScreen(yourDeck: yours, opponentDeck: theirs),
+        builder: (_) => PlaytestScreen(
+          yourDeck: yours,
+          opponentDeck: theirs,
+          turnOrder: _turnOrder,
+        ),
       ),
     );
   }

@@ -38,6 +38,7 @@ class PlaytestEngine {
     required DeckStore store,
     required Deck yourDeck,
     required Deck opponentDeck,
+    TurnOrder turnOrder = TurnOrder.youFirst,
     Random? random,
   }) {
     final rng = random ?? Random();
@@ -50,9 +51,15 @@ class PlaytestEngine {
     engine._deal(state.you, store.viewOf(yourDeck).items);
     engine._deal(state.opponent, store.viewOf(opponentDeck).items);
 
-    // You take the first turn, which the crest's energy rule cares about.
-    state.you.goesFirst = true;
-    state.opponent.goesFirst = false;
+    // Who goes first, which the crest's energy rule cares about: the player
+    // going second is paid three to make up for it.
+    final youFirst = switch (turnOrder) {
+      TurnOrder.youFirst => true,
+      TurnOrder.cpuFirst => false,
+      TurnOrder.random => rng.nextBool(),
+    };
+    state.you.goesFirst = youFirst;
+    state.opponent.goesFirst = !youFirst;
 
     // The first vanguard is the ride deck's grade 0, and it starts on the
     // field rather than in the ride deck.
@@ -67,6 +74,11 @@ class PlaytestEngine {
     // The CPU decides its opening at once; yours waits for you.
     engine._cpuMulligan(state.opponent);
 
+    state.note(
+      youFirst
+          ? 'You go first, so you charge no energy on turn one.'
+          : 'The CPU goes first. You are paid three energy for going second.',
+    );
     state.note('Game on. Choose which cards to put back.');
     return engine;
   }
@@ -147,7 +159,7 @@ class PlaytestEngine {
   void beginPlay() {
     state.phase = PlaytestPhase.stand;
     state.turn = 0;
-    state.yourTurn = true;
+    state.yourTurn = state.you.goesFirst;
     _beginTurn();
   }
 
