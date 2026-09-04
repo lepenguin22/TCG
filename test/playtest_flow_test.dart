@@ -530,6 +530,71 @@ void main() {
       expect(find.textContaining('★2'), findsOneWidget);
     });
 
+    testWidgets('power is given in whatever amount the card says', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+
+      // The field opens on the commonest amount, and the old fixed buttons
+      // are gone: an ability giving 4000 is typed in as 4000.
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '5000',
+      );
+      expect(find.text('+5k power'), findsNothing);
+      await tester.enterText(find.byType(TextField), '4000');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add power'));
+      await tester.pumpAndSettle();
+
+      // A grade 0 vanguard is 9000 in this deck, so it now reads 13000 and
+      // says how much of that was applied by hand.
+      expect(find.textContaining('13000 power'), findsWidgets);
+      expect(find.textContaining(RegExp(r'\+4000 by hand')), findsOneWidget);
+
+      // Taking it away again works off the same field, and clearing puts
+      // the unit back where it started.
+      await tester.tap(find.text('Remove power'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(RegExp(r'\d by hand')), findsNothing);
+
+      await tester.tap(find.text('Add power'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(RegExp(r'\d by hand')), findsNothing);
+    });
+
+    testWidgets('an empty power field does nothing', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pumpAndSettle();
+
+      final add = tester.widget<OutlinedButton>(
+        find.ancestor(
+          of: find.text('Add power'),
+          matching: find.byType(OutlinedButton),
+        ),
+      );
+      expect(add.onPressed, isNull, reason: 'nothing to add');
+    });
+
     testWidgets('drive is offered on the vanguard alone', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
@@ -687,11 +752,10 @@ void main() {
       // until a card the vanguard's grade allows comes into view.
       await tapOnBoard(tester, find.text('Deck').last);
       expect(find.text('To hand'), findsWidgets);
-      await tester.scrollUntilVisible(
-        find.text('Call').first,
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
+      for (var i = 0; i < 12 && find.text('Call').evaluate().isEmpty; i += 1) {
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -220));
+        await tester.pumpAndSettle();
+      }
       expect(find.text('Call'), findsWidgets);
 
       await tester.tap(find.text('Call').first);

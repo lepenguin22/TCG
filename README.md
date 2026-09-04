@@ -400,8 +400,11 @@ follow. Rather than pretend otherwise, the board runs everything around them and
 leaves the abilities to you: tap any unit to read its text and apply what it
 says, with controls there for power, critical, drive, standing and resting,
 retiring, drawing, energy and damage, and every zone above open for the costs.
-Power, critical and drive all wear off at end of turn the way the game says
-they do — a unit carrying more than its one critical, or reduced below it, says
+Power is typed in rather than picked from a list: cards give 2000 and 4000 as
+readily as 5000, so the unit sheet has a field — opening on 5000, the commonest
+— with buttons to add or take away exactly that much, and a Clear that puts the
+unit back to its printed power. Power, critical and drive all wear off at end
+of turn the way the game says they do — a unit carrying more than its one critical, or reduced below it, says
 so on the board, and the drive check button names how many checks are coming.
 
 Drive is offered on the vanguard alone, since nothing else drive checks, and

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/deck.dart';
@@ -775,7 +776,14 @@ void _showCrestSheet(
     isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        // The power field brings up the keyboard, so the sheet is padded
+        // out from under it rather than left half covered.
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1793,7 +1801,14 @@ void _showHandSheet(
     isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        // The power field brings up the keyboard, so the sheet is padded
+        // out from under it rather than left half covered.
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1854,7 +1869,14 @@ void _showUnitSheet(
     isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        // The power field brings up the keyboard, so the sheet is padded
+        // out from under it rather than left half covered.
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1889,17 +1911,12 @@ void _showUnitSheet(
               ),
             ),
             const SizedBox(height: 8),
+            _PowerControl(game: game, side: side, circle: circle, unit: unit),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final amount in [5000, 10000, -5000])
-                  OutlinedButton(
-                    onPressed: () => game.addPower(side, circle, amount),
-                    child: Text(
-                      '${amount > 0 ? '+' : ''}${amount ~/ 1000}k power',
-                    ),
-                  ),
                 // Critical is the other half of what an ability gives a unit:
                 // how many damage a hit on the vanguard is worth.
                 OutlinedButton(
@@ -1953,6 +1970,128 @@ void _showUnitSheet(
       ),
     ),
   );
+}
+
+/// The power an ability gives a unit, typed in rather than picked off a
+/// short list of buttons.
+///
+/// Cards give 2000, 3000 and 4000 as readily as the 5000 and 10000 the board
+/// used to offer, and rounding to whatever happened to be on screen is not
+/// playing the card. So the amount is a field -- it opens on 5000, the most
+/// common one -- and the two buttons add or take away exactly what is in it.
+class _PowerControl extends StatefulWidget {
+  const _PowerControl({
+    required this.game,
+    required this.side,
+    required this.circle,
+    required this.unit,
+  });
+
+  final PlaytestController game;
+  final PlaytestSide side;
+  final Circle circle;
+  final FieldUnit unit;
+
+  @override
+  State<_PowerControl> createState() => _PowerControlState();
+}
+
+class _PowerControlState extends State<_PowerControl> {
+  final TextEditingController _amount = TextEditingController(text: '5000');
+
+  @override
+  void initState() {
+    super.initState();
+    // What is typed decides whether the buttons do anything, so the row
+    // follows the field.
+    _amount.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  /// The typed amount, or null where there is nothing usable in the field.
+  int? get _typed {
+    final value = int.tryParse(_amount.text.trim());
+    if (value == null || value <= 0) return null;
+    return value;
+  }
+
+  void _apply(int sign) {
+    final amount = _typed;
+    if (amount == null) return;
+    setState(
+      () => widget.game.addPower(widget.side, widget.circle, sign * amount),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final typed = _typed;
+    final bonus = widget.unit.powerBonus;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 104,
+              child: TextField(
+                controller: _amount,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: const TextStyle(color: AppColors.text, fontSize: 14),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'Power',
+                  hintText: '5000',
+                ),
+              ),
+            ),
+            OutlinedButton(
+              onPressed: typed == null ? null : () => _apply(1),
+              child: const Text('Add power'),
+            ),
+            OutlinedButton(
+              onPressed: typed == null ? null : () => _apply(-1),
+              child: const Text('Remove power'),
+            ),
+          ],
+        ),
+        // What has been applied by hand so far, and a way back out of it.
+        if (bonus != 0) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${widget.unit.power} power '
+                  '(${bonus > 0 ? '+' : ''}$bonus by hand)',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(
+                  () =>
+                      widget.game.addPower(widget.side, widget.circle, -bonus),
+                ),
+                child: const Text('Clear'),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 /// Moving a rear-guard between the front and back of its own column.
