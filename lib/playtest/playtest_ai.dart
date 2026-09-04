@@ -294,18 +294,28 @@ class PlaytestAi {
     final plan = _cheapestGuard(needed, shields);
     if (plan == null) return; // Cannot be stopped, so do not pay towards it.
 
-    // What the CPU will spend, in cards. Early damage is cheap and even
-    // useful -- it is a damage check, and counter-blast fuel -- so it takes
-    // those hits and keeps its hand. Late damage is the game.
+    // What the CPU will spend, in cards.
+    //
+    // Nothing at all for the first few. Early damage is not a loss in this
+    // game -- it is a damage check, which is a free look at a trigger, and it
+    // is the counter-blast an ability will want later. Guarding it away costs
+    // a card and buys almost nothing, which is how a fifteen thousand shield
+    // trigger ended up being spent to stop a nine thousand attack on turn
+    // one. Six damage is the game, so what matters is which damage this is.
+    final after = me.damageCount + critical;
     var budget = switch (me.damageCount) {
-      0 || 1 || 2 => 1,
-      3 => 2,
+      0 || 1 || 2 => 0,
+      3 => 1,
+      4 => 2,
       _ => 3,
     };
-    // A double critical is two damage, so it is worth more to stop.
+    // The hit that puts it on five is the one after which everything has to
+    // be answered, so it is worth more than the one that puts it on three.
+    if (after >= 5) budget += 1;
+    // A double critical is two damage at once, and worth more to stop.
     if (critical >= 2) budget += 1;
     // A full hand can afford to spend; a nearly empty one cannot.
-    if (me.hand.length >= 6) budget += 1;
+    if (me.hand.length >= 7) budget += 1;
     if (me.hand.length <= 3) budget -= 1;
 
     if (plan.length > budget) return;

@@ -392,11 +392,13 @@ reasoning can be argued with rather than being buried in a magic number.
   target's power is simply waved through, so it is not made. Over a run of
   self-play games the previous version would have thrown 638 such swings; this
   one makes none.
-- **It guards by what the trade is worth.** Early damage is cheap, and even
-  useful — it is a damage check and counter-blast fuel — so it takes those hits
-  and keeps its hand. Deeper in damage, and against a double critical, it
-  spends more. It answers about four in five of the attacks it could stop, and
-  takes the rest on purpose.
+- **It guards by what the trade is worth**, and what that is depends on which
+  damage this would be. The first few are not a loss: each is a damage check,
+  which is a free look at a trigger, and the counter-blast an ability will
+  want later — so it takes them rather than spending a card. By four damage
+  the next hit is the one that matters, and it answers. Measured over
+  self-play it guards under a third of the answerable attacks while on nought
+  to two damage, and over three fifths of them from four.
 - **It spends the fewest cards that do the job**, taking the biggest shields
   first. Filling from the smallest up, as it used to, cost 2.19 cards a guard
   against 1.12 now.

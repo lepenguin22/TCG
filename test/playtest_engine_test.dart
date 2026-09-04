@@ -1501,30 +1501,37 @@ void main() {
       return attack;
     }
 
-    test('it takes an early hit rather than spending its hand', () async {
+    test(
+      'it takes an expensive early hit rather than spending its hand',
+      () async {
+        final (store, deck) = await buildDeck();
+        final engine = engineFor(store, deck);
+        final ai = PlaytestAi(engine);
+        engine.beginPlay();
+        final cpu = engine.state.opponent;
+        final before = cpu.hand.length;
+
+        // Undamaged, and the attack needs more than one card to answer.
+        final attack = swing(engine, store, cpu.vanguard!.power + 25000);
+        ai.guard(attack);
+
+        expect(cpu.hand.length, before, reason: 'it kept its cards');
+        expect(attack.connects, isTrue, reason: 'and took the damage');
+      },
+    );
+
+    test('it answers a cheap attack once the damage matters', () async {
       final (store, deck) = await buildDeck();
       final engine = engineFor(store, deck);
       final ai = PlaytestAi(engine);
       engine.beginPlay();
       final cpu = engine.state.opponent;
-      final before = cpu.hand.length;
 
-      // Undamaged, and the attack needs more than one card to answer.
-      final attack = swing(engine, store, cpu.vanguard!.power + 25000);
-      ai.guard(attack);
+      // Undamaged this same attack goes through -- the damage is worth more
+      // than the card. Three damage in, the trade turns over.
+      cpu.damage.addAll(cpu.deck.sublist(0, 3));
+      cpu.deck.removeRange(0, 3);
 
-      expect(cpu.hand.length, before, reason: 'it kept its cards');
-      expect(attack.connects, isTrue, reason: 'and took the damage');
-    });
-
-    test('it answers a cheap attack even when undamaged', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      // One card of shield covers it, which is a trade worth making.
       final attack = swing(engine, store, cpu.vanguard!.power + 4000);
       ai.guard(attack);
 
@@ -1546,6 +1553,51 @@ void main() {
       ai.guard(attack);
 
       expect(attack.connects, isFalse, reason: 'four damage is not five');
+    });
+
+    test('a small early attack is taken, not guarded away', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine);
+      engine.beginPlay();
+      final cpu = engine.state.opponent;
+      final before = cpu.hand.length;
+
+      // The reported case: a turn one attack from a grade 0 vanguard, and a
+      // hand holding fifteen thousand shield triggers. Answering it costs a
+      // card and buys nothing, so it goes through.
+      engine.state.phase = PlaytestPhase.battle;
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+      );
+      expect(cpu.damageCount, 0);
+      ai.guard(attack);
+
+      expect(attack.guardians, isEmpty, reason: 'nothing spent on it');
+      expect(cpu.hand.length, before);
+      expect(attack.connects, isTrue, reason: 'so the damage lands');
+    });
+
+    test('the same attack is answered at four damage', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine);
+      engine.beginPlay();
+      final cpu = engine.state.opponent;
+
+      cpu.damage.addAll(cpu.deck.sublist(0, 4));
+      cpu.deck.removeRange(0, 4);
+
+      engine.state.phase = PlaytestPhase.battle;
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+      );
+      ai.guard(attack);
+
+      expect(attack.guardians, isNotEmpty, reason: 'four damage is different');
+      expect(attack.connects, isFalse);
     });
 
     test('it saves the perfect guard for the hit that would kill it', () async {

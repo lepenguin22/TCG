@@ -25,6 +25,10 @@ void main() {
       int guards,
       int guardCards,
       int stoppable,
+      int earlyFaced,
+      int earlyGuarded,
+      int lateFaced,
+      int lateGuarded,
     })
   >
   selfPlay({int count = 40}) async {
@@ -35,7 +39,11 @@ void main() {
         hopeless = 0,
         guards = 0,
         guardCards = 0,
-        stoppable = 0;
+        stoppable = 0,
+        earlyFaced = 0,
+        earlyGuarded = 0,
+        lateFaced = 0,
+        lateGuarded = 0;
 
     for (var seed = 0; seed < count; seed += 1) {
       final (store, deck) = await buildDeck();
@@ -68,15 +76,33 @@ void main() {
           // one achieves nothing at all.
           if (pending.attackPower < pending.target.power) hopeless += 1;
 
-          if (pending.hitsVanguard &&
-              pending.attackPower > pending.target.power) {
-            stoppable += 1;
+          final answerable =
+              pending.hitsVanguard &&
+              pending.attackPower > pending.target.power;
+          if (answerable) stoppable += 1;
+          // Which damage this would be decides whether answering it is worth
+          // a card, so the two ends are counted apart.
+          final early = defender.me.damageCount <= 2;
+          if (answerable) {
+            if (early) {
+              earlyFaced += 1;
+            } else if (defender.me.damageCount >= 4) {
+              lateFaced += 1;
+            }
           }
+
           final handBefore = defender.me.hand.length;
           defender.guard(pending);
           if (pending.guardians.isNotEmpty) {
             guards += 1;
             guardCards += handBefore - defender.me.hand.length;
+            if (answerable) {
+              if (early) {
+                earlyGuarded += 1;
+              } else if (defender.me.damageCount >= 4) {
+                lateGuarded += 1;
+              }
+            }
           }
           engine.driveCheck();
           engine.resolveAttack();
@@ -98,6 +124,10 @@ void main() {
       guards: guards,
       guardCards: guardCards,
       stoppable: stoppable,
+      earlyFaced: earlyFaced,
+      earlyGuarded: earlyGuarded,
+      lateFaced: lateFaced,
+      lateGuarded: lateGuarded,
     );
   }
 
@@ -129,13 +159,22 @@ void main() {
       expect(perGuard, lessThan(1.6), reason: 'cards spent per guard');
     });
 
-    test('it answers most of what it can answer, but not all', () async {
+    test('it takes early damage and defends late ones', () async {
       final result = await selfPlay();
-      final rate = result.guards / result.stoppable;
-      // Guarding everything is as thoughtless as guarding nothing: early
-      // damage is cheap and worth taking, late damage is not.
-      expect(rate, greaterThan(0.5));
-      expect(rate, lessThan(0.95));
+      expect(result.earlyFaced, greaterThan(20));
+      expect(result.lateFaced, greaterThan(10));
+
+      final early = result.earlyGuarded / result.earlyFaced;
+      final late = result.lateGuarded / result.lateFaced;
+
+      // The first few damage are not a loss: each is a damage check and the
+      // counter-blast an ability will want, so they are taken rather than
+      // guarded away. This is what stopped a fifteen thousand shield trigger
+      // being spent on a nine thousand attack on turn one.
+      expect(early, lessThan(0.35), reason: 'guarded early: $early');
+      // By four damage the next hit is the one that matters, and it answers.
+      expect(late, greaterThan(0.6), reason: 'guarded late: $late');
+      expect(late, greaterThan(early), reason: 'it tells the two apart');
     });
   });
 }
