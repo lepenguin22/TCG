@@ -672,11 +672,16 @@ class PlaytestEngine {
   ///
   /// A grade 3 vanguard twin drives and a grade 4 triple drives; everything
   /// below checks once.
-  int driveCount(FieldUnit vanguard) => switch (vanguard.card.grade) {
-    >= 4 => 3,
-    3 => 2,
-    _ => 1,
-  };
+  int driveCount(FieldUnit vanguard) {
+    final base = switch (vanguard.card.grade) {
+      >= 4 => 3,
+      3 => 2,
+      _ => 1,
+    };
+    // An ability can add to that, or take it away. Nought is a real answer:
+    // a card that stops the vanguard drive checking exists.
+    return (base + vanguard.driveBonus).clamp(0, 9);
+  }
 
   /// Flips the drive checks into hand, returning what came off the top so the
   /// screen can show it.
@@ -840,6 +845,31 @@ class PlaytestEngine {
     state.note(
       '${unit.card.name} gets ${gained >= 0 ? '+' : ''}$gained critical '
       '(now ${unit.critical}).',
+      by: side,
+    );
+  }
+
+  /// Gives the vanguard another drive check, for an ability that grants one.
+  ///
+  /// Only the vanguard drive checks, so this does nothing anywhere else. Like
+  /// power and critical it lasts the turn: a card that grants drive for the
+  /// turn needs nothing further, and one that grants it continuously is
+  /// re-applied each turn -- which is the safer way round, because forgetting
+  /// to add it shows up as a missing check, where forgetting to take it away
+  /// would quietly hand out cards.
+  void addDrive(PlaytestSide side, Circle circle, int amount) {
+    final unit = side.field[circle];
+    if (unit == null) return;
+    final before = driveCount(unit);
+    unit.driveBonus += amount;
+    final now = driveCount(unit);
+    if (now == before) {
+      unit.driveBonus -= amount;
+      return;
+    }
+    state.note(
+      '${unit.card.name} drive checks ${now > before ? 'one more' : 'one '
+                'fewer'} (now $now).',
       by: side,
     );
   }

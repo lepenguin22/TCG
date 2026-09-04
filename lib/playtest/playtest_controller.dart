@@ -272,6 +272,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void addDrive(PlaytestSide side, Circle circle, int amount) {
+    engine.addDrive(side, circle, amount);
+    _sync();
+  }
+
   void toggleRest(PlaytestSide side, Circle circle) {
     engine.toggleRest(side, circle);
     _sync();

@@ -46,7 +46,7 @@ void main() {
       // Play on far enough to lay out the attacking and guarding states too,
       // which put the most into the strip between the two boards.
       final step = RegExp(
-        r'^(Next|End turn|Take it|Continue|Resolve|Drive check)$',
+        r'^(Next|End turn|Take it|Continue|Resolve|Drive check.*)$',
       );
       for (var i = 0; i < 8; i += 1) {
         final button = find.textContaining(step);

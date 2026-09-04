@@ -526,6 +526,71 @@ void main() {
       expect(find.textContaining('★2'), findsOneWidget);
     });
 
+    testWidgets('drive is offered on the vanguard alone', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      expect(find.text('+1 drive'), findsOneWidget);
+      // The heading counts the checks it will make.
+      expect(find.textContaining('1 drive'), findsWidgets);
+
+      await tester.tap(find.text('+1 drive'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      // Ride, then attack: the button says how many checks are coming.
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+      expect(find.text('Drive check ×2'), findsOneWidget);
+    });
+
+    testWidgets('a rear-guard is offered no drive', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+      // It has power and critical controls, but nothing drive: a rear-guard
+      // never drive checks.
+      expect(find.text('+1 critical'), findsOneWidget);
+      expect(find.text('+1 drive'), findsNothing);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

@@ -100,6 +100,10 @@ class FieldUnit {
   /// triggers. Also cleared at end of turn.
   int criticalBonus = 0;
 
+  /// Extra drive checks this unit makes, from an ability that grants them.
+  /// Only the vanguard drive checks at all, so this only ever matters there.
+  int driveBonus = 0;
+
   int get power => card.power + powerBonus;
 
   int get critical => 1 + criticalBonus;
@@ -107,6 +111,7 @@ class FieldUnit {
   void clearTurnEffects() {
     powerBonus = 0;
     criticalBonus = 0;
+    driveBonus = 0;
   }
 }
 

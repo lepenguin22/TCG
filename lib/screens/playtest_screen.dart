@@ -1426,7 +1426,9 @@ class _Controls extends StatelessWidget {
           if (!drove)
             FilledButton(
               onPressed: game.driveCheck,
-              child: const Text('Drive check'),
+              child: Text(
+                'Drive check ×${game.engine.driveCount(attack.attacker)}',
+              ),
             )
           else
             FilledButton(
@@ -1660,7 +1662,14 @@ void _showUnitSheet(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _CardHeading(card: unit.card, unit: unit, circle: circle),
+            _CardHeading(
+              card: unit.card,
+              unit: unit,
+              circle: circle,
+              drive: circle == Circle.vanguard
+                  ? game.engine.driveCount(unit)
+                  : null,
+            ),
             // Moving between the rows of a column is a rule the engine keeps,
             // not something applied by hand, so it sits above that line.
             if (side == game.you && game.engine.canMove(side, circle)) ...[
@@ -1706,6 +1715,20 @@ void _showUnitSheet(
                       : () => game.addCritical(side, circle, -1),
                   child: const Text('-1 critical'),
                 ),
+                // Only the vanguard drive checks, so the drive controls only
+                // appear where they would do something.
+                if (circle == Circle.vanguard) ...[
+                  OutlinedButton(
+                    onPressed: () => game.addDrive(side, circle, 1),
+                    child: const Text('+1 drive'),
+                  ),
+                  OutlinedButton(
+                    onPressed: game.engine.driveCount(unit) <= 0
+                        ? null
+                        : () => game.addDrive(side, circle, -1),
+                    child: const Text('-1 drive'),
+                  ),
+                ],
                 OutlinedButton(
                   onPressed: () => game.toggleRest(side, circle),
                   child: Text(unit.rested ? 'Stand' : 'Rest'),
@@ -1789,11 +1812,14 @@ class _MoveAction extends StatelessWidget {
 }
 
 class _CardHeading extends StatelessWidget {
-  const _CardHeading({required this.card, this.unit, this.circle});
+  const _CardHeading({required this.card, this.unit, this.circle, this.drive});
 
   final GameCard card;
   final FieldUnit? unit;
   final Circle? circle;
+
+  /// How many drive checks this unit makes, for the vanguard alone.
+  final int? drive;
 
   @override
   Widget build(BuildContext context) {
@@ -1821,6 +1847,7 @@ class _CardHeading extends StatelessWidget {
                   if (card.power > 0) '${unit?.power ?? card.power} power',
                   if (card.shield > 0) '${card.shield} shield',
                   if (card.trigger != null) '${card.trigger} trigger',
+                  if (drive != null) '$drive drive',
                   if (circle != null) circle!.label,
                 ].join(' · '),
                 style: const TextStyle(

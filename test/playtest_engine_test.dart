@@ -522,6 +522,126 @@ void main() {
     );
   });
 
+  group('drive given by an ability', () {
+    (PlaytestEngine, PlaytestSide) atGrade(
+      DeckStore store,
+      Deck deck,
+      int grade,
+    ) {
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      while (engine.rideDeckOption(you) != null &&
+          (you.vanguard?.card.grade ?? 0) < grade) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      engine.state.phase = PlaytestPhase.battle;
+      return (engine, you);
+    }
+
+    test('drive comes from the grade to begin with', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 2);
+      expect(engine.driveCount(you.vanguard!), 1);
+
+      final (engine3, you3) = atGrade(store, deck, 3);
+      expect(engine3.driveCount(you3.vanguard!), 2, reason: 'twin drive');
+    });
+
+    test('an ability can add a check', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 3);
+
+      engine.addDrive(you, Circle.vanguard, 1);
+      expect(engine.driveCount(you.vanguard!), 3);
+    });
+
+    test('the extra check really is flipped', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 3);
+      engine.addDrive(you, Circle.vanguard, 1);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      final before = you.hand.length;
+      final flipped = engine.driveCheck();
+
+      expect(flipped.length, 3, reason: 'twin drive plus the one given');
+      expect(you.hand.length, greaterThanOrEqualTo(before + 3));
+    });
+
+    test('it can be taken away, and stops at none', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 3);
+
+      engine.addDrive(you, Circle.vanguard, -1);
+      expect(engine.driveCount(you.vanguard!), 1);
+      engine.addDrive(you, Circle.vanguard, -1);
+      expect(engine.driveCount(you.vanguard!), 0);
+      engine.addDrive(you, Circle.vanguard, -3);
+      expect(engine.driveCount(you.vanguard!), 0, reason: 'no further');
+    });
+
+    test('a vanguard on no drive checks nothing', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 3);
+      engine.addDrive(you, Circle.vanguard, -2);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      expect(engine.driveCheck(), isEmpty);
+    });
+
+    test('it wears off at end of turn', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 3);
+
+      engine.addDrive(you, Circle.vanguard, 1);
+      expect(engine.driveCount(you.vanguard!), 3);
+      engine.endTurn();
+      expect(engine.driveCount(you.vanguard!), 2);
+      expect(you.vanguard!.driveBonus, 0);
+    });
+
+    test('a rear-guard drive checks nothing whatever it is given', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 2);
+
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.frontLeft),
+      );
+      engine.call(you, unit, Circle.frontLeft);
+      engine.addDrive(you, Circle.frontLeft, 2);
+
+      engine.declareAttack(from: Circle.frontLeft, to: Circle.vanguard);
+      expect(
+        engine.driveCheck(),
+        isEmpty,
+        reason: 'only the vanguard drive checks at all',
+      );
+    });
+
+    test('a striding vanguard keeps its triple drive on top', () async {
+      final (store, deck) = await buildStrideDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      while (engine.rideDeckOption(you) != null) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      final cost = <GameCard>[];
+      var total = 0;
+      for (final card in you.hand) {
+        if (total >= 3) break;
+        cost.add(card);
+        total += card.grade;
+      }
+      engine.stride(you, you.gZone.first, cost);
+      expect(engine.driveCount(you.vanguard!), 3);
+
+      engine.addDrive(you, Circle.vanguard, 1);
+      expect(engine.driveCount(you.vanguard!), 4);
+    });
+  });
+
   group('critical given by an ability', () {
     /// A game in battle with a grade 2 vanguard on each side.
     (PlaytestEngine, PlaytestSide, PlaytestSide) ready(

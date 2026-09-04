@@ -374,11 +374,17 @@ placed on (VC), [COST][Counter-Blast 1], choose one of your opponent's
 rear-guards, and retire it" — and there is no encoding of them for a program to
 follow. Rather than pretend otherwise, the board runs everything around them and
 leaves the abilities to you: tap any unit to read its text and apply what it
-says, with controls there for power, critical, standing and resting, retiring,
-drawing, energy and damage, and every zone above open for the costs. Power and
-critical are the two things an ability gives a unit, and both wear off at end
-of turn the way the game says they do — a unit carrying more than its one
-critical, or reduced below it, says so on the board. It is a patient
+says, with controls there for power, critical, drive, standing and resting,
+retiring, drawing, energy and damage, and every zone above open for the costs.
+Power, critical and drive all wear off at end of turn the way the game says
+they do — a unit carrying more than its one critical, or reduced below it, says
+so on the board, and the drive check button names how many checks are coming.
+
+Drive is offered on the vanguard alone, since nothing else drive checks, and
+it is cleared each turn like the rest. That is the safer way round for a
+continuous drive+1, which has to be re-applied: forgetting to add it shows up
+as a missing check, where forgetting to take a temporary one away would
+quietly hand out cards. It is a patient
 paper opponent, not a rules engine.
 
 That still answers the questions a deck list cannot. Does it ride through grade
