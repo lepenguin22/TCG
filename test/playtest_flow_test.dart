@@ -9,7 +9,7 @@ import 'package:tcg_decks/screens/playtest_screen.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
-import 'playtest_engine_test.dart' show buildDeck;
+import 'playtest_engine_test.dart' show buildDeck, buildStrideDeck;
 
 void main() {
   group('the playtest controller', () {
@@ -110,6 +110,88 @@ void main() {
       expect(game.stage, PlaytestStage.yours);
     });
 
+    test('a boost is off until you ask for it', () async {
+      final (store, deck) = await buildDeck();
+      final game = PlaytestController(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        random: Random(3),
+      );
+      game.confirmMulligan();
+      game.ride(game.engine.rideDeckOption(game.you)!, fromRideDeck: true);
+      game.nextPhase();
+
+      final booster = game.you.hand.firstWhere(
+        (c) => game.engine.canCall(game.you, c, Circle.backCenter),
+      );
+      game.hold(booster);
+      game.placeHeld(Circle.backCenter);
+      game.nextPhase();
+
+      game.selectAttacker(Circle.vanguard);
+      expect(game.availableBooster, isNotNull, reason: 'one is standing there');
+      expect(game.boostSelected, isFalse, reason: 'not without being asked');
+
+      game.attackWithSelected(Circle.vanguard);
+      // The attack is the vanguard alone, and the booster is still standing.
+      expect(game.state.attack!.attackPower, game.you.vanguard!.power);
+      expect(game.you.field[Circle.backCenter]!.rested, isFalse);
+    });
+
+    test('asking for the boost brings it along', () async {
+      final (store, deck) = await buildDeck();
+      final game = PlaytestController(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        random: Random(3),
+      );
+      game.confirmMulligan();
+      game.ride(game.engine.rideDeckOption(game.you)!, fromRideDeck: true);
+      game.nextPhase();
+
+      final booster = game.you.hand.firstWhere(
+        (c) => game.engine.canCall(game.you, c, Circle.backCenter),
+      );
+      game.hold(booster);
+      game.placeHeld(Circle.backCenter);
+      game.nextPhase();
+
+      game.selectAttacker(Circle.vanguard);
+      game.toggleBoost();
+      expect(game.boostSelected, isTrue);
+
+      final vanguardPower = game.you.vanguard!.power;
+      game.attackWithSelected(Circle.vanguard);
+      expect(game.state.attack!.attackPower, vanguardPower + booster.power);
+      expect(game.you.field[Circle.backCenter]!.rested, isTrue);
+    });
+
+    test('choosing another attacker clears the boost', () async {
+      final (store, deck) = await buildDeck();
+      final game = PlaytestController(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        random: Random(3),
+      );
+      game.confirmMulligan();
+      game.ride(game.engine.rideDeckOption(game.you)!, fromRideDeck: true);
+      game.nextPhase();
+      final booster = game.you.hand.firstWhere(
+        (c) => game.engine.canCall(game.you, c, Circle.backCenter),
+      );
+      game.hold(booster);
+      game.placeHeld(Circle.backCenter);
+      game.nextPhase();
+
+      game.selectAttacker(Circle.vanguard);
+      game.toggleBoost();
+      game.selectAttacker(null);
+      expect(game.boostSelected, isFalse);
+    });
+
     test('a rear-guard attack skips the drive check', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(
@@ -138,6 +220,15 @@ void main() {
   });
 
   group('the playtest board', () {
+    /// Taps something on the board, scrolling it into view first: the board
+    /// is taller than the test viewport, so the lower half needs reaching.
+    Future<void> tapOnBoard(WidgetTester tester, Finder finder) async {
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+
     Future<void> pump(WidgetTester tester, DeckStore store, deck) async {
       await tester.pumpWidget(
         ChangeNotifierProvider<DeckStore>.value(
@@ -170,6 +261,62 @@ void main() {
       expect(find.textContaining('Turn 1'), findsOneWidget);
       expect(find.text('You'), findsOneWidget);
       expect(find.text('CPU'), findsOneWidget);
+    });
+
+    testWidgets('the zones are on the board and open', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // One pile each side for the deck, drop and soul.
+      expect(find.text('Deck'), findsNWidgets(2));
+      expect(find.text('Drop'), findsNWidgets(2));
+      expect(find.text('Soul'), findsNWidgets(2));
+      // No G zone for a Standard deck that does not stride.
+      expect(find.text('G'), findsNothing);
+
+      // Yours is the lower of the two.
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.textContaining('Drop zone'), findsOneWidget);
+    });
+
+    testWidgets('the damage zone opens with its costs', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      expect(find.text('No damage'), findsNWidgets(2));
+      await tapOnBoard(tester, find.text('No damage').last);
+
+      expect(find.textContaining('Damage zone'), findsOneWidget);
+      expect(find.text('Counter-blast 1'), findsOneWidget);
+      expect(find.text('Counter-charge 1'), findsOneWidget);
+    });
+
+    testWidgets('the deck can be searched', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      expect(find.text('Shuffle'), findsOneWidget);
+      expect(find.text('To hand'), findsWidgets);
+    });
+
+    testWidgets('a stride deck shows a G zone', (tester) async {
+      final (store, deck) = await buildStrideDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      expect(find.text('G'), findsNWidgets(2));
+      await tapOnBoard(tester, find.text('G').last);
+      expect(find.textContaining('G zone'), findsOneWidget);
+      // A grade 0 vanguard cannot stride yet, and the sheet says why.
+      expect(find.textContaining('needs a grade 3 vanguard'), findsOneWidget);
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

@@ -123,9 +123,21 @@ class PlaytestSide {
 
   /// The ride deck, held face down and ridden from in ascending grade order.
   final List<GameCard> rideDeck = [];
+
+  /// The G zone, which only a Premium deck that strides has.
+  final List<GameCard> gZone = [];
   final List<GameCard> drop = [];
   final List<GameCard> soul = [];
   final List<GameCard> damage = [];
+
+  /// Damage turned face down by a counter-blast, by instance. A face down
+  /// card is spent: it still counts towards the six, but cannot pay again
+  /// until something counter-charges it.
+  final Set<int> spentDamage = {};
+
+  /// The unit a striding G unit is riding on top of, put back when the stride
+  /// ends. In the game it sits underneath as the "heart".
+  FieldUnit? heart;
 
   /// Divinez energy. Every way of gaining it is an ability, so the engine
   /// never awards it -- the player sets it as the cards they play say to.
@@ -139,6 +151,15 @@ class PlaytestSide {
   FieldUnit? get vanguard => field[Circle.vanguard];
 
   int get damageCount => damage.length;
+
+  /// Damage still face up, and so still able to pay a counter-blast.
+  int get openDamage =>
+      damage.where((c) => !spentDamage.contains(c.instanceId)).length;
+
+  bool isSpent(GameCard card) => spentDamage.contains(card.instanceId);
+
+  /// Whether a G unit is currently riding on top of the vanguard.
+  bool get isStriding => heart != null;
 
   /// Six damage ends the game.
   bool get isDefeated => damageCount >= 6;

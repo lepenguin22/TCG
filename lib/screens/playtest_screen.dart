@@ -265,6 +265,8 @@ class _Board extends StatelessWidget {
             child: Column(
               children: [
                 _SideSummary(side: game.cpu, game: game),
+                const SizedBox(height: 6),
+                _ZoneRail(game: game, side: game.cpu),
                 const SizedBox(height: 8),
                 _Field(game: game, side: game.cpu, isYours: false),
                 const SizedBox(height: 10),
@@ -272,6 +274,8 @@ class _Board extends StatelessWidget {
                 const SizedBox(height: 10),
                 _Field(game: game, side: game.you, isYours: true),
                 const SizedBox(height: 8),
+                _ZoneRail(game: game, side: game.you),
+                const SizedBox(height: 6),
                 _SideSummary(side: game.you, game: game),
               ],
             ),
@@ -315,9 +319,6 @@ class _SideSummary extends StatelessWidget {
           danger: side.damageCount >= 5,
         ),
         _Pip(label: 'Hand', value: '${side.hand.length}'),
-        _Pip(label: 'Deck', value: '${side.deck.length}'),
-        _Pip(label: 'Soul', value: '${side.soul.length}'),
-        _Pip(label: 'Drop', value: '${side.drop.length}'),
         // Energy is only ever gained by an ability, so it is a counter the
         // player keeps rather than something the board can work out. Tap to
         // add one, hold to take one away.
@@ -366,6 +367,483 @@ class _Pip extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The zones that sit beside the field: the damage row, and the piles.
+///
+/// These are half the game once abilities come into it -- a counter-blast pays
+/// out of damage, a soul-blast out of soul, a search goes through the deck --
+/// so they are on the board and tappable rather than left as numbers.
+class _ZoneRail extends StatelessWidget {
+  const _ZoneRail({required this.game, required this.side});
+
+  final PlaytestController game;
+  final PlaytestSide side;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () => _showDamageSheet(context, game, side),
+            child: _DamageRow(side: side),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _Pile(
+          label: 'Deck',
+          count: side.deck.length,
+          onTap: () => _showDeckSheet(context, game, side),
+        ),
+        _Pile(
+          label: 'Drop',
+          count: side.drop.length,
+          onTap: () => _showPileSheet(
+            context,
+            game,
+            side,
+            title: 'Drop zone',
+            cards: side.drop,
+            actionLabel: 'Return to hand',
+            onAction: (card) => game.returnFromDrop(side, card),
+          ),
+        ),
+        _Pile(
+          label: 'Soul',
+          count: side.soul.length,
+          onTap: () => _showSoulSheet(context, game, side),
+        ),
+        // Only a deck that strides has a G zone, so it only appears for one.
+        if (side.gZone.isNotEmpty)
+          _Pile(
+            label: 'G',
+            count: side.gZone.length,
+            highlight: game.engine.canStride(side),
+            onTap: () => _showGZoneSheet(context, game, side),
+          ),
+      ],
+    );
+  }
+}
+
+/// The damage zone, laid out as the cards it is rather than a number. A card
+/// turned face down has been spent on a counter-blast.
+class _DamageRow extends StatelessWidget {
+  const _DamageRow({required this.side});
+
+  final PlaytestSide side;
+
+  @override
+  Widget build(BuildContext context) {
+    if (side.damage.isEmpty) {
+      return const SizedBox(
+        height: 30,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'No damage',
+            style: TextStyle(color: AppColors.textFaint, fontSize: 11),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 30,
+      child: Row(
+        children: [
+          for (final card in side.damage)
+            Padding(
+              padding: const EdgeInsets.only(right: 3),
+              child: Container(
+                width: 20,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: side.isSpent(card)
+                      ? AppColors.surface
+                      : AppColors.danger.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: side.isSpent(card)
+                        ? AppColors.border
+                        : AppColors.danger,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pile extends StatelessWidget {
+  const _Pile({
+    required this.label,
+    required this.count,
+    required this.onTap,
+    this.highlight = false,
+  });
+
+  final String label;
+  final int count;
+  final VoidCallback onTap;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: highlight ? AppColors.accent : AppColors.border,
+              width: highlight ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                label,
+                style: const TextStyle(color: AppColors.textFaint, fontSize: 9),
+              ),
+              Text(
+                '$count',
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A sheet listing the cards in a zone, with one action per card.
+void _showPileSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side, {
+  required String title,
+  required List<GameCard> cards,
+  String? actionLabel,
+  void Function(GameCard card)? onAction,
+  List<Widget> Function(BuildContext sheetContext)? header,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      builder: (_, scrollController) => ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        children: [
+          SectionHeader(title: '$title (${cards.length})'),
+          ...?header?.call(sheetContext),
+          if (cards.isEmpty)
+            const Text('Empty.', style: TextStyle(color: AppColors.textMuted)),
+          for (final card in cards.reversed)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CardImage(url: card.imageUrl, width: 32),
+              title: Text(
+                card.name,
+                style: const TextStyle(color: AppColors.text, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Grade ${card.grade}'
+                '${card.trigger == null ? '' : ' · ${card.trigger} trigger'}',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+              trailing: onAction == null
+                  ? null
+                  : TextButton(
+                      onPressed: () {
+                        onAction(card);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: Text(actionLabel ?? 'Move'),
+                    ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showDamageSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  _showPileSheet(
+    context,
+    game,
+    side,
+    title: 'Damage zone',
+    cards: side.damage,
+    header: (sheetContext) => [
+      Text(
+        '${side.openDamage} of ${side.damageCount} face up. '
+        'A counter-blast turns damage face down to pay for an ability.',
+        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 8,
+        children: [
+          OutlinedButton(
+            onPressed: () {
+              game.counterBlast(side, 1);
+              Navigator.of(sheetContext).pop();
+            },
+            child: const Text('Counter-blast 1'),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              game.counterBlast(side, 2);
+              Navigator.of(sheetContext).pop();
+            },
+            child: const Text('Counter-blast 2'),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              game.counterCharge(side, 1);
+              Navigator.of(sheetContext).pop();
+            },
+            child: const Text('Counter-charge 1'),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              game.dealDamage(side);
+              Navigator.of(sheetContext).pop();
+            },
+            child: const Text('Take damage'),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+    ],
+  );
+}
+
+void _showSoulSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  _showPileSheet(
+    context,
+    game,
+    side,
+    title: 'Soul',
+    cards: side.soul,
+    actionLabel: 'Soul-blast',
+    onAction: (card) => game.soulBlast(side, card),
+    header: (sheetContext) => [
+      OutlinedButton(
+        onPressed: () {
+          game.soulCharge(side, 1);
+          Navigator.of(sheetContext).pop();
+        },
+        child: const Text('Soul-charge 1'),
+      ),
+      const SizedBox(height: 12),
+    ],
+  );
+}
+
+/// The deck: a count, a shuffle, and a search for the abilities that need one.
+void _showDeckSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  _showPileSheet(
+    context,
+    game,
+    side,
+    title: 'Deck',
+    cards: side.deck,
+    actionLabel: 'To hand',
+    onAction: (card) => game.searchDeck(side, card),
+    header: (sheetContext) => [
+      const Text(
+        'The whole deck is listed here so an ability that searches can be '
+        'played. It shuffles itself after a search. Only look when a card '
+        'tells you to.',
+        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton(
+        onPressed: () {
+          game.shuffleDeck(side);
+          Navigator.of(sheetContext).pop();
+        },
+        child: const Text('Shuffle'),
+      ),
+      const SizedBox(height: 12),
+    ],
+  );
+}
+
+/// The G zone, and the stride it exists for.
+void _showGZoneSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  final yours = side == game.you;
+  final canStride = yours && game.engine.canStride(side);
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      builder: (_, scrollController) => ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        children: [
+          SectionHeader(title: 'G zone (${side.gZone.length})'),
+          Text(
+            side.isStriding
+                ? 'Striding already. The G unit goes back at end of turn.'
+                : canStride
+                ? 'Pick a G unit to stride, then discard cards worth grade 3 '
+                      'or more between them to pay for it.'
+                : 'A stride needs a grade 3 vanguard and grade 3 worth of '
+                      'cards in hand to discard.',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          for (final card in side.gZone)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CardImage(url: card.imageUrl, width: 32),
+              title: Text(
+                card.name,
+                style: const TextStyle(color: AppColors.text, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Grade ${card.grade} · ${card.power} power',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+              trailing: !canStride
+                  ? null
+                  : TextButton(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        _showStrideCostSheet(context, game, card);
+                      },
+                      child: const Text('Stride'),
+                    ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Picks the cards discarded to pay for a stride.
+void _showStrideCostSheet(
+  BuildContext context,
+  PlaytestController game,
+  GameCard strider,
+) {
+  final picks = <GameCard>{};
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (builderContext, setSheetState) {
+        final total = picks.fold(0, (sum, card) => sum + card.grade);
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionHeader(
+                  title: 'Pay for ${strider.name}',
+                  caption:
+                      'Discard cards worth grade 3 or more. '
+                      'Picked: $total.',
+                ),
+                for (final card in game.you.hand)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: picks.contains(card),
+                    onChanged: (checked) => setSheetState(() {
+                      if (checked ?? false) {
+                        picks.add(card);
+                      } else {
+                        picks.remove(card);
+                      }
+                    }),
+                    title: Text(
+                      card.name,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Grade ${card.grade}',
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: total < 3
+                        ? null
+                        : () {
+                            game.stride(strider, picks.toList());
+                            Navigator.of(sheetContext).pop();
+                          },
+                    child: Text(total < 3 ? 'Grade $total of 3' : 'Stride'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }
 
 /// One player's six circles, back row nearer the middle for the opponent so
@@ -874,7 +1352,10 @@ class _Controls extends StatelessWidget {
           PlaytestPhase.battle =>
             game.selectedAttacker == null
                 ? 'Battle — tap one of your front row units to attack with.'
-                : 'Tap the unit to attack.',
+                : game.availableBooster == null
+                ? 'Tap the unit to attack.'
+                : 'Boost is ${game.boostSelected ? 'on' : 'off'} — '
+                      'tap the unit to attack.',
           _ => state.phase.label,
         }, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
       ),
@@ -882,6 +1363,24 @@ class _Controls extends StatelessWidget {
         TextButton(
           onPressed: () => _showRideSheet(context, game),
           child: const Text('Ride'),
+        ),
+      // Boosting is a choice, not a default: a unit that restands wants its
+      // booster kept back for the second swing.
+      if (state.phase == PlaytestPhase.battle && game.availableBooster != null)
+        TextButton.icon(
+          onPressed: game.toggleBoost,
+          icon: Icon(
+            game.boostSelected
+                ? Icons.check_box_outlined
+                : Icons.check_box_outline_blank,
+            size: 18,
+          ),
+          label: Text('+${game.availableBooster!.card.power}'),
+          style: TextButton.styleFrom(
+            foregroundColor: game.boostSelected
+                ? AppColors.accent
+                : AppColors.textMuted,
+          ),
         ),
       if (state.phase == PlaytestPhase.battle && game.selectedAttacker != null)
         TextButton(

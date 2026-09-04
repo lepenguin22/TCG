@@ -299,7 +299,30 @@ rows, boosting from behind, attacks that only the front row can make or receive,
 drive checks sized to the vanguard's grade, damage checks, guarding with shields
 and perfect guards, and the sixth damage that ends it. Triggers resolve
 properly: critical adds power and a critical, draw draws, front lifts the front
-row, heal heals when you are not ahead on damage, stand stands a unit.
+row, heal heals when you are not ahead on damage, stand stands a unit. Both
+players draw on their own first turn; nobody skips it.
+
+Boosting is asked for rather than assumed. A booster behind the attacker shows
+up as a checkbox in the control bar, off until you tick it, because it is not
+always wanted — a unit that restands wants its booster kept back for the second
+swing, and one spent on the first is not there for it.
+
+### The zones
+
+The zones beside the field are where the game actually happens once abilities
+come into it, so they are on the board and tappable rather than left as numbers:
+
+- **Damage** is laid out as the cards it is. A counter-blast turns them face
+  down, a counter-charge turns them back, and a spent card still counts towards
+  the six that ends the game.
+- **Soul** takes a soul-blast per card and a soul-charge off the top of the deck.
+- **Deck** shuffles, and lists itself so an ability that searches can be played —
+  it reshuffles after a search. It is there for the cards that tell you to look.
+- **Drop** hands a card back where something returns one.
+- **G zone** appears only for a deck that has one. With a grade 3 vanguard and
+  grade 3 worth of cards in hand to discard, a G unit strides on top of the
+  vanguard: it triple drives, the unit underneath stays as the heart, and both
+  go back where they came from when the turn ends.
 
 ### What it will not do for you
 
@@ -311,7 +334,8 @@ rear-guards, and retire it" — and there is no encoding of them for a program t
 follow. Rather than pretend otherwise, the board runs everything around them and
 leaves the abilities to you: tap any unit to read its text and apply what it
 says, with controls there for power, standing and resting, retiring, drawing,
-energy and damage. It is a patient paper opponent, not a rules engine.
+energy and damage, and every zone above open for the costs. It is a patient
+paper opponent, not a rules engine.
 
 That still answers the questions a deck list cannot. Does it ride through grade
 3 reliably? Does the mulligan leave a workable hand? Are sixteen triggers enough

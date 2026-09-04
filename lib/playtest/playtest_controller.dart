@@ -76,6 +76,13 @@ class PlaytestController extends ChangeNotifier {
   /// The circle you have chosen to attack with, waiting on a target.
   Circle? selectedAttacker;
 
+  /// Whether the booster behind the chosen attacker is coming along.
+  ///
+  /// Off until you say otherwise. Boosting is not always wanted: a unit that
+  /// restands wants its booster kept back for the second swing, and a booster
+  /// spent on the first one is not there for it.
+  bool boostSelected = false;
+
   void _sync() {
     if (state.isOver) stage = PlaytestStage.over;
     notifyListeners();
@@ -131,6 +138,7 @@ class PlaytestController extends ChangeNotifier {
 
   void nextPhase() {
     selectedAttacker = null;
+    boostSelected = false;
     holding = null;
     engine.advancePhase();
     // Ending your turn hands over to the CPU, which plays up to its first
@@ -143,19 +151,35 @@ class PlaytestController extends ChangeNotifier {
 
   void selectAttacker(Circle? circle) {
     selectedAttacker = circle;
+    boostSelected = false;
     notifyListeners();
   }
 
-  /// Attacks [target] with the unit you picked, bringing the booster behind it
-  /// along automatically -- a standing booster is almost always wanted, and
-  /// asking every time would make a turn of attacks tedious.
+  /// The unit that could boost the attacker you have chosen, if there is one
+  /// standing behind it.
+  FieldUnit? get availableBooster {
+    final from = selectedAttacker;
+    final circle = from?.boostedBy;
+    if (circle == null) return null;
+    final booster = you.field[circle];
+    return booster == null || booster.rested ? null : booster;
+  }
+
+  void toggleBoost() {
+    if (availableBooster == null) return;
+    boostSelected = !boostSelected;
+    notifyListeners();
+  }
+
+  /// Attacks [target] with the unit you picked, boosting only if you asked
+  /// for it.
   void attackWithSelected(Circle target) {
     final from = selectedAttacker;
     if (from == null) return;
-    final boosterCircle = from.boostedBy;
-    final booster = boosterCircle == null ? null : you.field[boosterCircle];
+    final boost = boostSelected && availableBooster != null;
     selectedAttacker = null;
-    attack(from: from, to: target, boost: booster != null && !booster.rested);
+    boostSelected = false;
+    attack(from: from, to: target, boost: boost);
   }
 
   /// Declares one of your attacks. The CPU guards it straight away, so what
@@ -258,6 +282,51 @@ class PlaytestController extends ChangeNotifier {
 
   void dealDamage(PlaytestSide side) {
     engine.dealDamage(side);
+    _sync();
+  }
+
+  void stride(GameCard card, List<GameCard> cost) {
+    engine.stride(you, card, cost);
+    _sync();
+  }
+
+  void counterBlast(PlaytestSide side, int count) {
+    engine.counterBlast(side, count);
+    _sync();
+  }
+
+  void counterCharge(PlaytestSide side, int count) {
+    engine.counterCharge(side, count);
+    _sync();
+  }
+
+  void soulBlast(PlaytestSide side, GameCard card) {
+    engine.soulBlast(side, card);
+    _sync();
+  }
+
+  void soulCharge(PlaytestSide side, int count) {
+    engine.soulCharge(side, count);
+    _sync();
+  }
+
+  void searchDeck(PlaytestSide side, GameCard card, {bool toHand = true}) {
+    engine.searchDeck(side, card, toHand: toHand);
+    _sync();
+  }
+
+  void shuffleDeck(PlaytestSide side) {
+    engine.shuffleDeck(side);
+    _sync();
+  }
+
+  void returnFromDrop(PlaytestSide side, GameCard card) {
+    engine.returnFromDrop(side, card);
+    _sync();
+  }
+
+  void bottomDeck(PlaytestSide side, GameCard card) {
+    engine.bottomDeck(side, card);
     _sync();
   }
 }

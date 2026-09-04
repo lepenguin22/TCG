@@ -111,8 +111,11 @@ class PlaytestSetupScreen extends StatelessWidget {
                         'Card abilities are written as text on the card, not '
                         'as anything a program can follow, so neither side '
                         'plays them automatically. Tap a unit to read its '
-                        'text and apply it yourself — the board has controls '
-                        'for power, standing, retiring, drawing and damage.',
+                        'text and apply it yourself. Every zone an ability '
+                        'is paid out of is on the board and tappable — '
+                        'counter-blast out of damage, soul-blast out of '
+                        'soul, search the deck, take a card back from the '
+                        'drop, and stride out of the G zone.',
                         style: TextStyle(
                           color: AppColors.textMuted,
                           height: 1.45,

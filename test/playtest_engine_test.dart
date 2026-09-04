@@ -68,6 +68,23 @@ Future<(DeckStore, Deck)> buildDeck({
   return (store, store.decks.firstWhere((d) => d.id == deck.id));
 }
 
+/// The same deck with a G zone bolted on, as a Premium deck that strides has.
+Future<(DeckStore, Deck)> buildStrideDeck() async {
+  final (store, deck) = await buildDeck();
+  final gUnit = store.saveCard(
+    gameId: 'vanguard',
+    name: 'Stride Beast',
+    attributes: {
+      'grade': '4',
+      'cardType': 'g-unit',
+      'power': '15000',
+      'effect': 'A G unit.',
+    },
+  );
+  store.addToDeck(deck.id, gUnit.id, zoneG, quantity: 8);
+  return (store, store.decks.firstWhere((d) => d.id == deck.id));
+}
+
 PlaytestEngine engineFor(DeckStore store, Deck deck, {int seed = 7}) =>
     PlaytestEngine.start(
       store: store,
@@ -552,6 +569,247 @@ void main() {
       engine.endTurn();
       expect(you.vanguard!.powerBonus, 0);
       expect(you.vanguard!.criticalBonus, 0);
+    });
+  });
+
+  group('the turn one draw', () {
+    test('the player going first draws on turn one', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      final you = engine.state.you;
+      expect(you.hand.length, 5, reason: 'the opening hand');
+
+      engine.beginPlay();
+      expect(engine.state.turn, 1);
+      expect(engine.state.yourTurn, isTrue);
+      expect(you.hand.length, 6, reason: 'no skipped first draw');
+    });
+
+    test('the player going second draws on their first turn too', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final foe = engine.state.opponent;
+      expect(foe.hand.length, 5);
+
+      engine.endTurn();
+      expect(engine.state.yourTurn, isFalse);
+      expect(foe.hand.length, 6);
+    });
+  });
+
+  group('the G zone', () {
+    final deckWithGZone = buildStrideDeck;
+
+    test('G units go to the G zone, not the main deck', () async {
+      final (store, deck) = await deckWithGZone();
+      final engine = engineFor(store, deck);
+      final you = engine.state.you;
+
+      expect(you.gZone.length, 8);
+      expect(you.deck.any((c) => c.cardType == 'g-unit'), isFalse);
+      expect(you.hand.any((c) => c.cardType == 'g-unit'), isFalse);
+      // And the main deck is still the fifty it should be.
+      expect(you.deck.length + you.hand.length, 50);
+    });
+
+    test('a G unit can never be called to a circle', () async {
+      final (store, deck) = await deckWithGZone();
+      final engine = engineFor(store, deck);
+      final you = engine.state.you;
+      final gUnit = you.gZone.first;
+
+      expect(engine.canCall(you, gUnit, Circle.frontLeft), isFalse);
+    });
+
+    test('striding needs a grade 3 vanguard', () async {
+      final (store, deck) = await deckWithGZone();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      expect(engine.canStride(you), isFalse, reason: 'grade 0 vanguard');
+      while (engine.rideDeckOption(you) != null) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      expect(you.vanguard!.card.grade, 3);
+      expect(engine.canStride(you), isTrue);
+    });
+
+    test('a stride costs grade 3 from hand and sits on the vanguard', () async {
+      final (store, deck) = await deckWithGZone();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      while (engine.rideDeckOption(you) != null) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      final heart = you.vanguard!.card;
+      final gUnit = you.gZone.first;
+
+      // Two grade 2s pay for it; one alone would not.
+      expect(engine.isStrideCost([you.hand.first]), isFalse);
+      final cost = <GameCard>[];
+      var total = 0;
+      for (final card in you.hand) {
+        if (total >= 3) break;
+        cost.add(card);
+        total += card.grade;
+      }
+      engine.stride(you, gUnit, cost);
+
+      expect(you.vanguard!.card, gUnit);
+      expect(you.isStriding, isTrue);
+      expect(you.heart!.card, heart, reason: 'the ridden unit is underneath');
+      expect(you.gZone.contains(gUnit), isFalse);
+      for (final paid in cost) {
+        expect(you.drop, contains(paid));
+      }
+    });
+
+    test('a striding vanguard triple drives', () async {
+      final (store, deck) = await deckWithGZone();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      while (engine.rideDeckOption(you) != null) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      expect(engine.driveCount(you.vanguard!), 2, reason: 'twin at grade 3');
+
+      final cost = <GameCard>[];
+      var total = 0;
+      for (final card in you.hand) {
+        if (total >= 3) break;
+        cost.add(card);
+        total += card.grade;
+      }
+      engine.stride(you, you.gZone.first, cost);
+      expect(engine.driveCount(you.vanguard!), 3);
+    });
+
+    test('a stride lasts one turn and the heart comes back', () async {
+      final (store, deck) = await deckWithGZone();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      while (engine.rideDeckOption(you) != null) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      final heart = you.vanguard!.card;
+      final gUnit = you.gZone.first;
+      final cost = <GameCard>[];
+      var total = 0;
+      for (final card in you.hand) {
+        if (total >= 3) break;
+        cost.add(card);
+        total += card.grade;
+      }
+      engine.stride(you, gUnit, cost);
+
+      engine.endTurn();
+      expect(you.isStriding, isFalse);
+      expect(you.vanguard!.card, heart);
+      expect(you.gZone, contains(gUnit), reason: 'it goes back to the G zone');
+    });
+  });
+
+  group('the zones abilities are paid out of', () {
+    test('a counter-blast turns damage face down', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      you.damage.addAll(you.deck.sublist(0, 3));
+      you.deck.removeRange(0, 3);
+
+      expect(you.openDamage, 3);
+      engine.counterBlast(you, 2);
+      expect(you.openDamage, 1);
+      // Spent damage still counts towards the six that ends the game.
+      expect(you.damageCount, 3);
+
+      engine.counterCharge(you, 1);
+      expect(you.openDamage, 2);
+    });
+
+    test('a counter-blast cannot spend what is already spent', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      you.damage.addAll(you.deck.sublist(0, 2));
+      you.deck.removeRange(0, 2);
+
+      engine.counterBlast(you, 5);
+      expect(you.openDamage, 0);
+      expect(you.damageCount, 2, reason: 'no damage was invented');
+    });
+
+    test('a soul-blast moves a card from soul to drop', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      final inSoul = you.soul.single;
+
+      engine.soulBlast(you, inSoul);
+      expect(you.soul, isEmpty);
+      expect(you.drop, contains(inSoul));
+    });
+
+    test('a soul-charge takes off the top of the deck', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final before = you.deck.length;
+
+      engine.soulCharge(you, 2);
+      expect(you.soul.length, 2);
+      expect(you.deck.length, before - 2);
+    });
+
+    test('searching the deck takes the card and shuffles', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final wanted = you.deck.firstWhere((c) => c.name == 'Beater');
+      final before = you.deck.length;
+
+      engine.searchDeck(you, wanted);
+      expect(you.hand, contains(wanted));
+      expect(you.deck.contains(wanted), isFalse);
+      expect(you.deck.length, before - 1);
+    });
+
+    test('a card can be taken back out of the drop zone', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final pitched = you.hand.first;
+      engine.discard(you, pitched);
+      expect(you.drop, contains(pitched));
+
+      engine.returnFromDrop(you, pitched);
+      expect(you.hand, contains(pitched));
+      expect(you.drop.contains(pitched), isFalse);
+    });
+
+    test('a card can be put under the deck', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final card = you.hand.first;
+
+      engine.bottomDeck(you, card);
+      expect(you.hand.contains(card), isFalse);
+      // Under the deck means it is the last thing that would be drawn.
+      expect(you.deck.first, card);
     });
   });
 

@@ -5,7 +5,7 @@ import 'package:tcg_decks/screens/playtest_screen.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
-import 'playtest_engine_test.dart' show buildDeck;
+import 'playtest_engine_test.dart' show buildStrideDeck;
 
 /// The board is the densest screen in the app -- twelve circles, two damage
 /// rows, a hand and a control bar, all on a phone. It is also the screen where
@@ -25,7 +25,8 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final (store, deck) = await buildDeck();
+      // A deck with a G zone, which is the widest the zone rail ever gets.
+      final (store, deck) = await buildStrideDeck();
       await tester.pumpWidget(
         ChangeNotifierProvider<DeckStore>.value(
           value: store,

@@ -75,10 +75,10 @@ class PlaytestEngine {
           case zoneRide:
             side.rideDeck.add(card);
           case zoneG:
-            // A G zone only matters to decks that stride, which is a
-            // Premium-era mechanic. Kept out of the way rather than shuffled
-            // into the main deck, where it would corrupt every draw.
-            continue;
+            // The G zone sits beside the board rather than in the deck: it is
+            // strided from, never drawn, and shuffling it in would corrupt
+            // every draw.
+            side.gZone.add(card);
           default:
             side.deck.add(card);
         }
@@ -160,7 +160,8 @@ class PlaytestEngine {
     state.phase = PlaytestPhase.draw;
     state.note('--- Turn ${state.turn}: ${side.name} ---', by: side);
 
-    // Both players draw on every turn of their own, the first included.
+    // Both players draw on every turn of their own, the first turn included.
+    // There is no skipped draw for whoever goes first.
     _draw(side);
     if (_checkForEnd()) return;
     state.phase = PlaytestPhase.ride;
@@ -184,6 +185,8 @@ class PlaytestEngine {
 
   void endTurn() {
     final side = state.active;
+    // A stride lasts one turn, so the G unit goes back before anything else.
+    endStride(side);
     for (final unit in side.units) {
       unit.clearTurnEffects();
     }
@@ -273,6 +276,136 @@ class PlaytestEngine {
     );
   }
 
+  // -------------------------------------------------------------------- stride
+
+  /// Whether this side could stride right now.
+  ///
+  /// Stride is a Premium-era move: with a grade 3 vanguard you put a G unit on
+  /// top of it for the turn, paying by discarding cards worth grade 3 or more
+  /// between them.
+  bool canStride(PlaytestSide side) =>
+      !side.isStriding &&
+      side.gZone.isNotEmpty &&
+      (side.vanguard?.card.grade ?? 0) >= 3 &&
+      strideCostAvailable(side);
+
+  /// Whether the hand holds enough grades to pay for a stride.
+  bool strideCostAvailable(PlaytestSide side) =>
+      side.hand.fold(0, (sum, card) => sum + card.grade) >= 3;
+
+  /// Whether [cost] is a legal stride cost: grade 3 or more between them.
+  bool isStrideCost(List<GameCard> cost) =>
+      cost.fold(0, (sum, card) => sum + card.grade) >= 3;
+
+  /// Strides [card] over the vanguard, discarding [cost] to pay for it.
+  ///
+  /// The unit underneath stays put as the heart and comes back when the turn
+  /// ends -- a stride is for one turn only.
+  void stride(PlaytestSide side, GameCard card, List<GameCard> cost) {
+    final heart = side.vanguard;
+    if (heart == null || !isStrideCost(cost)) return;
+
+    for (final paid in cost) {
+      side.hand.remove(paid);
+      side.drop.add(paid);
+    }
+    side.gZone.remove(card);
+    side.heart = heart;
+    side.field[Circle.vanguard] = FieldUnit(card);
+    state.note(
+      '${side.name} strides ${card.name} over ${heart.card.name}, '
+      'discarding ${cost.length} to pay for it.',
+      by: side,
+    );
+  }
+
+  /// Ends a stride, putting the G unit back and the heart back on top.
+  void endStride(PlaytestSide side) {
+    final heart = side.heart;
+    if (heart == null) return;
+    final strider = side.field[Circle.vanguard];
+    if (strider != null) side.gZone.add(strider.card);
+    side.field[Circle.vanguard] = heart;
+    side.heart = null;
+    state.note('${side.name}\'s stride ends.', by: side);
+  }
+
+  // ----------------------------------------------------------------- the zones
+
+  /// Turns face-up damage face down to pay a counter-blast.
+  void counterBlast(PlaytestSide side, int count) {
+    var paid = 0;
+    for (final card in side.damage) {
+      if (paid >= count) break;
+      if (side.spentDamage.add(card.instanceId)) paid += 1;
+    }
+    if (paid > 0) {
+      state.note('${side.name} counter-blasts $paid.', by: side);
+    }
+  }
+
+  /// Turns spent damage back face up.
+  void counterCharge(PlaytestSide side, int count) {
+    var charged = 0;
+    for (final card in side.damage.reversed) {
+      if (charged >= count) break;
+      if (side.spentDamage.remove(card.instanceId)) charged += 1;
+    }
+    if (charged > 0) {
+      state.note('${side.name} counter-charges $charged.', by: side);
+    }
+  }
+
+  /// Moves a card out of the soul and into the drop, for a soul-blast.
+  void soulBlast(PlaytestSide side, GameCard card) {
+    if (!side.soul.remove(card)) return;
+    side.drop.add(card);
+    state.note('${side.name} soul-blasts ${card.name}.', by: side);
+  }
+
+  /// Puts the top of the deck into the soul, for a soul-charge.
+  void soulCharge(PlaytestSide side, int count) {
+    for (var i = 0; i < count; i += 1) {
+      if (side.deck.isEmpty) break;
+      side.soul.add(side.deck.removeLast());
+    }
+    state.note('${side.name} soul-charges $count.', by: side);
+    _checkForEnd();
+  }
+
+  /// Takes a named card out of the deck, for an ability that searches.
+  ///
+  /// The deck is shuffled afterwards, as searching it always requires.
+  void searchDeck(PlaytestSide side, GameCard card, {bool toHand = true}) {
+    if (!side.deck.remove(card)) return;
+    (toHand ? side.hand : side.drop).add(card);
+    side.deck.shuffle(_random);
+    state.note(
+      '${side.name} searches out ${card.name} '
+      '${toHand ? 'to hand' : 'to the drop zone'}.',
+      by: side,
+    );
+  }
+
+  void shuffleDeck(PlaytestSide side) {
+    side.deck.shuffle(_random);
+    state.note('${side.name} shuffles.', by: side);
+  }
+
+  /// Returns a card from the drop zone to the hand.
+  void returnFromDrop(PlaytestSide side, GameCard card) {
+    if (!side.drop.remove(card)) return;
+    side.hand.add(card);
+    state.note('${side.name} takes ${card.name} back from the drop.', by: side);
+  }
+
+  /// Puts a card from hand on the bottom of the deck.
+  void bottomDeck(PlaytestSide side, GameCard card) {
+    if (!side.hand.remove(card)) return;
+    side.deck.insert(0, card);
+    state.note('${side.name} puts ${card.name} under the deck.', by: side);
+  }
+
   // ---------------------------------------------------------------------- call
 
   /// Whether [card] may be called to [circle].
@@ -281,6 +414,9 @@ class PlaytestEngine {
   /// grade 3 hitting the field on turn one.
   bool canCall(PlaytestSide side, GameCard card, Circle circle) {
     if (circle == Circle.vanguard || !card.isUnit) return false;
+    // A G unit is strided, never called: it lives in the G zone and only ever
+    // reaches the field on top of the vanguard.
+    if (card.cardType == 'g-unit') return false;
     final vanguardGrade = side.vanguard?.card.grade ?? 0;
     return card.grade <= vanguardGrade;
   }
