@@ -634,6 +634,8 @@ class PlaytestEngine {
       booster: booster,
     );
     state.attack = pending;
+    // A new battle, so the last one's checks come off the trigger zone.
+    state.triggerZone.clear();
     state.note(
       '${side.name} attacks ${target.card.name} with ${attacker.card.name}'
       '${booster == null ? '' : ' boosted by ${booster.card.name}'} '
@@ -696,9 +698,13 @@ class PlaytestEngine {
       final card = side.deck.removeLast();
       side.hand.add(card);
       flipped.add(card);
+      state.triggerZone.add(CheckedCard(card, CheckKind.drive, side.name));
       state.note('${side.name} drive checks ${card.name}.', by: side);
       _applyTrigger(side, card, pending.attacker);
     }
+    // Recorded even when nothing was flipped, since a vanguard on no drive
+    // has still done its checking and the attack is ready to resolve.
+    pending.driveChecked = true;
     _checkForEnd();
     return flipped;
   }
@@ -752,6 +758,7 @@ class PlaytestEngine {
     }
     final card = side.deck.removeLast();
     side.damage.add(card);
+    state.triggerZone.add(CheckedCard(card, CheckKind.damage, side.name));
     state.note(
       '${side.name} damage checks ${card.name} '
       '(${side.damageCount} damage).',

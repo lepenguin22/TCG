@@ -1161,7 +1161,12 @@ class _UnitTile extends StatelessWidget {
   }
 }
 
-/// The strip between the two boards: whatever the game is waiting on.
+/// The strip between the two boards: the battle, laid out as its zones.
+///
+/// A guardian circle and a trigger zone are where a fight is actually read in
+/// the real game -- what was thrown in front of the attack, and what came off
+/// the top -- so they are shown as the cards they are rather than folded into
+/// a shield total and a log line.
 class _Middle extends StatelessWidget {
   const _Middle({required this.game});
 
@@ -1170,7 +1175,7 @@ class _Middle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final attack = game.state.attack;
-    final checks = game.lastChecks;
+    final checks = game.triggerZone;
 
     if (attack == null && checks.isEmpty) {
       return Container(height: 1, color: AppColors.border);
@@ -1181,11 +1186,10 @@ class _Middle extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (attack != null)
+          if (attack != null) ...[
             Text(
-              '${attack.attacker.card.name} → '
-              '${attack.target.card.name}   '
-              '${attack.attackPower} vs ${attack.defence}'
+              '${attack.attacker.card.name} → ${attack.target.card.name}'
+              '   ${attack.attackPower} vs ${attack.defence}'
               '${attack.perfectGuarded ? '  (perfect guard)' : ''}',
               style: TextStyle(
                 color: attack.connects ? AppColors.danger : AppColors.success,
@@ -1193,37 +1197,201 @@ class _Middle extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            const SizedBox(height: 8),
+            _GuardianZone(attack: attack),
+          ],
           if (checks.isNotEmpty) ...[
             const SizedBox(height: 8),
-            SizedBox(
-              height: 64,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final card in checks)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Column(
-                        children: [
-                          CardImage(url: card.imageUrl, width: 34),
-                          if (card.trigger != null)
-                            Text(
-                              card.trigger!,
-                              style: const TextStyle(
-                                fontSize: 8,
-                                color: AppColors.warning,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            _TriggerZone(checks: checks),
           ],
         ],
       ),
     );
+  }
+}
+
+/// The guardian circle: what has been called in front of this attack.
+class _GuardianZone extends StatelessWidget {
+  const _GuardianZone({required this.attack});
+
+  final PendingAttack attack;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ZoneStrip(
+      label: 'Guardian',
+      trailing: attack.perfectGuarded
+          ? 'perfect guard'
+          : attack.guardians.isEmpty
+          ? null
+          : '+${attack.shield} shield',
+      empty: 'Nothing guarding',
+      children: [
+        for (final card in attack.guardians)
+          _CheckTile(
+            card: card,
+            caption: card.isSentinel ? 'PG' : '${card.shield ~/ 1000}k',
+            colour: card.isSentinel ? AppColors.success : AppColors.textMuted,
+          ),
+      ],
+    );
+  }
+}
+
+/// The trigger zone: every card this battle has turned face up, drive checks
+/// and damage checks alike, in the order they were checked.
+class _TriggerZone extends StatelessWidget {
+  const _TriggerZone({required this.checks});
+
+  final List<CheckedCard> checks;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ZoneStrip(
+      label: 'Trigger',
+      empty: 'Nothing checked',
+      children: [
+        for (final check in checks)
+          _CheckTile(
+            card: check.card,
+            caption: check.card.trigger ?? check.kind.label.toLowerCase(),
+            colour: check.card.trigger != null
+                ? AppColors.warning
+                : AppColors.textFaint,
+            corner: check.kind == CheckKind.drive ? 'D' : '✚',
+            cornerColour: check.kind == CheckKind.drive
+                ? AppColors.accent
+                : AppColors.danger,
+            tooltip: '${check.sideName} · ${check.kind.label}',
+          ),
+      ],
+    );
+  }
+}
+
+/// A labelled row of cards, scrolling sideways when there are many.
+class _ZoneStrip extends StatelessWidget {
+  const _ZoneStrip({
+    required this.label,
+    required this.children,
+    required this.empty,
+    this.trailing,
+  });
+
+  final String label;
+  final List<Widget> children;
+  final String empty;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 9,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                trailing!,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (children.isEmpty)
+          Text(
+            empty,
+            style: const TextStyle(color: AppColors.textFaint, fontSize: 11),
+          )
+        else
+          SizedBox(
+            height: 58,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final child in children)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: child,
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One card in a zone strip, with a word underneath saying what it is doing.
+class _CheckTile extends StatelessWidget {
+  const _CheckTile({
+    required this.card,
+    required this.caption,
+    required this.colour,
+    this.corner,
+    this.cornerColour,
+    this.tooltip,
+  });
+
+  final GameCard card;
+  final String caption;
+  final Color colour;
+  final String? corner;
+  final Color? cornerColour;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final tile = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          children: [
+            CardImage(url: card.imageUrl, width: 30),
+            if (corner != null)
+              Positioned(
+                left: 0,
+                top: 0,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    corner!,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: cornerColour ?? Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        Text(
+          caption,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 8, color: colour),
+        ),
+      ],
+    );
+    final label = tooltip;
+    return label == null ? tile : Tooltip(message: label, child: tile);
   }
 }
 
@@ -1413,7 +1581,7 @@ class _Controls extends StatelessWidget {
 
       case PlaytestStage.yourAttack:
         final attack = state.attack!;
-        final drove = game.lastChecks.isNotEmpty || !attack.isVanguardAttack;
+        final drove = attack.driveChecked || !attack.isVanguardAttack;
         return [
           Expanded(
             child: Text(

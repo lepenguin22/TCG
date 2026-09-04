@@ -105,7 +105,11 @@ void main() {
       expect(game.state.attack, isNotNull);
 
       game.driveCheck();
-      expect(game.lastChecks, isNotEmpty, reason: 'a vanguard drive checks');
+      expect(
+        game.triggerZone.where((c) => c.kind == CheckKind.drive),
+        isNotEmpty,
+        reason: 'a vanguard drive checks',
+      );
 
       game.resolveYourAttack();
       expect(game.state.attack, isNull);
@@ -240,7 +244,7 @@ void main() {
       game.selectAttacker(Circle.frontLeft);
       game.attackWithSelected(Circle.vanguard);
       game.driveCheck();
-      expect(game.lastChecks, isEmpty);
+      expect(game.triggerZone, isEmpty);
     });
   });
 
@@ -589,6 +593,74 @@ void main() {
       // never drive checks.
       expect(find.text('+1 critical'), findsOneWidget);
       expect(find.text('+1 drive'), findsNothing);
+    });
+
+    testWidgets('the battle shows its guardian and trigger zones', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // Nothing to show before a battle starts.
+      expect(find.text('GUARDIAN'), findsNothing);
+      expect(find.text('TRIGGER'), findsNothing);
+
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+
+      // The guardian circle appears with the attack, empty until something
+      // is called to it.
+      expect(find.text('GUARDIAN'), findsOneWidget);
+      expect(find.text('Nothing guarding'), findsOneWidget);
+
+      await tester.tap(find.textContaining(RegExp(r'Drive check ×')));
+      await tester.pumpAndSettle();
+
+      // And the drive check lands in the trigger zone.
+      expect(find.text('TRIGGER'), findsOneWidget);
+      expect(find.text('Nothing checked'), findsNothing);
+    });
+
+    testWidgets('a damage check stays visible after the attack', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+      await tester.tap(find.textContaining(RegExp(r'Drive check ×')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resolve'));
+      await tester.pumpAndSettle();
+
+      // The battle is over, but what it turned up is still on the board.
+      expect(find.text('GUARDIAN'), findsNothing, reason: 'no attack now');
+      expect(find.text('TRIGGER'), findsOneWidget);
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

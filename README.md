@@ -346,6 +346,23 @@ one is followed rather than overruled; three is the default where the database
 never carried the text. Spending energy stays yours, since every ability that
 costs it is prose — the crest tile on the board has blast buttons for it.
 
+### The battle, as its zones
+
+Between the two boards sit the two zones a fight is actually read from.
+
+The **guardian circle** holds the cards thrown in front of an attack, as the
+cards they are rather than as a shield total: what was spent, whether a
+perfect guard was among them, and what it adds up to. It appears with the
+attack and clears when the battle ends, the guardians going to the drop the
+way they do in the game.
+
+The **trigger zone** holds everything the battle turned face up, drive checks
+and damage checks together, in the order they were checked and marked for
+which was which and whose it was — your drive and their damage come off the
+same attack. It stays up after the attack resolves, deliberately: the damage
+is checked *during* the resolve, and clearing it then would take the card away
+before it could be read. The next attack clears it.
+
 ### The zones
 
 The zones beside the field are where the game actually happens once abilities

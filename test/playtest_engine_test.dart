@@ -802,6 +802,152 @@ void main() {
     });
   });
 
+  group('the guardian circle and the trigger zone', () {
+    (PlaytestEngine, PlaytestSide, PlaytestSide) ready(
+      DeckStore store,
+      Deck deck,
+    ) {
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+      for (final side in [you, foe]) {
+        while (engine.rideDeckOption(side) != null &&
+            (side.vanguard?.card.grade ?? 0) < 2) {
+          engine.ride(side, engine.rideDeckOption(side)!, fromRideDeck: true);
+        }
+      }
+      engine.state.phase = PlaytestPhase.battle;
+      return (engine, you, foe);
+    }
+
+    test('cards called to guard are held, not just counted', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = ready(store, deck);
+
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+      );
+      expect(attack.guardians, isEmpty);
+
+      final shield = engine.guardOptions(foe).firstWhere((c) => c.shield > 0);
+      engine.addGuardian(shield);
+
+      expect(attack.guardians.single, shield, reason: 'the card itself');
+      expect(attack.shield, shield.shield);
+    });
+
+    test('the guardians go to the drop when the battle ends', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = ready(store, deck);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      final shield = engine.guardOptions(foe).firstWhere((c) => c.shield > 0);
+      engine.addGuardian(shield);
+      engine.resolveAttack();
+
+      expect(foe.drop, contains(shield));
+    });
+
+    test('a drive check lands in the trigger zone', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+      expect(engine.state.triggerZone, isEmpty);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      final flipped = engine.driveCheck();
+
+      expect(engine.state.triggerZone.length, flipped.length);
+      expect(engine.state.triggerZone.first.kind, CheckKind.drive);
+      expect(engine.state.triggerZone.first.sideName, you.name);
+    });
+
+    test('a damage check lands there too, named for whoever took it', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = ready(store, deck);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.addPower(you, Circle.vanguard, 50000);
+      engine.driveCheck();
+      engine.resolveAttack();
+
+      final damage = engine.state.triggerZone
+          .where((c) => c.kind == CheckKind.damage)
+          .toList();
+      expect(damage, isNotEmpty, reason: 'the hit was checked for');
+      expect(damage.first.sideName, foe.name, reason: 'they took it');
+    });
+
+    test('both kinds sit there together, in the order checked', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.addPower(you, Circle.vanguard, 50000);
+      engine.driveCheck();
+      engine.resolveAttack();
+
+      final kinds = engine.state.triggerZone.map((c) => c.kind).toList();
+      expect(kinds, contains(CheckKind.drive));
+      expect(kinds, contains(CheckKind.damage));
+      expect(
+        kinds.indexOf(CheckKind.drive),
+        lessThan(kinds.lastIndexOf(CheckKind.damage)),
+        reason: 'the drive check happens first',
+      );
+    });
+
+    test('the damage stays visible after the attack resolves', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.addPower(you, Circle.vanguard, 50000);
+      engine.driveCheck();
+      engine.resolveAttack();
+
+      // Resolving ends the battle but must not clear what it revealed, or
+      // the card would be gone before it could be read.
+      expect(engine.state.attack, isNull);
+      expect(engine.state.triggerZone, isNotEmpty);
+    });
+
+    test('the next attack clears the zone', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheck();
+      expect(engine.state.triggerZone, isNotEmpty);
+
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.frontLeft),
+      );
+      engine.call(you, unit, Circle.frontLeft);
+      engine.declareAttack(from: Circle.frontLeft, to: Circle.vanguard);
+      expect(engine.state.triggerZone, isEmpty, reason: 'a new battle');
+    });
+
+    test('a vanguard on no drive still counts as having checked', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = ready(store, deck);
+
+      engine.addDrive(you, Circle.vanguard, -1);
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+      );
+      expect(attack.driveChecked, isFalse);
+      expect(engine.driveCheck(), isEmpty);
+      expect(
+        attack.driveChecked,
+        isTrue,
+        reason: 'so the board does not wait on a check that cannot happen',
+      );
+    });
+  });
+
   group('triggers', () {
     /// A deck whose every main deck card is the trigger under test, so a check
     /// is guaranteed to turn one up.

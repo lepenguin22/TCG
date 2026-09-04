@@ -229,6 +229,32 @@ enum PlaytestPhase {
   final String label;
 }
 
+/// Which kind of check turned a card face up.
+enum CheckKind {
+  drive('Drive'),
+  damage('Damage');
+
+  const CheckKind(this.label);
+
+  final String label;
+}
+
+/// A card turned face up by a check, sitting in the trigger zone.
+///
+/// In the game the checked card is put face up where both players can see it
+/// before it goes to hand or to damage, which is the moment a trigger is read
+/// off it. The board keeps that moment rather than only its consequences.
+class CheckedCard {
+  const CheckedCard(this.card, this.kind, this.sideName);
+
+  final GameCard card;
+  final CheckKind kind;
+
+  /// Whose check it was: your drive and their damage come off the same
+  /// attack, so the two have to be told apart.
+  final String sideName;
+}
+
 /// An attack that has been declared and is waiting to be guarded and resolved.
 class PendingAttack {
   PendingAttack({
@@ -250,6 +276,10 @@ class PendingAttack {
 
   /// Whether a sentinel has cancelled the attack outright.
   bool perfectGuarded = false;
+
+  /// Whether the drive check has been made, so the board knows the attack is
+  /// ready to resolve rather than still owing a check.
+  bool driveChecked = false;
 
   bool get isVanguardAttack => attackerCircle == Circle.vanguard;
 
@@ -291,6 +321,10 @@ class PlaytestState {
   bool ridden = false;
 
   PendingAttack? attack;
+
+  /// The cards this battle has turned face up, drive and damage together, in
+  /// the order they were checked. Cleared when the next attack is declared.
+  final List<CheckedCard> triggerZone = [];
 
   final List<LogEntry> log = [];
 

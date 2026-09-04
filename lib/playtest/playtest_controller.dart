@@ -68,9 +68,9 @@ class PlaytestController extends ChangeNotifier {
   /// Cards you have picked out of your opening hand to put back.
   final Set<GameCard> mulliganPicks = {};
 
-  /// The most recent drive or damage check, kept so the board can show what
-  /// was flipped rather than making you read it out of the log.
-  List<GameCard> lastChecks = const [];
+  /// The cards this battle has turned face up, drive and damage together.
+  /// The engine keeps them; the board shows them as the trigger zone.
+  List<CheckedCard> get triggerZone => state.triggerZone;
 
   /// A unit you have picked up and are about to place.
   GameCard? holding;
@@ -194,21 +194,22 @@ class PlaytestController extends ChangeNotifier {
   void attack({required Circle from, required Circle to, bool boost = false}) {
     final pending = engine.declareAttack(from: from, to: to, boost: boost);
     ai.guard(pending);
-    lastChecks = const [];
     stage = PlaytestStage.yourAttack;
     _sync();
   }
 
   /// Runs the drive check for the attack you have declared.
   void driveCheck() {
-    lastChecks = engine.driveCheck();
+    engine.driveCheck();
     notifyListeners();
   }
 
   /// Settles your attack and returns the board to you.
   void resolveYourAttack() {
     engine.resolveAttack();
-    lastChecks = const [];
+    // The trigger zone is deliberately left standing: the damage this attack
+    // just dealt was checked during the resolve, and clearing it here would
+    // hide the card before it had been read.
     stage = state.isOver ? PlaytestStage.over : PlaytestStage.yours;
     _sync();
   }
@@ -233,7 +234,6 @@ class PlaytestController extends ChangeNotifier {
       return;
     }
     engine.declareAttack(from: next.from, to: next.to, boost: next.boost);
-    lastChecks = const [];
     stage = PlaytestStage.guarding;
   }
 
@@ -247,7 +247,7 @@ class PlaytestController extends ChangeNotifier {
   /// Takes the attack as it stands: drive check first, so you see what the
   /// CPU turned up before the damage lands.
   void confirmGuard() {
-    lastChecks = engine.driveCheck();
+    engine.driveCheck();
     stage = PlaytestStage.cpuAttack;
     _sync();
   }
@@ -255,7 +255,6 @@ class PlaytestController extends ChangeNotifier {
   /// Resolves the CPU's attack and moves on to its next one.
   void resolveCpuAttack() {
     engine.resolveAttack();
-    lastChecks = const [];
     _nextCpuAttack();
     _sync();
   }
