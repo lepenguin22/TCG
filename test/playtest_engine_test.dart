@@ -1118,7 +1118,8 @@ void main() {
       engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
       engine.driveCheck();
 
-      expect(you.vanguard!.power, before + 5000);
+      expect(you.vanguard!.power, before + PlaytestEngine.triggerPower);
+      expect(PlaytestEngine.triggerPower, 10000, reason: 'not the old 5000');
       expect(you.vanguard!.critical, 2, reason: 'one more than the base');
     });
 
@@ -1149,8 +1150,11 @@ void main() {
       engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
       engine.driveCheck();
 
-      expect(you.vanguard!.powerBonus, 10000);
-      expect(you.field[Circle.frontLeft]!.powerBonus, 10000);
+      expect(you.vanguard!.powerBonus, PlaytestEngine.triggerPower);
+      expect(
+        you.field[Circle.frontLeft]!.powerBonus,
+        PlaytestEngine.triggerPower,
+      );
     });
 
     test('a heal trigger heals when you are not ahead', () async {
@@ -1190,7 +1194,32 @@ void main() {
       engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
       engine.driveCheck();
       expect(you.damageCount, 1, reason: 'no heal while ahead');
-      expect(you.vanguard!.powerBonus, 5000, reason: 'the power still applies');
+      expect(
+        you.vanguard!.powerBonus,
+        PlaytestEngine.triggerPower,
+        reason: 'the power still applies',
+      );
+    });
+
+    test('an over trigger is worth a hundred thousand', () async {
+      final (store, deck) = await deckOfTriggers('over');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.state.phase = PlaytestPhase.battle;
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheck();
+
+      // An over trigger is its own number, ten times an ordinary trigger,
+      // and the rest of what it does is the card's own text.
+      expect(you.vanguard!.powerBonus, PlaytestEngine.overTriggerPower);
+      expect(PlaytestEngine.overTriggerPower, 100000);
+      expect(
+        you.vanguard!.critical,
+        1,
+        reason: 'the power is all the engine gives it',
+      );
     });
 
     test('a trigger in damage helps the player taking the hit', () async {
@@ -1202,7 +1231,7 @@ void main() {
       engine.dealDamage(foe);
       // The critical trigger came off their own deck, so their vanguard is
       // the one that grew.
-      expect(foe.vanguard!.powerBonus, 5000);
+      expect(foe.vanguard!.powerBonus, PlaytestEngine.triggerPower);
       expect(engine.state.you.vanguard!.powerBonus, 0);
     });
 

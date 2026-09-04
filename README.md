@@ -302,8 +302,12 @@ mulligan, the ride deck climbed a grade at a time, calling to the front and back
 rows, boosting from behind, attacks that only the front row can make or receive,
 drive checks sized to the vanguard's grade, damage checks, guarding with shields
 and perfect guards, and the sixth damage that ends it. Triggers resolve
-properly: critical adds power and a critical, draw draws, front lifts the front
-row, heal heals when you are not ahead on damage, stand stands a unit. Both
+properly, and for **+10000 power** — the number the V-series rules revision
+moved them to, which every format the app supports is played under, whatever
+an old printing's own text says. Critical adds that power and a critical, draw
+draws, front spreads it across the front row rather than onto one unit, heal
+heals when you are not ahead on damage, stand stands a unit. An over trigger is
+its own number, +100000, and the rest of what it does is the card's text. Both
 players draw on their own first turn; nobody skips it.
 
 Rear-guards move between the rows of their own column during your main phase,

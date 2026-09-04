@@ -28,6 +28,17 @@ class PlaytestEngine {
   /// separate pieces on the board.
   static int _nextInstanceId = 1;
 
+  /// What a trigger gives the unit it is placed on.
+  ///
+  /// Ten thousand, not the five thousand the game started with: the V-series
+  /// rules revision doubled it, and every format the app supports -- Standard,
+  /// V Premium and Premium -- is played under those rules, whatever an old
+  /// card's own printed text says.
+  static const int triggerPower = 10000;
+
+  /// What an over trigger gives, which is its own number and always was.
+  static const int overTriggerPower = 100000;
+
   // ---------------------------------------------------------------- setting up
 
   /// Builds a game from two decks in the library.
@@ -830,40 +841,48 @@ class PlaytestEngine {
     final target = beneficiary ?? side.vanguard;
     switch (trigger) {
       case 'critical':
-        target?.powerBonus += 5000;
+        target?.powerBonus += triggerPower;
         target?.criticalBonus += 1;
-        state.note('Critical trigger: +5000 power and +1 critical.', by: side);
+        state.note(
+          'Critical trigger: +$triggerPower power and +1 critical.',
+          by: side,
+        );
       case 'draw':
-        target?.powerBonus += 5000;
+        target?.powerBonus += triggerPower;
         _draw(side);
-        state.note('Draw trigger: +5000 power and a card.', by: side);
+        state.note('Draw trigger: +$triggerPower power and a card.', by: side);
       case 'front':
+        // The front trigger spreads its power across the front row instead of
+        // giving it all to one unit, which is why it is not the target here.
         for (final entry in side.field.entries) {
-          if (entry.key.isFrontRow) entry.value.powerBonus += 10000;
+          if (entry.key.isFrontRow) entry.value.powerBonus += triggerPower;
         }
-        state.note('Front trigger: +10000 to the front row.', by: side);
+        state.note('Front trigger: +$triggerPower to the front row.', by: side);
       case 'heal':
-        target?.powerBonus += 5000;
+        target?.powerBonus += triggerPower;
         // Heal only works while you are not ahead on damage.
         final foe = side == state.you ? state.opponent : state.you;
         if (side.damageCount >= foe.damageCount && side.damage.isNotEmpty) {
           side.drop.add(side.damage.removeLast());
           state.note(
-            'Heal trigger: +5000 power and a damage healed.',
+            'Heal trigger: +$triggerPower power and a damage healed.',
             by: side,
           );
         } else {
-          state.note('Heal trigger: +5000 power, no heal.', by: side);
+          state.note('Heal trigger: +$triggerPower power, no heal.', by: side);
         }
       case 'stand':
-        target?.powerBonus += 5000;
+        target?.powerBonus += triggerPower;
         final rested = side.units.where((u) => u.rested).toList();
         if (rested.isNotEmpty) rested.first.rested = false;
-        state.note('Stand trigger: +5000 power and a unit stands.', by: side);
-      case 'over':
-        target?.powerBonus += 100000;
         state.note(
-          'Over trigger: +100000 power. Read the card for the rest.',
+          'Stand trigger: +$triggerPower power and a unit stands.',
+          by: side,
+        );
+      case 'over':
+        target?.powerBonus += overTriggerPower;
+        state.note(
+          'Over trigger: +$overTriggerPower power. Read the card for the rest.',
           by: side,
         );
       default:
