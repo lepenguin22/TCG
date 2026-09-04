@@ -70,7 +70,7 @@ Future<(DeckStore, Deck)> buildDeck({
 
 /// The same deck with a G zone bolted on, as a Premium deck that strides has.
 Future<(DeckStore, Deck)> buildStrideDeck() async {
-  final (store, deck) = await buildDeck();
+  final (store, deck) = await buildEnergyDeck();
   final gUnit = store.saveCard(
     gameId: 'vanguard',
     name: 'Stride Beast',
@@ -82,6 +82,28 @@ Future<(DeckStore, Deck)> buildStrideDeck() async {
     },
   );
   store.addToDeck(deck.id, gUnit.id, zoneG, quantity: 8);
+  return (store, store.decks.firstWhere((d) => d.id == deck.id));
+}
+
+/// The same deck with the real Energy Generator crest in its ride deck, text
+/// and all, so the energy rules are read off the card rather than assumed.
+Future<(DeckStore, Deck)> buildEnergyDeck() async {
+  final (store, deck) = await buildDeck();
+  final crest = store.saveCard(
+    gameId: 'vanguard',
+    name: 'Energy Generator',
+    attributes: {
+      'cardType': 'ride-deck-crest',
+      'effect':
+          '(You may only have one ride deck crest in a ride deck)\n'
+          '[AUTO]Ride Deck:When you ride, put this card into the crest zone, '
+          'and if you went second, [Energy-Charge 3].\n'
+          '[CONT]:You may have up to ten energy.\n'
+          '[AUTO]:At the beginning of your ride phase, [Energy-Charge 3].\n'
+          '[ACT][1/Turn]:[COST][[Energy-Blast 7]], and draw a card.',
+    },
+  );
+  store.addToDeck(deck.id, crest.id, zoneRide);
   return (store, store.decks.firstWhere((d) => d.id == deck.id));
 }
 
@@ -596,6 +618,181 @@ void main() {
       expect(engine.state.yourTurn, isFalse);
       expect(foe.hand.length, 6);
     });
+  });
+
+  group('the energy the crest charges', () {
+    test('the crest waits in the ride deck until the first ride', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      final you = engine.state.you;
+
+      expect(you.crest, isNotNull, reason: 'the deck brought one');
+      expect(you.crestInPlay, isFalse, reason: 'not in the crest zone yet');
+      expect(you.energy, 0);
+    });
+
+    test('going first charges nothing on turn one', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      expect(you.goesFirst, isTrue);
+      expect(engine.state.turn, 1);
+      // The charge happens at the beginning of the ride phase, and the crest
+      // does not reach the crest zone until the ride itself.
+      expect(you.energy, 0);
+
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      expect(you.crestInPlay, isTrue);
+      expect(you.energy, 0, reason: 'and going first pays nothing on arrival');
+    });
+
+    test('going second is paid three when the crest lands', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final foe = engine.state.opponent;
+      expect(foe.goesFirst, isFalse);
+
+      engine.endTurn();
+      expect(engine.state.yourTurn, isFalse);
+      expect(foe.energy, 0, reason: 'still nothing at the start of the phase');
+
+      engine.ride(foe, engine.rideDeckOption(foe)!, fromRideDeck: true);
+      expect(foe.energy, 3, reason: 'the going-second clause');
+    });
+
+    test('three arrives every turn after the crest is down', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      expect(you.energy, 0);
+
+      // Round the table back to you: the crest is in play, so the beginning
+      // of your ride phase charges.
+      engine.endTurn();
+      engine.endTurn();
+      expect(engine.state.yourTurn, isTrue);
+      expect(you.energy, 3);
+
+      engine.endTurn();
+      engine.endTurn();
+      expect(you.energy, 6);
+    });
+
+    test('the player who went first stays a charge behind', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+
+      // Six turns, three each, riding on the first of them.
+      for (var turn = 1; turn <= 6; turn += 1) {
+        final side = engine.state.active;
+        if (!side.crestInPlay) {
+          engine.ride(side, engine.rideDeckOption(side)!, fromRideDeck: true);
+        }
+        if (turn < 6) engine.endTurn();
+      }
+
+      // Both have charged twice off the crest. The three paid for going
+      // second is the whole of the difference between them.
+      expect(you.energy, 6);
+      expect(foe.energy, 9);
+    });
+
+    test('the cap eventually closes that gap', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+
+      // Left long enough, the player who went second reaches ten first and
+      // waits there, so the head start stops being one.
+      for (var turn = 1; turn <= 20; turn += 1) {
+        final side = engine.state.active;
+        if (!side.crestInPlay) {
+          engine.ride(side, engine.rideDeckOption(side)!, fromRideDeck: true);
+        }
+        engine.endTurn();
+      }
+      expect(you.energy, 10);
+      expect(foe.energy, 10);
+    });
+
+    test('energy stops at the ten the crest allows', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+
+      for (var i = 0; i < 20; i += 1) {
+        engine.endTurn();
+      }
+      expect(you.energy, PlaytestSide.energyCap);
+      expect(you.energy, 10);
+    });
+
+    test('a deck with no crest never charges', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      expect(you.crest, isNull);
+
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      for (var i = 0; i < 6; i += 1) {
+        engine.endTurn();
+      }
+      expect(you.energy, 0);
+    });
+
+    test('the charge is read off the crest text', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      expect(engine.crestCharge(engine.state.you), 3);
+
+      // A crest printing a different number is followed, not overruled.
+      final (otherStore, otherDeck) = await buildDeck();
+      final crest = otherStore.saveCard(
+        gameId: 'vanguard',
+        name: 'Bigger Generator',
+        attributes: {
+          'cardType': 'ride-deck-crest',
+          'effect':
+              '[AUTO]:At the beginning of your ride phase, '
+              '[Energy-Charge 5].',
+        },
+      );
+      otherStore.addToDeck(otherDeck.id, crest.id, zoneRide);
+      final other = engineFor(
+        otherStore,
+        otherStore.decks.firstWhere((d) => d.id == otherDeck.id),
+      );
+      expect(other.crestCharge(other.state.you), 5);
+    });
+
+    test(
+      'spending energy by hand cannot go past the cap or below zero',
+      () async {
+        final (store, deck) = await buildEnergyDeck();
+        final engine = engineFor(store, deck);
+        final you = engine.state.you;
+
+        engine.setEnergy(you, 7);
+        expect(you.energy, 7);
+        engine.setEnergy(you, 50);
+        expect(you.energy, 10);
+        engine.setEnergy(you, -4);
+        expect(you.energy, 0);
+      },
+    );
   });
 
   group('the G zone', () {

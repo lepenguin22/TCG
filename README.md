@@ -307,6 +307,34 @@ up as a checkbox in the control bar, off until you tick it, because it is not
 always wanted — a unit that restands wants its booster kept back for the second
 swing, and one spent on the first is not there for it.
 
+### Energy
+
+A deck carrying a ride deck crest gets its energy charged automatically,
+because the crest does it on its own every turn and having to remember it by
+hand is how a playtest drifts out of sync with a real game. The rules come off
+the card rather than out of a guess:
+
+```
+[AUTO]Ride Deck: When you ride, put this card into the crest zone,
+                 and if you went second, [Energy-Charge 3].
+[CONT]: You may have up to ten energy.
+[AUTO]: At the beginning of your ride phase, [Energy-Charge 3].
+```
+
+Which settles the first turn, and it settles it by timing rather than by a
+special case. The charge happens at the *beginning* of the ride phase, and the
+crest does not reach the crest zone until you actually ride — during that same
+phase, after the moment has passed. So whoever goes first charges nothing on
+turn one. Whoever goes second charges nothing at the beginning of theirs
+either, but is paid three when the crest lands, which is what the "if you went
+second" clause is for. From each player's second turn onwards both charge three
+a turn, and both stop at ten.
+
+The number is read off the crest's own text, so a crest printing a different
+one is followed rather than overruled; three is the default where the database
+never carried the text. Spending energy stays yours, since every ability that
+costs it is prose — the crest tile on the board has blast buttons for it.
+
 ### The zones
 
 The zones beside the field are where the game actually happens once abilities
@@ -319,6 +347,8 @@ come into it, so they are on the board and tappable rather than left as numbers:
 - **Deck** shuffles, and lists itself so an ability that searches can be played —
   it reshuffles after a search. It is there for the cards that tell you to look.
 - **Drop** hands a card back where something returns one.
+- **Crest** appears for a deck that brings one, greyed until it reaches the
+  crest zone on your first ride, and showing the energy it has charged.
 - **G zone** appears only for a deck that has one. With a grade 3 vanguard and
   grade 3 worth of cards in hand to discard, a G unit strides on top of the
   vanguard: it triple drives, the unit underneath stays as the heart, and both

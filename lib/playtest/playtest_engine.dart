@@ -50,6 +50,10 @@ class PlaytestEngine {
     engine._deal(state.you, store.viewOf(yourDeck).items);
     engine._deal(state.opponent, store.viewOf(opponentDeck).items);
 
+    // You take the first turn, which the crest's energy rule cares about.
+    state.you.goesFirst = true;
+    state.opponent.goesFirst = false;
+
     // The first vanguard is the ride deck's grade 0, and it starts on the
     // field rather than in the ride deck.
     engine._standUpFirstVanguard(state.you);
@@ -165,6 +169,44 @@ class PlaytestEngine {
     _draw(side);
     if (_checkForEnd()) return;
     state.phase = PlaytestPhase.ride;
+
+    // "[AUTO]:At the beginning of your ride phase, [Energy-Charge 3]." Only
+    // once the crest is in the crest zone, which it is not on turn one --
+    // it arrives during the ride, after this moment has passed. That is why
+    // whoever goes first starts a turn behind on energy.
+    if (side.crestInPlay) {
+      _chargeEnergy(side, crestCharge(side));
+    }
+  }
+
+  /// How much energy this side's crest charges each turn.
+  ///
+  /// Read off the crest where its text says, so a crest printing a different
+  /// number is followed rather than overruled. Three is the Energy Generator's
+  /// number and the default for a crest whose text the database never carried.
+  int crestCharge(PlaytestSide side) {
+    final crest = side.crest;
+    if (crest == null) return 0;
+    final match = RegExp(
+      r'Energy-Charge\s+(\d+)',
+      caseSensitive: false,
+    ).firstMatch(crest.effect);
+    return int.tryParse(match?.group(1) ?? '') ?? 3;
+  }
+
+  /// Adds energy, up to the ten the crest allows.
+  void _chargeEnergy(PlaytestSide side, int amount) {
+    if (amount <= 0) return;
+    final before = side.energy;
+    side.energy = (side.energy + amount).clamp(0, PlaytestSide.energyCap);
+    final gained = side.energy - before;
+    state.note(
+      gained == amount
+          ? '${side.name} energy-charges $amount (${side.energy}).'
+          : '${side.name} energy-charges $gained to the cap of '
+                '${PlaytestSide.energyCap}.',
+      by: side,
+    );
   }
 
   /// Moves the game on to whatever comes after [state.phase].
@@ -274,6 +316,26 @@ class PlaytestEngine {
       '(grade ${card.grade})${fromRideDeck ? ' from the ride deck' : ''}.',
       by: side,
     );
+    _placeCrest(side);
+  }
+
+  /// "[AUTO]Ride Deck:When you ride, put this card into the crest zone, and
+  /// if you went second, [Energy-Charge 3]."
+  ///
+  /// The three paid here is what makes up for going second: the player who
+  /// went first has already passed the beginning of their ride phase with no
+  /// crest in play, so they charge nothing on turn one.
+  void _placeCrest(PlaytestSide side) {
+    final crest = side.crest;
+    if (crest == null || side.crestInPlay) return;
+    side.crestInPlay = true;
+    state.note(
+      '${side.name} puts ${crest.name} into the crest zone.',
+      by: side,
+    );
+    if (!side.goesFirst) {
+      _chargeEnergy(side, crestCharge(side));
+    }
   }
 
   // -------------------------------------------------------------------- stride
@@ -706,10 +768,10 @@ class PlaytestEngine {
     );
   }
 
-  /// Counter-blast, soul-blast, energy: costs the engine cannot read off a
-  /// card, so the player pays them here.
+  /// Energy spent or gained by an ability the player is applying by hand. The
+  /// crest's own charge is automatic; everything else lands here.
   void setEnergy(PlaytestSide side, int value) {
-    side.energy = value.clamp(0, 99);
+    side.energy = value.clamp(0, PlaytestSide.energyCap);
   }
 
   /// Deals damage directly, for an ability that says to.

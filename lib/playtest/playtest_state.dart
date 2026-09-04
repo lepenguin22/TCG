@@ -139,12 +139,31 @@ class PlaytestSide {
   /// ends. In the game it sits underneath as the "heart".
   FieldUnit? heart;
 
-  /// Divinez energy. Every way of gaining it is an ability, so the engine
-  /// never awards it -- the player sets it as the cards they play say to.
+  /// Divinez energy, spent on the abilities that ask for it.
+  ///
+  /// The ride deck crest charges this on its own every turn, which the engine
+  /// does; every other way of gaining or spending it is an ability, which the
+  /// player applies by hand.
   int energy = 0;
 
-  /// The ride deck crest, once it is in play.
+  /// The most energy anyone may hold. The Energy Generator crest says it:
+  /// "[CONT]:You may have up to ten energy."
+  static const energyCap = 10;
+
+  /// The ride deck crest this deck brought, if it has one.
   GameCard? crest;
+
+  /// Whether the crest has reached the crest zone.
+  ///
+  /// It gets there on the first ride, not at the start of the game, and that
+  /// timing is the whole of the first turn energy rule: the charge happens at
+  /// the beginning of the ride phase, and on turn one the crest is not there
+  /// yet to do it.
+  bool crestInPlay = false;
+
+  /// Whether this side took the first turn of the game. The crest pays the
+  /// player who went second three energy to make up for it.
+  bool goesFirst = false;
 
   final Map<Circle, FieldUnit> field = {};
 

@@ -9,7 +9,8 @@ import 'package:tcg_decks/screens/playtest_screen.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
-import 'playtest_engine_test.dart' show buildDeck, buildStrideDeck;
+import 'playtest_engine_test.dart'
+    show buildDeck, buildEnergyDeck, buildStrideDeck;
 
 void main() {
   group('the playtest controller', () {
@@ -317,6 +318,38 @@ void main() {
       expect(find.textContaining('G zone'), findsOneWidget);
       // A grade 0 vanguard cannot stride yet, and the sheet says why.
       expect(find.textContaining('needs a grade 3 vanguard'), findsOneWidget);
+    });
+
+    testWidgets('the crest is on the board and explains itself', (
+      tester,
+    ) async {
+      final (store, deck) = await buildEnergyDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      expect(find.text('Crest'), findsNWidgets(2));
+      await tapOnBoard(tester, find.text('Crest').last);
+
+      expect(find.text('Energy Generator'), findsOneWidget);
+      // Turn one, before riding: it says why nothing has been charged.
+      expect(find.textContaining('Still in the ride deck'), findsOneWidget);
+    });
+
+    testWidgets('riding charges the crest into play', (tester) async {
+      final (store, deck) = await buildEnergyDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Crest').last);
+      // Going first, so it is down but has charged nothing yet.
+      expect(find.textContaining('0 energy'), findsOneWidget);
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

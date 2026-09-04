@@ -415,6 +415,15 @@ class _ZoneRail extends StatelessWidget {
           count: side.soul.length,
           onTap: () => _showSoulSheet(context, game, side),
         ),
+        // The crest, once a deck brings one. It charges the energy on its
+        // own, so it is worth being able to see and read.
+        if (side.crest != null)
+          _Pile(
+            label: 'Crest',
+            count: side.crestInPlay ? side.energy : 0,
+            highlight: side.crestInPlay,
+            onTap: () => _showCrestSheet(context, game, side),
+          ),
         // Only a deck that strides has a G zone, so it only appears for one.
         if (side.gZone.isNotEmpty)
           _Pile(
@@ -702,6 +711,80 @@ void _showDeckSheet(
       ),
       const SizedBox(height: 12),
     ],
+  );
+}
+
+/// The ride deck crest: what it says, and the energy it has charged.
+void _showCrestSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  final crest = side.crest;
+  if (crest == null) return;
+  final charge = game.engine.crestCharge(side);
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _CardHeading(card: crest),
+            const SizedBox(height: 14),
+            Text(
+              side.crestInPlay
+                  ? '${side.energy} energy, of a maximum of '
+                        '${PlaytestSide.energyCap}. It charges $charge at the '
+                        'beginning of every one of ${side.name == 'You' ? 'your' : 'its'} '
+                        'ride phases, on its own.'
+                  : 'Still in the ride deck. It reaches the crest zone on the '
+                        'first ride — which is why whoever goes first charges '
+                        'nothing on turn one.',
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Spending it is an ability, so it is yours to apply',
+              style: TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 11,
+                letterSpacing: 0.6,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final cost in [1, 2, 3, 7])
+                  OutlinedButton(
+                    onPressed: side.energy < cost
+                        ? null
+                        : () => game.setEnergy(side, side.energy - cost),
+                    child: Text('Blast $cost'),
+                  ),
+                OutlinedButton(
+                  onPressed: () => game.setEnergy(side, side.energy + 1),
+                  child: const Text('Charge 1'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
   );
 }
 
