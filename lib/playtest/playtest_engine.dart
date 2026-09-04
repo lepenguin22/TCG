@@ -473,11 +473,32 @@ class PlaytestEngine {
     state.note('${side.name} takes ${card.name} back from the drop.', by: side);
   }
 
-  /// Puts a card from hand on the bottom of the deck.
+  /// Puts a card on the bottom of the deck, from wherever it is now.
+  ///
+  /// Costs ask for this from the hand most often -- "put a card from your
+  /// hand on the bottom of your deck" -- but the drop zone and the soul are
+  /// asked for it too, so the card comes out of whichever holds it.
   void bottomDeck(PlaytestSide side, GameCard card) {
-    if (!side.hand.remove(card)) return;
+    final from = _takeFrom(side, card);
+    if (from == null) return;
     side.deck.insert(0, card);
-    state.note('${side.name} puts ${card.name} under the deck.', by: side);
+    state.note(
+      '${side.name} puts ${card.name} under the deck'
+      '${from == 'hand' ? '' : ' from the $from'}.',
+      by: side,
+    );
+  }
+
+  /// Puts a unit on the field on the bottom of the deck.
+  ///
+  /// The other half of the same cost: plenty of cards pay by putting a
+  /// rear-guard, or themselves, back into the deck rather than retiring it,
+  /// which is a different place for it to end up and worth keeping straight.
+  void bottomDeckUnit(PlaytestSide side, Circle circle) {
+    final unit = side.field.remove(circle);
+    if (unit == null) return;
+    side.deck.insert(0, unit.card);
+    state.note('${side.name} puts ${unit.card.name} under the deck.', by: side);
   }
 
   // ---------------------------------------------------------------------- call
@@ -504,7 +525,7 @@ class PlaytestEngine {
   ///
   /// A unit already on the circle is retired to make room.
   void call(PlaytestSide side, GameCard card, Circle circle) {
-    final from = _takeForCall(side, card);
+    final from = _takeFrom(side, card, deck: true);
     if (from == null) return;
 
     final existing = side.field[circle];
@@ -525,10 +546,13 @@ class PlaytestEngine {
   }
 
   /// Takes [card] out of the zone holding it, naming that zone. Null when the
-  /// card is nowhere it could be called from.
-  String? _takeForCall(PlaytestSide side, GameCard card) {
+  /// card is in none of them.
+  ///
+  /// The deck is only searched where the caller says so: a call may come out
+  /// of it, but a card being put under the deck never comes from the deck.
+  String? _takeFrom(PlaytestSide side, GameCard card, {bool deck = false}) {
     if (side.hand.remove(card)) return 'hand';
-    if (side.deck.remove(card)) return 'deck';
+    if (deck && side.deck.remove(card)) return 'deck';
     if (side.drop.remove(card)) return 'drop zone';
     if (side.soul.remove(card)) return 'soul';
     return null;

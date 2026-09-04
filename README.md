@@ -374,7 +374,14 @@ come into it, so they are on the board and tappable rather than left as numbers:
 - **Soul** takes a soul-blast per card and a soul-charge off the top of the deck.
 - **Deck** shuffles, and lists itself so an ability that searches can be played —
   it reshuffles after a search. It is there for the cards that tell you to look.
-- **Drop** hands a card back where something returns one.
+- **Drop** hands a card back where something returns one, and sends one under
+  the deck for the costs that ask for that.
+
+Cards go **under the deck** as well as to the drop zone, since a good many
+costs are paid that way and where a card ends up decides what can fetch it
+back later. A card in hand, in the drop zone or in the soul can be put under
+the deck from its own sheet, and a rear-guard goes there straight off the
+field, next to the retire it is not.
 
 Calling is not tied to your hand, and not tied to the main phase. Plenty of
 abilities call a unit out of the deck, the drop or the soul, and plenty of them

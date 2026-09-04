@@ -432,6 +432,7 @@ class _ZoneRail extends StatelessWidget {
             actionLabel: 'To hand',
             onAction: (card) => game.returnFromDrop(side, card),
             callable: true,
+            bottomable: true,
           ),
         ),
         _Pile(
@@ -574,6 +575,7 @@ void _showPileSheet(
   void Function(GameCard card)? onAction,
   List<Widget> Function(BuildContext sheetContext)? header,
   bool callable = false,
+  bool bottomable = false,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -591,46 +593,80 @@ void _showPileSheet(
           ...?header?.call(sheetContext),
           if (cards.isEmpty)
             const Text('Empty.', style: TextStyle(color: AppColors.textMuted)),
+          // The actions sit under each card rather than beside it: a pile
+          // can offer three of them, which will not fit alongside a card
+          // name on a phone.
           for (final card in cards.reversed)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CardImage(url: card.imageUrl, width: 32),
-              title: Text(
-                card.name,
-                style: const TextStyle(color: AppColors.text, fontSize: 14),
-              ),
-              subtitle: Text(
-                'Grade ${card.grade}'
-                '${card.trigger == null ? '' : ' · ${card.trigger} trigger'}',
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Abilities call out of the deck, the drop and the soul as
-                  // readily as out of hand, so every pile offers it for a
-                  // unit that could legally be called.
-                  if (callable &&
-                      side == game.you &&
-                      game.engine.canCall(game.you, card, Circle.frontLeft))
-                    TextButton(
-                      onPressed: () {
-                        game.hold(card);
-                        Navigator.of(sheetContext).pop();
-                      },
-                      child: const Text('Call'),
+                  CardImage(url: card.imageUrl, width: 32),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          card.name,
+                          style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          'Grade ${card.grade}'
+                          '${card.trigger == null ? '' : ' · ${card.trigger} trigger'}',
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Wrap(
+                          spacing: 4,
+                          children: [
+                            // Abilities call out of the deck, the drop and
+                            // the soul as readily as out of hand, so every
+                            // pile offers it for a unit that could legally
+                            // be called.
+                            if (callable &&
+                                side == game.you &&
+                                game.engine.canCall(
+                                  game.you,
+                                  card,
+                                  Circle.frontLeft,
+                                ))
+                              TextButton(
+                                onPressed: () {
+                                  game.hold(card);
+                                  Navigator.of(sheetContext).pop();
+                                },
+                                child: const Text('Call'),
+                              ),
+                            if (onAction != null)
+                              TextButton(
+                                onPressed: () {
+                                  onAction(card);
+                                  Navigator.of(sheetContext).pop();
+                                },
+                                child: Text(actionLabel ?? 'Move'),
+                              ),
+                            // Costs put cards under the deck out of the drop
+                            // and the soul as well as out of hand.
+                            if (bottomable && side == game.you)
+                              TextButton(
+                                onPressed: () {
+                                  game.bottomDeck(side, card);
+                                  Navigator.of(sheetContext).pop();
+                                },
+                                child: const Text('To bottom'),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
-                  if (onAction != null)
-                    TextButton(
-                      onPressed: () {
-                        onAction(card);
-                        Navigator.of(sheetContext).pop();
-                      },
-                      child: Text(actionLabel ?? 'Move'),
-                    ),
+                  ),
                 ],
               ),
             ),
@@ -710,6 +746,7 @@ void _showSoulSheet(
     actionLabel: 'Soul-blast',
     onAction: (card) => game.soulBlast(side, card),
     callable: true,
+    bottomable: true,
     header: (sheetContext) => [
       OutlinedButton(
         onPressed: () {
@@ -1801,8 +1838,7 @@ void _showHandSheet(
     isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
       child: SingleChildScrollView(
-        // The power field brings up the keyboard, so the sheet is padded
-        // out from under it rather than left half covered.
+        // Padded out from under the keyboard where anything brings one up.
         padding: EdgeInsets.fromLTRB(
           20,
           0,
@@ -1844,6 +1880,15 @@ void _showHandSheet(
               detail: 'For a cost the card text asks for.',
               onTap: () {
                 game.discard(card);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+            _SheetAction(
+              icon: Icons.vertical_align_bottom,
+              label: 'To the bottom of the deck',
+              detail: 'The other cost cards ask for, kept out of the drop.',
+              onTap: () {
+                game.bottomDeck(game.you, card);
                 Navigator.of(sheetContext).pop();
               },
             ),
@@ -1947,7 +1992,7 @@ void _showUnitSheet(
                   onPressed: () => game.toggleRest(side, circle),
                   child: Text(unit.rested ? 'Stand' : 'Rest'),
                 ),
-                if (circle != Circle.vanguard)
+                if (circle != Circle.vanguard) ...[
                   OutlinedButton(
                     onPressed: () {
                       game.retire(side, circle);
@@ -1955,6 +2000,16 @@ void _showUnitSheet(
                     },
                     child: const Text('Retire'),
                   ),
+                  // A cost that puts a unit back in the deck rather than the
+                  // drop zone, which is a different place for it to end up.
+                  OutlinedButton(
+                    onPressed: () {
+                      game.bottomDeckUnit(side, circle);
+                      Navigator.of(sheetContext).pop();
+                    },
+                    child: const Text('To bottom of deck'),
+                  ),
+                ],
                 OutlinedButton(
                   onPressed: () => game.drawCard(side),
                   child: const Text('Draw a card'),

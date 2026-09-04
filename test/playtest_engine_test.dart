@@ -1711,6 +1711,79 @@ void main() {
       // Under the deck means it is the last thing that would be drawn.
       expect(you.deck.first, card);
     });
+
+    test('a card in the drop zone goes under the deck too', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final card = you.hand.first;
+      engine.discard(you, card);
+      expect(you.drop, contains(card));
+
+      engine.bottomDeck(you, card);
+      expect(you.drop.contains(card), isFalse);
+      expect(you.deck.first, card);
+      expect(
+        engine.state.log.last.text,
+        contains('from the drop zone'),
+        reason: 'where it came from is worth reading',
+      );
+    });
+
+    test('a card in the soul goes under the deck too', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.soulCharge(you, 1);
+      final card = you.soul.first;
+
+      engine.bottomDeck(you, card);
+      expect(you.soul.contains(card), isFalse);
+      expect(you.deck.first, card);
+    });
+
+    test('the deck is never raided to put a card under itself', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final card = you.deck.last;
+      final size = you.deck.length;
+
+      engine.bottomDeck(you, card);
+      expect(you.deck.length, size, reason: 'nothing moved');
+      expect(you.deck.last, card, reason: 'still on top');
+    });
+
+    test('a rear-guard can be put under the deck', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+
+      engine.bottomDeckUnit(you, Circle.backLeft);
+      expect(you.field[Circle.backLeft], isNull);
+      expect(you.deck.first, unit);
+      expect(you.drop.contains(unit), isFalse, reason: 'not a retire');
+    });
+
+    test('an empty circle puts nothing under the deck', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final size = you.deck.length;
+
+      engine.bottomDeckUnit(you, Circle.backLeft);
+      expect(you.deck.length, size);
+    });
   });
 
   group('the CPU', () {

@@ -758,8 +758,7 @@ void main() {
       }
       expect(find.text('Call'), findsWidgets);
 
-      await tester.tap(find.text('Call').first);
-      await tester.pumpAndSettle();
+      await tapOnBoard(tester, find.text('Call').first);
 
       // The board is now waiting for a circle, in the battle phase.
       expect(find.textContaining('Tap a circle to call'), findsOneWidget);
@@ -806,6 +805,111 @@ void main() {
       await tapOnBoard(tester, find.text('Drop').last);
       expect(find.textContaining('Drop zone'), findsOneWidget);
       expect(find.text('Call'), findsWidgets);
+    });
+
+    testWidgets('a card in hand goes under the deck', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      final before = find.textContaining(RegExp(r'^Deck \(\d+\)$'));
+      final count = tester.widget<Text>(before).data!;
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('To the bottom of the deck'));
+      await tester.pumpAndSettle();
+
+      // The deck is one card bigger than it was, and the card left the hand
+      // without passing through the drop zone.
+      await tapOnBoard(tester, find.text('Deck').last);
+      expect(
+        tester.widget<Text>(before).data,
+        isNot(count),
+        reason: 'the deck grew',
+      );
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.textContaining('Drop zone (0)'), findsOneWidget);
+    });
+
+    testWidgets('a rear-guard goes under the deck', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+      await tester.tap(find.text('To bottom of deck'));
+      await tester.pumpAndSettle();
+
+      // The circle is empty again and nothing went to the drop zone, which
+      // is what separates this from a retire.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('circle-You-backLeft')),
+          matching: find.text('—'),
+        ),
+        findsOneWidget,
+      );
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.textContaining('Drop zone (0)'), findsOneWidget);
+    });
+
+    testWidgets('the vanguard is never offered the bottom of the deck', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      expect(find.text('To bottom of deck'), findsNothing);
+      expect(find.text('Retire'), findsNothing, reason: 'nor a retire');
+    });
+
+    testWidgets('the drop zone sends a card under the deck', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.text('To bottom'), findsOneWidget);
+      await tester.tap(find.text('To bottom'));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.textContaining('Drop zone (0)'), findsOneWidget);
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

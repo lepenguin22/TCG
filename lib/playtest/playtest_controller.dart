@@ -351,4 +351,9 @@ class PlaytestController extends ChangeNotifier {
     engine.bottomDeck(side, card);
     _sync();
   }
+
+  void bottomDeckUnit(PlaytestSide side, Circle circle) {
+    engine.bottomDeckUnit(side, circle);
+    _sync();
+  }
 }
