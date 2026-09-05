@@ -373,10 +373,16 @@ class PlaytestEngine {
   /// Stride is a Premium-era move: with a grade 3 vanguard you put a G unit on
   /// top of it for the turn, paying by discarding cards worth grade 3 or more
   /// between them.
+  /// Whether a stride is legal right now.
+  ///
+  /// Striding again on top of a stride is legal and happens: the G unit
+  /// standing there goes back to the G zone face up and the new one takes its
+  /// place over the same heart. So being mid-stride is not a reason to
+  /// refuse -- the grade of the unit underneath is what matters, and that is
+  /// the heart while a stride is up.
   bool canStride(PlaytestSide side) =>
-      !side.isStriding &&
       side.gZone.isNotEmpty &&
-      (side.vanguard?.card.grade ?? 0) >= 3 &&
+      ((side.heart ?? side.vanguard)?.card.grade ?? 0) >= 3 &&
       strideCostAvailable(side);
 
   /// Whether the hand holds enough grades to pay for a stride.
@@ -392,14 +398,28 @@ class PlaytestEngine {
   /// The unit underneath stays put as the heart and comes back when the turn
   /// ends -- a stride is for one turn only.
   void stride(PlaytestSide side, GameCard card, List<GameCard> cost) {
-    final heart = side.vanguard;
+    // Mid-stride the heart is the real vanguard; the unit on the circle is
+    // the G unit already standing there, which this stride replaces.
+    final heart = side.heart ?? side.vanguard;
     if (heart == null || !isStrideCost(cost)) return;
+    if (!side.gZone.contains(card)) return;
 
     for (final paid in cost) {
       side.hand.remove(paid);
       side.drop.add(paid);
     }
+
+    // A G unit that was already strided goes back where it came from, face
+    // up: that is where the face-up G zone a Generation Break counts comes
+    // from in the first place.
+    final standing = side.field[Circle.vanguard];
+    if (side.isStriding && standing != null) {
+      side.gZone.add(standing.card);
+      side.faceUpG.add(standing.card.instanceId);
+    }
+
     side.gZone.remove(card);
+    side.faceUpG.remove(card.instanceId);
     side.heart = heart;
     side.field[Circle.vanguard] = FieldUnit(card);
     state.note(
@@ -409,12 +429,33 @@ class PlaytestEngine {
     );
   }
 
+  /// Turns a G zone card face up, for the abilities that ask for one, and
+  /// face down again for the ones that put it back.
+  void flipG(PlaytestSide side, GameCard card, {required bool faceUp}) {
+    if (!side.gZone.contains(card)) return;
+    final changed = faceUp
+        ? side.faceUpG.add(card.instanceId)
+        : side.faceUpG.remove(card.instanceId);
+    if (!changed) return;
+    state.note(
+      '${side.name} turns ${card.name} '
+      '${faceUp ? 'face up' : 'face down'} in the G zone '
+      '(${side.generationBreak} face up).',
+      by: side,
+    );
+  }
+
   /// Ends a stride, putting the G unit back and the heart back on top.
   void endStride(PlaytestSide side) {
     final heart = side.heart;
     if (heart == null) return;
     final strider = side.field[Circle.vanguard];
-    if (strider != null) side.gZone.add(strider.card);
+    if (strider != null) {
+      // Back to the G zone face up, which is what makes a Generation Break
+      // turn on after the first stride.
+      side.gZone.add(strider.card);
+      side.faceUpG.add(strider.card.instanceId);
+    }
     side.field[Circle.vanguard] = heart;
     side.heart = null;
     state.note('${side.name}\'s stride ends.', by: side);

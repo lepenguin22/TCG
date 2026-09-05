@@ -1815,6 +1815,153 @@ void main() {
     });
   });
 
+  group('the G zone', () {
+    /// A striding board: a grade 3 vanguard and a hand that can pay.
+    Future<(PlaytestEngine, PlaytestSide)> readyToStride(
+      DeckStore store,
+      Deck deck,
+    ) async {
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      for (var i = 0; i < 3; i += 1) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      // A hand of grade 2s, so paying is never the thing under test.
+      you.hand.clear();
+      while (you.hand.length < 8) {
+        final card = you.deck.lastWhere((c) => c.grade >= 2);
+        you.deck.remove(card);
+        you.hand.add(card);
+      }
+      return (engine, you);
+    }
+
+    test(
+      'a stride takes the G unit you picked, for the cost you paid',
+      () async {
+        final (store, deck) = await buildStrideDeck();
+        final (engine, you) = await readyToStride(store, deck);
+        final picked = you.gZone.first;
+        final cost = you.hand.take(2).toList();
+        final heart = you.vanguard!.card;
+
+        engine.stride(you, picked, cost);
+        expect(you.vanguard!.card, picked);
+        expect(you.heart!.card, heart);
+        expect(you.gZone.contains(picked), isFalse);
+        for (final paid in cost) {
+          expect(you.drop, contains(paid));
+        }
+      },
+    );
+
+    test('a G unit comes back face up when the stride ends', () async {
+      final (store, deck) = await buildStrideDeck();
+      final (engine, you) = await readyToStride(store, deck);
+      final picked = you.gZone.first;
+      expect(you.generationBreak, 0, reason: 'all face down to begin with');
+
+      engine.stride(you, picked, you.hand.take(2).toList());
+      engine.endStride(you);
+
+      expect(you.gZone, contains(picked));
+      expect(you.isFaceUp(picked), isTrue);
+      expect(you.generationBreak, 1);
+    });
+
+    test('striding again puts the standing G unit back face up', () async {
+      final (store, deck) = await buildStrideDeck();
+      final (engine, you) = await readyToStride(store, deck);
+      final first = you.gZone.first;
+      final heart = you.vanguard!.card;
+      engine.stride(you, first, you.hand.take(2).toList());
+
+      final second = you.gZone.firstWhere((c) => c != first);
+      expect(engine.canStride(you), isTrue, reason: 'a second one is legal');
+      engine.stride(you, second, you.hand.take(2).toList());
+
+      expect(you.vanguard!.card, second);
+      expect(you.heart!.card, heart, reason: 'the same heart underneath');
+      expect(you.gZone, contains(first));
+      expect(you.isFaceUp(first), isTrue, reason: 'and it came back face up');
+    });
+
+    test('a card can be turned face up and back down by hand', () async {
+      final (store, deck) = await buildStrideDeck();
+      final (engine, you) = await readyToStride(store, deck);
+      final card = you.gZone.first;
+
+      engine.flipG(you, card, faceUp: true);
+      expect(you.isFaceUp(card), isTrue);
+      expect(you.generationBreak, 1);
+      expect(engine.state.log.last.text, contains('face up'));
+
+      engine.flipG(you, card, faceUp: false);
+      expect(you.isFaceUp(card), isFalse);
+      expect(you.generationBreak, 0);
+    });
+
+    test('flipping a card that is not in the G zone does nothing', () async {
+      final (store, deck) = await buildStrideDeck();
+      final (engine, you) = await readyToStride(store, deck);
+      final notThere = you.hand.first;
+
+      engine.flipG(you, notThere, faceUp: true);
+      expect(you.generationBreak, 0);
+    });
+
+    test('a strided G unit is face down again while it is out', () async {
+      final (store, deck) = await buildStrideDeck();
+      final (engine, you) = await readyToStride(store, deck);
+      final card = you.gZone.first;
+      engine.flipG(you, card, faceUp: true);
+      expect(you.generationBreak, 1);
+
+      engine.stride(you, card, you.hand.take(2).toList());
+      expect(
+        you.generationBreak,
+        0,
+        reason: 'it is on the vanguard circle, not in the G zone',
+      );
+    });
+
+    test('a stride needs a grade 3 under it', () async {
+      final (store, deck) = await buildStrideDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+
+      expect(engine.canStride(you), isFalse, reason: 'only a grade 1 so far');
+    });
+
+    test('the CPU strides once a turn, not until its hand is gone', () async {
+      final (store, deck) = await buildStrideDeck();
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine, engine.state.you);
+      engine.beginPlay();
+      final you = engine.state.you;
+      for (var i = 0; i < 3; i += 1) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      you.hand.clear();
+      while (you.hand.length < 10) {
+        final card = you.deck.lastWhere((c) => c.grade >= 2);
+        you.deck.remove(card);
+        you.hand.add(card);
+      }
+
+      ai.takeTurn();
+      expect(you.isStriding, isTrue, reason: 'it did stride');
+      expect(
+        you.gZone.length,
+        greaterThanOrEqualTo(6),
+        reason: 'and only the once',
+      );
+    });
+  });
+
   group('locking', () {
     /// A game with a rear-guard of each side's on the board to lock.
     Future<(PlaytestEngine, PlaytestSide, PlaytestSide)> boardWithRearGuards(

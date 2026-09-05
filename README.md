@@ -454,7 +454,16 @@ afterwards, the way looking through it always does.
 - **G zone** appears only for a deck that has one. With a grade 3 vanguard and
   grade 3 worth of cards in hand to discard, a G unit strides on top of the
   vanguard: it triple drives, the unit underneath stays as the heart, and both
-  go back where they came from when the turn ends.
+  go back where they came from when the turn ends. You pick the G unit and the
+  cards that pay for it, and striding again over a stride is allowed — the unit
+  standing there goes back to the G zone face up over the same heart.
+
+  G zone cards are **face up or face down**, because that is a resource. A G
+  unit returns face up when its stride ends, which is where a Generation Break
+  comes from, and any card can be turned up or down by hand for the abilities
+  that count them or pay by flipping them. The pile on the board reads `G ↑2`
+  when two are face up, so the number an ability is asking about is visible
+  without opening anything.
 
 ### What it will not do for you
 

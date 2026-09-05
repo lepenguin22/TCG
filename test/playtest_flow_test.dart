@@ -487,6 +487,30 @@ void main() {
       expect(find.textContaining('needs a grade 3 vanguard'), findsOneWidget);
     });
 
+    testWidgets('a G zone card can be turned face up and back', (tester) async {
+      final (store, deck) = await buildStrideDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(tester, find.text('G').last);
+      expect(find.textContaining('0 face up'), findsOneWidget);
+      expect(find.text('Flip face up'), findsWidgets);
+
+      await tester.tap(find.text('Flip face up').first);
+      await tester.pumpAndSettle();
+
+      // The board says how many are face up without opening the sheet.
+      expect(find.text('G ↑1'), findsOneWidget);
+
+      await tapOnBoard(tester, find.text('G ↑1'));
+      expect(find.textContaining('1 face up'), findsOneWidget);
+      expect(find.text('Turn face down'), findsOneWidget);
+      await tester.tap(find.text('Turn face down'));
+      await tester.pumpAndSettle();
+      expect(find.text('G ↑1'), findsNothing);
+    });
+
     testWidgets('the crest is on the board and explains itself', (
       tester,
     ) async {

@@ -156,6 +156,13 @@ class PlaytestSide {
 
   /// The G zone, which only a Premium deck that strides has.
   final List<GameCard> gZone = [];
+
+  /// The G zone cards that are face up.
+  ///
+  /// A G unit comes back face up when its stride ends, and abilities turn
+  /// them up as a cost, so how many are face up is a resource in its own
+  /// right -- it is what a Generation Break counts.
+  final Set<int> faceUpG = {};
   final List<GameCard> drop = [];
   final List<GameCard> soul = [];
   final List<GameCard> damage = [];
@@ -206,6 +213,13 @@ class PlaytestSide {
       damage.where((c) => !spentDamage.contains(c.instanceId)).length;
 
   bool isSpent(GameCard card) => spentDamage.contains(card.instanceId);
+
+  bool isFaceUp(GameCard card) => faceUpG.contains(card.instanceId);
+
+  /// How many G zone cards are face up: the number a Generation Break is
+  /// counted against.
+  int get generationBreak =>
+      gZone.where((card) => faceUpG.contains(card.instanceId)).length;
 
   /// Whether a G unit is currently riding on top of the vanguard.
   bool get isStriding => heart != null;

@@ -461,7 +461,11 @@ class _ZoneRail extends StatelessWidget {
         // Only a deck that strides has a G zone, so it only appears for one.
         if (side.gZone.isNotEmpty)
           _Pile(
-            label: 'G',
+            // Face up over total: the face-up half is the number an ability
+            // counting a Generation Break is asking about.
+            label: side.generationBreak > 0
+                ? 'G ↑${side.generationBreak}'
+                : 'G',
             count: side.gZone.length,
             highlight: game.engine.canStride(side),
             onTap: () => _showGZoneSheet(context, game, side),
@@ -907,42 +911,96 @@ void _showGZoneSheet(
         controller: scrollController,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
-          SectionHeader(title: 'G zone (${side.gZone.length})'),
+          SectionHeader(
+            title: 'G zone (${side.gZone.length})',
+            caption: '${side.generationBreak} face up',
+          ),
           Text(
-            side.isStriding
-                ? 'Striding already. The G unit goes back at end of turn.'
-                : canStride
+            canStride
                 ? 'Pick a G unit to stride, then discard cards worth grade 3 '
-                      'or more between them to pay for it.'
+                      'or more between them to pay for it. Striding again '
+                      'over a stride is allowed: the unit standing there '
+                      'goes back face up.'
                 : 'A stride needs a grade 3 vanguard and grade 3 worth of '
                       'cards in hand to discard.',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
+          const SizedBox(height: 6),
+          const Text(
+            'A G unit comes back face up when its stride ends. Turn cards up '
+            'and down here for the abilities that count them or pay with '
+            'them.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
           const SizedBox(height: 12),
+          // Same shape as the other piles: the card, then what can be done
+          // with it underneath, since two actions will not sit beside a name.
           for (final card in side.gZone)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CardImage(url: card.imageUrl, width: 32),
-              title: Text(
-                card.name,
-                style: const TextStyle(color: AppColors.text, fontSize: 14),
-              ),
-              subtitle: Text(
-                'Grade ${card.grade} · ${card.power} power',
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                ),
-              ),
-              trailing: !canStride
-                  ? null
-                  : TextButton(
-                      onPressed: () {
-                        Navigator.of(sheetContext).pop();
-                        _showStrideCostSheet(context, game, card);
-                      },
-                      child: const Text('Stride'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Opacity(
+                    opacity: side.isFaceUp(card) ? 1 : 0.4,
+                    child: CardImage(url: card.imageUrl, width: 32),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          card.name,
+                          style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          'Grade ${card.grade} · ${card.power} power · '
+                          '${side.isFaceUp(card) ? 'face up' : 'face down'}',
+                          style: TextStyle(
+                            color: side.isFaceUp(card)
+                                ? AppColors.warning
+                                : AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Wrap(
+                          spacing: 4,
+                          children: [
+                            if (canStride)
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(sheetContext).pop();
+                                  _showStrideCostSheet(context, game, card);
+                                },
+                                child: const Text('Stride'),
+                              ),
+                            if (yours)
+                              TextButton(
+                                onPressed: () {
+                                  game.flipG(
+                                    side,
+                                    card,
+                                    faceUp: !side.isFaceUp(card),
+                                  );
+                                  Navigator.of(sheetContext).pop();
+                                },
+                                child: Text(
+                                  side.isFaceUp(card)
+                                      ? 'Turn face down'
+                                      : 'Flip face up',
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
+                  ),
+                ],
+              ),
             ),
         ],
       ),

@@ -394,6 +394,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void flipG(PlaytestSide side, GameCard card, {required bool faceUp}) {
+    engine.flipG(side, card, faceUp: faceUp);
+    _sync();
+  }
+
   void toggleLock(PlaytestSide side, Circle circle) {
     if (side.field[circle]?.locked ?? false) {
       engine.unlock(side, circle);

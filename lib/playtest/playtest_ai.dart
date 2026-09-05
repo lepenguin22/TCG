@@ -219,8 +219,12 @@ class PlaytestAi {
   }
 
   /// Strides when the deck can, which is most of what a G zone is worth.
+  ///
+  /// Once a turn, though the rules allow more: striding over its own stride
+  /// costs another three grades out of hand for one bigger body, and a CPU
+  /// that did it every turn would simply discard itself out of the game.
   bool _strideStep() {
-    if (!engine.canStride(me)) return false;
+    if (me.isStriding || !engine.canStride(me)) return false;
 
     // The biggest G unit: with no ability text to weigh, power is what is
     // left to choose on.
