@@ -10,7 +10,7 @@ The site answers 404 to a bare request; it wants a browser's headers. That is
 the whole reason it looked as though it had moved.
 
 Run from CI, where the site is reachable:
-    python3 tool/scrape_cardlist.py [--limit N] [--expansion N]
+    python3 tool/scrape_cardlist.py [--limit N] [--expansion N] [--card NO]
 """
 
 from __future__ import annotations
@@ -156,6 +156,19 @@ def card_numbers(expansion: int) -> list[tuple[str, str, str]]:
     return list(seen.values())
 
 
+CARD_IMAGE = re.compile(r'src="(/wordpress/wp-content/images/cardlist/[^"]+)"')
+
+
+def card_image(html: str) -> str:
+    """The card's own art, off its page.
+
+    A card read through a set listing brings its image with it. One asked for
+    by number has no listing to bring anything, so it comes off the page.
+    """
+    match = CARD_IMAGE.search(html)
+    return match.group(1) if match else ""
+
+
 def parse_card(number: str, name: str, image: str, html: str) -> dict[str, object]:
     """Reads one card's own page.
 
@@ -255,6 +268,11 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--expansion", type=int, action="append")
+    # Named cards, for the promos that no set sweep reaches: the mirror's PR
+    # set stopped where the mirror did, and a promo printed since is missing
+    # from the database with nothing short of re-reading thousands of cards
+    # to find it. Asking for the number is cheaper and repeatable.
+    parser.add_argument("--card", action="append", default=[])
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--from-expansion", type=int, default=243)
     parser.add_argument("--dump-type", default="")
@@ -264,7 +282,9 @@ def main() -> int:
     parser.add_argument("--max-failures", type=int, default=5)
     args = parser.parse_args()
 
-    if args.expansion:
+    if args.card and not args.expansion:
+        wanted = {}
+    elif args.expansion:
         wanted = {number: "" for number in args.expansion}
     else:
         wanted = {
@@ -323,6 +343,29 @@ def main() -> int:
         }
         print(f"  expansion={number} {product[:50]}: {len(cards)} cards")
         sys.stdout.flush()
+
+    # Cards asked for by number, kept in a bucket of their own so a later set
+    # sweep does not wipe them and they do not pretend to be a set.
+    if args.card:
+        bucket = sets.get("named", {"productName": "Named cards", "cards": []})
+        existing = {card["number"]: card for card in bucket["cards"]}  # type: ignore[index]
+        for number in args.card:
+            try:
+                page = fetch(card_url(number), missing_ok=True)
+            except (RuntimeError, UnicodeError) as error:
+                failures.append(f"{number}: {error}")
+                continue
+            if page is None:
+                failures.append(f"{number}: no such card on the site")
+                continue
+            card = parse_card(number, "", card_image(page), page)
+            if not card:
+                failures.append(f"{number}: page did not parse")
+                continue
+            existing[number] = card
+            print(f"  {number}: {card['name']} ({card['productName']})")
+        bucket["cards"] = list(existing.values())  # type: ignore[index]
+        sets["named"] = bucket
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(sets, ensure_ascii=False), encoding="utf-8")
