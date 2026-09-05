@@ -74,7 +74,11 @@ a real release key first if you ever go that way.
   hand, are kept for reuse in every later deck. Editing one updates it
   everywhere. Cards saved before the database existed are repaired from it on
   the next launch, filling in only what they are missing — anything you set
-  yourself always wins.
+  yourself always wins. The repair matches on the card number the way an
+  import does, so a card saved under a Japanese printing, or one carrying its
+  rarity, still finds the English entry; a number two different cards could
+  answer to repairs neither, since guessing there writes one card's abilities
+  onto the other.
 - **Breakdown screen** with the grade curve, trigger spread, card types and
   nations.
 - **Import from Deck Log.** Paste a share link or deck code from Bushiroad's

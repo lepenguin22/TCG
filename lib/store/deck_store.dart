@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../games/card_catalog.dart';
 import '../games/game_definition.dart';
 import '../games/games.dart';
+import '../games/vanguard/vanguard_numbers.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
 
@@ -24,8 +25,11 @@ const _backfillKey = 'tcgdecks.v1.backfill';
 /// predate the D-series" answer. Version 3 tells apart cards that share a
 /// name and every stat but do different things -- DZ-SS13/002 Blaster Blade
 /// and D-BT05/005 Blaster Blade were one entry until then, so decks holding
-/// either are carrying the wrong card's abilities and artwork.
-const cardBackfillVersion = 3;
+/// either are carrying the wrong card's abilities and artwork. Version 4
+/// carries the promos the database could never read before, and repairs cards
+/// saved under a number the database spells differently -- a Japanese
+/// printing, or one carrying its rarity.
+const cardBackfillVersion = 4;
 
 /// How many decks and cards an import brought in.
 class ImportResult {
@@ -258,6 +262,14 @@ class DeckStore extends ChangeNotifier {
     required List<CatalogCard> catalog,
   }) {
     final byNumber = <String, CatalogCard>{};
+    // The same numbers with the language and rarity markers taken off, which
+    // is how an imported card saved under a Japanese printing -- or one
+    // carrying its rarity -- finds the English entry the database holds. A
+    // key two different cards share is no use for identifying either, so it
+    // is dropped rather than guessed at.
+    final byStrict = <String, CatalogCard>{};
+    final byLoose = <String, CatalogCard>{};
+    final ambiguous = <String>{};
     final byName = <String, CatalogCard>{};
     for (final entry in catalog) {
       // Every printing, not just the one the catalogue shows: a card saved
@@ -265,9 +277,28 @@ class DeckStore extends ChangeNotifier {
       // and never be repaired.
       for (final printed in entry.allNumbers) {
         final number = printed.trim().toLowerCase();
-        if (number.isNotEmpty) byNumber.putIfAbsent(number, () => entry);
+        if (number.isEmpty) continue;
+        byNumber.putIfAbsent(number, () => entry);
+        for (final loose in [
+          (decklogNumberKey(printed), byStrict),
+          (decklogLooseNumberKey(printed), byLoose),
+        ]) {
+          final key = loose.$1;
+          final into = loose.$2;
+          if (key.isEmpty) continue;
+          final held = into[key];
+          if (held == null) {
+            into[key] = entry;
+          } else if (held != entry) {
+            ambiguous.add(key);
+          }
+        }
       }
       byName.putIfAbsent(entry.lowerName, () => entry);
+    }
+    for (final key in ambiguous) {
+      byStrict.remove(key);
+      byLoose.remove(key);
     }
 
     var changed = 0;
@@ -277,7 +308,12 @@ class DeckStore extends ChangeNotifier {
       CatalogCard? match;
       var byPrinting = false;
       if (card.gameId == gameId) {
-        match = (number != null && number.isNotEmpty) ? byNumber[number] : null;
+        if (number != null && number.isNotEmpty) {
+          match =
+              byNumber[number] ??
+              byStrict[decklogNumberKey(number)] ??
+              byLoose[decklogLooseNumberKey(number)];
+        }
         byPrinting = match != null;
         // Fall back to the name only when the card has no number of its own,
         // so a card identified by number is never matched to a different one.

@@ -27,6 +27,16 @@ final _catalog = [
     'no': 'DZ-BT01/030EN',
     'sr': 'd',
   }),
+  _card('Dancing Night Rose of the Nether Hour', {
+    'g': 3,
+    't': 'order',
+    'na': 'stoicheia',
+    'no': 'D-PR/1020EN',
+    'no2': ['D-PR/1021EN'],
+    'e': 'This card can be played from drop.',
+    'i': 'dpr/dpr_1020.png',
+    'sr': 'd',
+  }),
 ];
 
 Future<DeckStore> loadedStore() async {
@@ -42,6 +52,85 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('a card the catalog could not read before is filled in now', () async {
+    final store = await loadedStore();
+    // What an import of a deck holding a promo saved while the database had
+    // never heard of it: the number the deck named, and little else.
+    final card = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Dancing Night Rose of the Nether Hour',
+      attributes: {'cardNo': 'D-PR/1020EN', 'grade': '3'},
+    );
+
+    expect(await backfillLibraryFromCatalog(store, seededCatalog()), 1);
+    final updated = store.cardById(card.id)!;
+    expect(updated.attributes['cardType'], 'order');
+    expect(updated.attributes['nation'], 'stoicheia');
+    expect(updated.attributes['effect'], contains('played from drop'));
+    expect(updated.attributes['imageUrl'], contains('dpr_1020.png'));
+  });
+
+  test('a card saved under the other printing is filled in too', () async {
+    final store = await loadedStore();
+    final card = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Dancing Night Rose of the Nether Hour',
+      attributes: {'cardNo': 'D-PR/1021EN'},
+    );
+
+    expect(await backfillLibraryFromCatalog(store, seededCatalog()), 1);
+    expect(store.cardById(card.id)!.attributes['grade'], '3');
+  });
+
+  test('a Japanese printing finds the English entry', () async {
+    final store = await loadedStore();
+    // The Japanese printing of the same card: the same number without the EN
+    // the English one carries, which is the only bridge between them.
+    final card = store.saveCard(
+      gameId: 'vanguard',
+      name: '宵闇の薔薇',
+      attributes: {'cardNo': 'D-PR/1020'},
+    );
+
+    expect(await backfillLibraryFromCatalog(store, seededCatalog()), 1);
+    final updated = store.cardById(card.id)!;
+    expect(updated.attributes['grade'], '3');
+    expect(updated.attributes['effect'], contains('played from drop'));
+    expect(updated.name, '宵闇の薔薇', reason: 'your own name is never replaced');
+  });
+
+  test('a printing carrying its rarity finds it as well', () async {
+    final store = await loadedStore();
+    final card = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Dragonic Overlord',
+      attributes: {'cardNo': 'D-BT02/001RRR'},
+    );
+
+    expect(await backfillLibraryFromCatalog(store, seededCatalog()), 1);
+    expect(store.cardById(card.id)!.attributes['nation'], 'dragon-empire');
+  });
+
+  test('a number two cards could answer to repairs neither', () async {
+    final store = await loadedStore();
+    final card = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Ambiguous',
+      attributes: {'cardNo': 'D-XX/001'},
+    );
+
+    // Two different cards whose numbers reduce to the same key: guessing
+    // between them would write one card's abilities onto the other.
+    final catalog = CardCatalog()
+      ..seed(_asset, [
+        _card('One', {'no': 'D-XX/001EN', 'g': 1, 'e': 'the first'}),
+        _card('Two', {'no': 'D-XX/001R', 'g': 2, 'e': 'the second'}),
+      ]);
+
+    expect(await backfillLibraryFromCatalog(store, catalog), 0);
+    expect(store.cardById(card.id)!.attributes['grade'], isNull);
+  });
 
   test('a card saved before the catalog gets its details filled in', () async {
     final store = await loadedStore();

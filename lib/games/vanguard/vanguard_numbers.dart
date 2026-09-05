@@ -36,3 +36,31 @@ String? seriesFromCardNumber(String number) {
 
   return null;
 }
+
+/// A card number reduced to what the Japanese and English printings share.
+///
+/// The two releases of a set number their cards identically apart from the EN
+/// the English ones carry: `D-BT02/001` and `D-BT02/001EN` are the same card.
+/// Dropping that marker is therefore the whole trick behind importing a deck
+/// from the Japanese site and showing it in English -- the number bridges the
+/// languages, where the name cannot.
+String decklogNumberKey(String raw) =>
+    raw.trim().toLowerCase().replaceFirst(RegExp(r'en(?=$|[^a-z0-9])'), '');
+
+/// The same, reduced further to the set and the printed number, with every
+/// letter after the digits dropped.
+///
+/// This is what bridges a Japanese number to an English one. Where the English
+/// printing carries EN, the Japanese one carries its rarity in the same place:
+/// `DZ-SS14/001R` and `DZ-SS14/001EN` are the same card, and only stripping
+/// both down to `dz-ss14/001` finds it. Variant markers go too -- the `-W` of
+/// an alternate art, the ` SGR` of a rarity.
+///
+/// Two printings can share this key, so it is only ever used where it picks
+/// out a single card.
+String decklogLooseNumberKey(String raw) => raw
+    .trim()
+    .toLowerCase()
+    .replaceFirst(RegExp(r'\s+\S+$'), '')
+    .replaceFirst(RegExp(r'-[a-z]$'), '')
+    .replaceFirstMapped(RegExp(r'^(.*\d)[a-z]+$'), (match) => match[1]!);
