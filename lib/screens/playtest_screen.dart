@@ -813,120 +813,20 @@ void _showDeckSheet(
   );
 }
 
-/// The ride deck crest: what it says, and the energy it has charged.
+/// The crest zone: what is in it, what it charges, and what can be added.
+///
+/// A zone rather than a slot, because a player can hold more than one crest at
+/// once -- the Energy Generator out of the ride deck and a stride deck's own
+/// crest beside it. Playing the second must not cost the first, so this shows
+/// what is there and offers what else could be, rather than making one crest
+/// the only crest.
 void _showCrestSheet(
   BuildContext context,
   PlaytestController game,
   PlaytestSide side,
 ) {
-  final crest = side.crest;
-  if (crest == null) {
-    _showCrestChooser(context, game, side);
-    return;
-  }
-  final charge = game.engine.crestCharge(side);
-
-  showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: AppColors.surface,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (sheetContext) => SafeArea(
-      child: SingleChildScrollView(
-        // The power field brings up the keyboard, so the sheet is padded
-        // out from under it rather than left half covered.
-        padding: EdgeInsets.fromLTRB(
-          20,
-          0,
-          20,
-          24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _CardHeading(card: crest),
-            const SizedBox(height: 14),
-            Text(
-              !side.crestInPlay
-                  ? 'Still in the ride deck. It reaches the crest zone on the '
-                        'first ride — which is why whoever goes first charges '
-                        'nothing on turn one.'
-                  : charge == 0
-                  // A stride deck's crest charges nothing: it is permission
-                  // to stride, not an energy engine, and saying it charges
-                  // zero every turn would read as a fault.
-                  ? 'In the crest zone. It charges no energy of its own — '
-                        'what it does is on the card.'
-                  : '${side.energy} energy, of a maximum of '
-                        '${PlaytestSide.energyCap}. It charges $charge at the '
-                        'beginning of every one of ${side.name == 'You' ? 'your' : 'its'} '
-                        'ride phases, on its own.',
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 12,
-                height: 1.45,
-              ),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Spending it is an ability, so it is yours to apply',
-              style: TextStyle(
-                color: AppColors.textFaint,
-                fontSize: 11,
-                letterSpacing: 0.6,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final cost in [1, 2, 3, 7])
-                  OutlinedButton(
-                    onPressed: side.energy < cost
-                        ? null
-                        : () => game.setEnergy(side, side.energy - cost),
-                    child: Text('Blast $cost'),
-                  ),
-                OutlinedButton(
-                  onPressed: () => game.setEnergy(side, side.energy + 1),
-                  child: const Text('Charge 1'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            // A crest played by hand is one chosen by hand, so it can be
-            // chosen again. A crest that came out of the ride deck goes back
-            // the same way, which is what makes a mis-tap recoverable.
-            OutlinedButton(
-              onPressed: () {
-                game.removeCrest(side);
-                Navigator.of(sheetContext).pop();
-              },
-              child: const Text('Take it out of the crest zone'),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-/// Choosing a crest to play, for a deck that brings none of its own.
-///
-/// A Divinez deck carries its crest in its ride deck and never needs this. A
-/// stride deck carries none at all, so the crest a playtest wants has to be
-/// named -- and the ones worth naming are the ones the card database knows,
-/// plus anything the player has entered themselves.
-void _showCrestChooser(
-  BuildContext context,
-  PlaytestController game,
-  PlaytestSide side,
-) {
-  final store = context.read<DeckStore>();
   final definition = gameById(game.gameId);
+  final store = context.read<DeckStore>();
   final fromLibrary = store.cards
       .where(
         (card) =>
@@ -941,50 +841,152 @@ void _showCrestChooser(
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
-      child: FutureBuilder<List<CatalogCard>>(
-        future: _crestOptions(context, definition),
-        builder: (builderContext, snapshot) {
-          final catalogCrests = snapshot.data ?? const <CatalogCard>[];
-          final options = <CardDefinition>[
-            ...fromLibrary,
-            for (final entry in catalogCrests)
-              if (!fromLibrary.any((c) => c.name == entry.name))
-                CardDefinition(
-                  id: 'catalog:${entry.attributes['cardNo'] ?? entry.name}',
-                  gameId: definition.id,
-                  name: entry.name,
-                  attributes: entry.attributes,
-                  createdAt: DateTime.fromMillisecondsSinceEpoch(0),
-                  updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
-                ),
-          ];
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        builder: (_, scrollController) => FutureBuilder<List<CatalogCard>>(
+          future: _crestOptions(context, definition),
+          builder: (builderContext, snapshot) {
+            final catalogCrests = snapshot.data ?? const <CatalogCard>[];
+            final options = <CardDefinition>[
+              ...fromLibrary,
+              for (final entry in catalogCrests)
+                if (!fromLibrary.any((c) => c.name == entry.name))
+                  CardDefinition(
+                    id: 'catalog:${entry.attributes['cardNo'] ?? entry.name}',
+                    gameId: definition.id,
+                    name: entry.name,
+                    attributes: entry.attributes,
+                    createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+                    updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+                  ),
+            ];
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               children: [
-                SectionHeader(title: '${side.name}: crest zone'),
+                SectionHeader(
+                  title: 'Crest zone (${side.crestZone.length})',
+                  caption: '${side.energy} of ${PlaytestSide.energyCap} energy',
+                ),
+                if (side.rideCrest != null)
+                  Text(
+                    '${side.rideCrest!.name} is still in the ride deck. It '
+                    'reaches the crest zone on the first ride — which is why '
+                    'whoever goes first charges nothing on turn one.',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                if (side.crestZone.isEmpty && side.rideCrest == null)
+                  const Text(
+                    'Empty. A ride deck crest puts itself here on the first '
+                    'ride; a stride deck\'s crest is put here by an ability, '
+                    'so you play it below when that ability fires.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+
+                // What is in the zone, each with what it charges and a way
+                // back out. One crest leaving never disturbs the others.
+                for (final crest in side.crestZone) ...[
+                  const SizedBox(height: 14),
+                  _CardHeading(card: crest),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          game.engine.chargeOf(crest) == 0
+                              ? 'Charges no energy of its own — what it does '
+                                    'is on the card.'
+                              : 'Charges ${game.engine.chargeOf(crest)} at the '
+                                    'beginning of every ride phase, on its own.',
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          game.removeCrest(side, crest);
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: const Text('Take it out'),
+                      ),
+                    ],
+                  ),
+                ],
+
+                const SizedBox(height: 14),
                 const Text(
-                  'Empty. A ride deck crest puts itself here on the first '
-                  'ride. A stride deck\'s crest does not: an ability puts it '
-                  'into play, so it is played here, by you, when that '
-                  'ability fires.',
+                  'Spending it is an ability, so it is yours to apply',
+                  style: TextStyle(
+                    color: AppColors.textFaint,
+                    fontSize: 11,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final cost in [1, 2, 3, 7])
+                      OutlinedButton(
+                        onPressed: side.energy < cost
+                            ? null
+                            : () => game.setEnergy(side, side.energy - cost),
+                        child: Text('Blast $cost'),
+                      ),
+                    OutlinedButton(
+                      onPressed: () => game.setEnergy(side, side.energy + 1),
+                      child: const Text('Charge 1'),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 18),
+                const Text(
+                  'Play a crest',
+                  style: TextStyle(
+                    color: AppColors.textFaint,
+                    fontSize: 11,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Added to the crest zone beside whatever is already there.',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
-                const SizedBox(height: 12),
                 if (snapshot.connectionState == ConnectionState.waiting)
-                  const Text(
-                    'Reading the card database…',
-                    style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Reading the card database…',
+                      style: TextStyle(
+                        color: AppColors.textFaint,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 if (snapshot.connectionState != ConnectionState.waiting &&
                     options.isEmpty)
-                  const Text(
-                    'No ride deck crest to play. Add one to your library and '
-                    'it will show up here.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'No crest to play. Add one to your library and it will '
+                      'show up here.',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 for (final option in options)
                   ListTile(
@@ -1001,8 +1003,8 @@ void _showCrestChooser(
                       ),
                     ),
                     subtitle: Text(
-                      option.attributes['effect']?.split('\n').last ??
-                          'A ride deck crest.',
+                      option.attributes['effect']?.split('\n').first ??
+                          'A crest.',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1019,9 +1021,9 @@ void _showCrestChooser(
                     ),
                   ),
               ],
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     ),
   );

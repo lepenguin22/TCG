@@ -121,7 +121,7 @@ class PlaytestEngine {
     final crestIndex = side.rideDeck.indexWhere(
       (c) => c.cardType == 'ride-deck-crest',
     );
-    if (crestIndex >= 0) side.crest = side.rideDeck.removeAt(crestIndex);
+    if (crestIndex >= 0) side.rideCrest = side.rideDeck.removeAt(crestIndex);
 
     final firstIndex = side.rideDeck.indexWhere((c) => c.grade == 0);
     if (firstIndex < 0) return;
@@ -213,20 +213,15 @@ class PlaytestEngine {
   /// crest charges on its own from the next ride phase, and pays the three
   /// its text owes whoever went second, since that is what the card says.
   void playCrest(PlaytestSide side, CardDefinition card) {
-    side.crest = GameCard(_nextInstanceId++, card);
-    side.crestInPlay = false;
-    _placeCrest(side);
+    _enterCrestZone(side, GameCard(_nextInstanceId++, card));
   }
 
   /// Takes the crest back out of the crest zone.
   ///
   /// The energy it charged stays: it was spent or it was not, and taking the
   /// card away does not unspend it.
-  void removeCrest(PlaytestSide side) {
-    final crest = side.crest;
-    if (crest == null) return;
-    side.crest = null;
-    side.crestInPlay = false;
+  void removeCrest(PlaytestSide side, GameCard crest) {
+    if (!side.crestZone.remove(crest)) return;
     state.note(
       '${side.name} takes ${crest.name} out of the crest zone.',
       by: side,
@@ -238,20 +233,23 @@ class PlaytestEngine {
   /// Read off the crest where its text says, so a crest printing a different
   /// number is followed rather than overruled. Three is the Energy Generator's
   /// number and the default for a crest whose text the database never carried.
-  int crestCharge(PlaytestSide side) {
-    final crest = side.crest;
-    if (crest == null) return 0;
+  int crestCharge(PlaytestSide side) =>
+      side.crestZone.fold(0, (sum, crest) => sum + chargeOf(crest));
+
+  /// What one crest charges every ride phase, off its own text.
+  ///
+  /// A crest whose text says nothing about energy charges none: a stride
+  /// deck's crest is permission to stride, not an energy engine. The three is
+  /// only for a crest with no text at all, which is the Energy Generator as
+  /// the database once carried it -- blank, and charging three in every game
+  /// that has ever been played with it.
+  int chargeOf(GameCard crest) {
     final match = RegExp(
       r'Energy-Charge\s+(\d+)',
       caseSensitive: false,
     ).firstMatch(crest.effect);
     final printed = int.tryParse(match?.group(1) ?? '');
     if (printed != null) return printed;
-    // A crest whose text says nothing about energy charges none: a stride
-    // deck's crest is permission to stride, not an energy engine. The three
-    // is only for a crest with no text at all, which is the Energy Generator
-    // as the database once carried it -- blank, and charging three in every
-    // game that has ever been played with it.
     return crest.effect.trim().isEmpty ? 3 : 0;
   }
 
@@ -391,15 +389,27 @@ class PlaytestEngine {
   /// went first has already passed the beginning of their ride phase with no
   /// crest in play, so they charge nothing on turn one.
   void _placeCrest(PlaytestSide side) {
-    final crest = side.crest;
-    if (crest == null || side.crestInPlay) return;
-    side.crestInPlay = true;
+    final crest = side.rideCrest;
+    if (crest == null) return;
+    side.rideCrest = null;
+    _enterCrestZone(side, crest);
+  }
+
+  /// Puts one crest into the crest zone, however it got there.
+  ///
+  /// Whatever is already in the zone stays: a deck can hold the Energy
+  /// Generator and a stride deck's crest at the same time, and playing the
+  /// second must not cost the first.
+  void _enterCrestZone(PlaytestSide side, GameCard crest) {
+    side.crestZone.add(crest);
     state.note(
       '${side.name} puts ${crest.name} into the crest zone.',
       by: side,
     );
+    // "and if you went second, [Energy-Charge 3]" -- the crest's own clause,
+    // paid by the crest arriving rather than by the turn.
     if (!side.goesFirst) {
-      _chargeEnergy(side, crestCharge(side));
+      _chargeEnergy(side, chargeOf(crest));
     }
   }
 

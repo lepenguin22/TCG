@@ -187,16 +187,24 @@ class PlaytestSide {
   /// "[CONT]:You may have up to ten energy."
   static const energyCap = 10;
 
-  /// The ride deck crest this deck brought, if it has one.
-  GameCard? crest;
+  /// The ride deck crest this deck brought, while it is still in the ride
+  /// deck. It moves into the crest zone on the first ride.
+  GameCard? rideCrest;
 
-  /// Whether the crest has reached the crest zone.
+  /// The crest zone.
   ///
-  /// It gets there on the first ride, not at the start of the game, and that
-  /// timing is the whole of the first turn energy rule: the charge happens at
-  /// the beginning of the ride phase, and on turn one the crest is not there
-  /// yet to do it.
-  bool crestInPlay = false;
+  /// A list, because a player can have more than one crest in it at once: the
+  /// Energy Generator out of the ride deck, and a stride deck's own crest put
+  /// there by an ability, both at the same time.
+  final List<GameCard> crestZone = [];
+
+  /// Whether anything is in the crest zone.
+  ///
+  /// A ride deck crest gets there on the first ride, not at the start of the
+  /// game, and that timing is the whole of the first turn energy rule: the
+  /// charge happens at the beginning of the ride phase, and on turn one the
+  /// crest is not there yet to do it.
+  bool get crestInPlay => crestZone.isNotEmpty;
 
   /// Whether this side took the first turn of the game. The crest pays the
   /// player who went second three energy to make up for it.

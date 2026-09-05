@@ -1284,7 +1284,7 @@ void main() {
       final engine = engineFor(store, deck);
       final you = engine.state.you;
 
-      expect(you.crest, isNotNull, reason: 'the deck brought one');
+      expect(you.rideCrest, isNotNull, reason: 'the deck brought one');
       expect(you.crestInPlay, isFalse, reason: 'not in the crest zone yet');
       expect(you.energy, 0);
     });
@@ -1402,7 +1402,7 @@ void main() {
       final engine = engineFor(store, deck);
       engine.beginPlay();
       final you = engine.state.you;
-      expect(you.crest, isNull);
+      expect(you.rideCrest, isNull);
 
       engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
       for (var i = 0; i < 6; i += 1) {
@@ -1414,7 +1414,9 @@ void main() {
     test('the charge is read off the crest text', () async {
       final (store, deck) = await buildEnergyDeck();
       final engine = engineFor(store, deck);
-      expect(engine.crestCharge(engine.state.you), 3);
+      // Off the card, before it has reached the crest zone: what the crest
+      // will charge is a property of the crest, not of where it is.
+      expect(engine.chargeOf(engine.state.you.rideCrest!), 3);
 
       // A crest printing a different number is followed, not overruled.
       final (otherStore, otherDeck) = await buildDeck();
@@ -1433,7 +1435,7 @@ void main() {
         otherStore,
         otherStore.decks.firstWhere((d) => d.id == otherDeck.id),
       );
-      expect(other.crestCharge(other.state.you), 5);
+      expect(other.chargeOf(other.state.you.rideCrest!), 5);
     });
 
     test(
@@ -1548,10 +1550,10 @@ void main() {
       final engine = engineFor(store, deck);
       engine.beginPlay();
       final you = engine.state.you;
-      expect(you.crest, isNull, reason: 'this deck brings none');
+      expect(you.crestZone, isEmpty, reason: 'this deck brings none');
 
       engine.playCrest(you, crestCard(store));
-      expect(you.crest!.name, 'Energy Generator');
+      expect(you.crestZone.single.name, 'Energy Generator');
       expect(you.crestInPlay, isTrue);
       expect(engine.crestCharge(you), 3, reason: 'read off its own text');
     });
@@ -1596,6 +1598,51 @@ void main() {
       engine.endTurn(); // back to you
       expect(you.energy, 3, reason: 'your ride phase charged it');
     });
+
+    test(
+      'a stride crest joins the Energy Generator, not replaces it',
+      () async {
+        // The case this is all for: a Divinez deck's Energy Generator comes out
+        // of the ride deck on the first ride, and the stride deck crest an
+        // ability puts into play stands beside it. Neither costs the other.
+        final (store, deck) = await buildEnergyDeck();
+        final engine = engineFor(store, deck);
+        engine.beginPlay();
+        final you = engine.state.you;
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+        expect(you.crestZone.single.name, 'Energy Generator');
+
+        engine.playCrest(
+          you,
+          store.saveCard(
+            gameId: 'vanguard',
+            name: 'Vampire Princess of Night Fog, Nightrose',
+            attributes: {
+              'cardType': 'crest',
+              'effect':
+                  '[CONT]:You can perform [Stride], and cannot ride grade '
+                  '3 or greater cards without "Nightrose" in their card names.',
+            },
+          ),
+        );
+
+        expect(you.crestZone, hasLength(2));
+        expect(
+          you.crestZone.map((c) => c.name),
+          contains('Energy Generator'),
+          reason: 'the generator stayed where it was',
+        );
+        expect(
+          engine.crestCharge(you),
+          3,
+          reason: 'the generator still charges, the stride crest charges none',
+        );
+
+        // And taking one out leaves the other alone.
+        engine.removeCrest(you, you.crestZone.last);
+        expect(you.crestZone.single.name, 'Energy Generator');
+      },
+    );
 
     test('a stride deck crest charges no energy', () async {
       final (store, deck) = await buildDeck();
@@ -1652,14 +1699,14 @@ void main() {
       engine.playCrest(you, crestCard(store));
       engine.setEnergy(you, 5);
 
-      engine.removeCrest(you);
-      expect(you.crest, isNull);
+      engine.removeCrest(you, you.crestZone.single);
+      expect(you.crestZone, isEmpty);
       expect(you.crestInPlay, isFalse);
       expect(you.energy, 5, reason: 'spent or not, it was charged');
       expect(engine.crestCharge(you), 0, reason: 'nothing charges it now');
     });
 
-    test('a second crest replaces the first', () async {
+    test('a second crest joins the first rather than replacing it', () async {
       final (store, deck) = await buildDeck();
       final engine = engineFor(store, deck);
       engine.beginPlay();
@@ -1677,8 +1724,15 @@ void main() {
         },
       );
       engine.playCrest(you, other);
-      expect(you.crest!.name, 'Another Crest');
-      expect(engine.crestCharge(you), 1, reason: 'the new one\'s number');
+      expect(you.crestZone.map((c) => c.name), [
+        'Energy Generator',
+        'Another Crest',
+      ], reason: 'a crest zone holds more than one');
+      expect(
+        engine.crestCharge(you),
+        4,
+        reason: 'three from one and one from the other',
+      );
     });
   });
 

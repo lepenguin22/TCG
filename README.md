@@ -469,18 +469,19 @@ fire mid-battle, so each of those piles offers a **Call** beside its own action
 for any unit the vanguard's grade allows, and a circle takes it in the battle
 phase as readily as in the main one. A call out of the deck shuffles it
 afterwards, the way looking through it always does.
-- **Crest** is always there, greyed until something reaches it. There are two
-  kinds and they arrive differently. A **ride deck crest** — the Energy
-  Generator — comes with the deck and puts itself in on the first ride. A
-  **stride deck's crest** — `DZ-SS03/T01EN` Nightrose, `DZ-SS02/T01EN` Harri
-  and the rest — is not in the deck at all: an ability puts it into play, so
-  the empty crest zone offers them and you play the right one when that
-  ability fires. Either can be taken back out again.
+- **Crest** is a zone, not a slot: a player holds more than one at once. A
+  **ride deck crest** — the Energy Generator — comes with the deck and puts
+  itself in on the first ride. A **stride deck's crest** — `DZ-SS03/T01EN`
+  Nightrose, `DZ-SS02/T01EN` Harri and the rest — is not in the deck at all:
+  an ability puts it into play, so the crest zone offers them and you play the
+  right one when that ability fires. It lands **beside** whatever is already
+  there; the Energy Generator does not have to come out for it, because in the
+  game it does not. Each can be taken back out on its own.
 
-  What it charges is read off the card, so a stride crest charges nothing —
-  it is permission to stride, not an energy engine — while the Energy
-  Generator charges its three every ride phase and pays the three it owes
-  whoever went second.
+  What each charges is read off its own card and added up: a stride crest
+  charges nothing — it is permission to stride, not an energy engine — while
+  the Energy Generator charges its three every ride phase and pays the three
+  it owes whoever went second.
 - **G zone** appears only for a deck that has one. With a grade 3 vanguard and
   grade 3 worth of cards in hand to discard, a G unit strides on top of the
   vanguard: it triple drives, the unit underneath stays as the heart, and both

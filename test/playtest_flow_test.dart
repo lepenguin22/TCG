@@ -522,9 +522,12 @@ void main() {
       expect(find.text('Crest'), findsNWidgets(2));
       await tapOnBoard(tester, find.text('Crest').last);
 
-      expect(find.text('Energy Generator'), findsOneWidget);
-      // Turn one, before riding: it says why nothing has been charged.
-      expect(find.textContaining('Still in the ride deck'), findsOneWidget);
+      // Turn one, before riding: it names the crest waiting in the ride deck
+      // and says why nothing has been charged.
+      expect(
+        find.textContaining('Energy Generator is still in the ride deck'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('riding charges the crest into play', (tester) async {
@@ -1133,12 +1136,13 @@ void main() {
       await tester.tap(find.text('Play'));
       await tester.pumpAndSettle();
 
-      // It is in play, and its own sheet takes over from the chooser.
+      // It is in the zone, saying what it charges, with a way back out.
       await tapOnBoard(tester, find.text('Crest').last);
-      expect(find.textContaining('It charges 3'), findsOneWidget);
-      expect(find.text('Take it out of the crest zone'), findsOneWidget);
+      expect(find.textContaining('Crest zone (1)'), findsOneWidget);
+      expect(find.textContaining('Charges 3'), findsOneWidget);
+      expect(find.text('Take it out'), findsOneWidget);
 
-      await tester.tap(find.text('Take it out of the crest zone'));
+      await tester.tap(find.text('Take it out'));
       await tester.pumpAndSettle();
       await tapOnBoard(tester, find.text('Crest').last);
       expect(
@@ -1173,8 +1177,60 @@ void main() {
       await tapOnBoard(tester, find.text('Crest').last);
       // It is permission to stride, not an energy engine, so it does not
       // claim to charge zero every turn.
-      expect(find.textContaining('charges no energy'), findsOneWidget);
-      expect(find.textContaining('It charges 0'), findsNothing);
+      expect(find.textContaining('Charges no energy'), findsOneWidget);
+      expect(find.textContaining('Charges 0'), findsNothing);
+    });
+
+    testWidgets('a crest is played beside the one already there', (
+      tester,
+    ) async {
+      // The Energy Generator comes out of the ride deck; the stride deck's
+      // crest is played on top of that, without taking the generator out.
+      final (store, deck) = await buildEnergyDeck();
+      store.saveCard(
+        gameId: 'vanguard',
+        name: 'Vampire Princess of Night Fog, Nightrose',
+        attributes: {
+          'cardType': 'crest',
+          'effect': '[CONT]:You can perform [Stride].',
+        },
+      );
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Crest').last);
+      expect(find.textContaining('Crest zone (1)'), findsOneWidget);
+
+      // The crest zone offers another without asking for the first back. The
+      // list of them sits below what is already in the zone, so scroll to it.
+      for (var i = 0; i < 8 && find.text('Play').evaluate().isEmpty; i += 1) {
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -200));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Play').first);
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Crest').last);
+      expect(find.textContaining('Crest zone (2)'), findsOneWidget);
+
+      // Both are in it, each saying what it charges. The sheet is taller than
+      // the screen with two crests in it, so it takes a scroll to see them.
+      for (
+        var i = 0;
+        i < 8 && find.textContaining('Charges no energy').evaluate().isEmpty;
+        i += 1
+      ) {
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -120));
+        await tester.pumpAndSettle();
+      }
+      expect(find.textContaining('Charges 3'), findsOneWidget);
+      expect(find.textContaining('Charges no energy'), findsOneWidget);
+      expect(find.text('Take it out'), findsNWidgets(2));
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

@@ -405,8 +405,8 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
-  void removeCrest(PlaytestSide side) {
-    engine.removeCrest(side);
+  void removeCrest(PlaytestSide side, GameCard crest) {
+    engine.removeCrest(side, crest);
     _sync();
   }
 
