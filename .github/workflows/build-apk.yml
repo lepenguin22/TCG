@@ -62,7 +62,10 @@ jobs:
       # The build number becomes the Android versionCode, so a newer build
       # always installs over an older one instead of being refused.
       - name: Build release APK
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        run: |
+          flutter build apk --release \
+            --build-number=${{ github.run_number }} \
+            --dart-define=APP_VERSION="build ${{ github.run_number }}"
 
       - name: Name the APK after the commit
         run: |

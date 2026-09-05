@@ -233,7 +233,14 @@ class PlaytestController extends ChangeNotifier {
       stage = PlaytestStage.yours;
       return;
     }
-    engine.declareAttack(from: next.from, to: next.to, boost: next.boost);
+    final pending = engine.declareAttack(
+      from: next.from,
+      to: next.to,
+      boost: next.boost,
+    );
+    // Whatever the attack itself sets off, before you are asked to guard it:
+    // the power it adds is power your guard has to answer.
+    ai.playAttackAbilities(pending);
     stage = PlaytestStage.guarding;
   }
 

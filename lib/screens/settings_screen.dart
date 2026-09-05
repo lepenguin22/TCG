@@ -117,6 +117,19 @@ class SettingsScreen extends StatelessWidget {
               style: TextStyle(color: AppColors.textFaint, fontSize: 12),
             ),
           ),
+          // Which build this is. Android's own app info reports the version
+          // out of the pubspec, which never moves, so "is the fix in the copy
+          // on my phone?" had no answer anywhere until here. The release
+          // build passes the tag in; a build made by hand says so instead.
+          const Center(
+            child: Text(
+              String.fromEnvironment(
+                'APP_VERSION',
+                defaultValue: 'Local build',
+              ),
+              style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+            ),
+          ),
         ],
       ),
     );

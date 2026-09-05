@@ -43,7 +43,15 @@ jobs:
       - run: flutter test
 
       - name: Build release APK
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        # APP_VERSION is what the app shows in its settings, so an
+        # installed APK can say which release it is.
+        run: |
+          flutter build apk --release \
+            --build-number=${{ github.run_number }} \
+            --build-name="${TAG#v}" \
+            --dart-define=APP_VERSION="${TAG}"
 
       - name: Name the APK after the tag
         env:

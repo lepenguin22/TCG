@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +24,7 @@ class PlaytestScreen extends StatefulWidget {
     required this.yourDeck,
     required this.opponentDeck,
     this.turnOrder = TurnOrder.youFirst,
+    this.random,
   });
 
   final Deck yourDeck;
@@ -30,6 +33,11 @@ class PlaytestScreen extends StatefulWidget {
   /// Who takes turn one. Kept as the choice rather than the outcome, so a
   /// random order is rolled again on every restart.
   final TurnOrder turnOrder;
+
+  /// The shuffle. Left unset in the app, where a game should be a fresh one
+  /// every time; fixed by the tests, so a board they drive is the same board
+  /// on every run rather than one that usually happens to work.
+  final Random? random;
 
   @override
   State<PlaytestScreen> createState() => _PlaytestScreenState();
@@ -46,6 +54,7 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
       yourDeck: widget.yourDeck,
       opponentDeck: widget.opponentDeck,
       turnOrder: widget.turnOrder,
+      random: widget.random,
     );
   }
 

@@ -104,14 +104,30 @@ class FieldUnit {
   /// Only the vanguard drive checks at all, so this only ever matters there.
   int driveBonus = 0;
 
-  int get power => card.power + powerBonus;
+  /// Power that lasts one battle rather than one turn -- "until end of that
+  /// battle", which is most of what an on-attack ability gives. Cleared when
+  /// the attack resolves, so a pump for one swing does not sit on the unit
+  /// for the rest of the turn.
+  int battleBonus = 0;
+
+  /// Abilities already used this turn, by their printed text. What a
+  /// [1/Turn] is counted with.
+  final Set<String> usedAbilities = {};
+
+  int get power => card.power + powerBonus + battleBonus;
 
   int get critical => 1 + criticalBonus;
+
+  void clearBattleEffects() {
+    battleBonus = 0;
+  }
 
   void clearTurnEffects() {
     powerBonus = 0;
     criticalBonus = 0;
     driveBonus = 0;
+    battleBonus = 0;
+    usedAbilities.clear();
   }
 }
 

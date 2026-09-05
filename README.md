@@ -322,6 +322,46 @@ up as a checkbox in the control bar, off until you tick it, because it is not
 always wanted — a unit that restands wants its booster kept back for the second
 swing, and one spent on the first is not there for it.
 
+### What the CPU can read
+
+A CPU that ignored every ability played a deck of vanilla bodies, which is not
+what a deck does. So the board reads the printed English of the shapes that are
+unambiguous, and refuses the rest:
+
+```
+[AUTO](VC):When this unit attacks a vanguard, this unit gets [Power]+5000
+                                              until end of that battle.   ✓ played
+[CONT](RC):During your turn, this unit gets [Power]+3000.                 ✓ played
+[AUTO]:When rode upon, draw a card.                                       ✓ played
+[AUTO](VC):When placed, [COST][Counter-Blast 1], draw a card.             ✓ played
+
+[AUTO](VC):When this unit attacks, choose one of your rear-guards, and
+           it gets [Power]+5000.                                          ✗ refused
+[ACT](VC):[COST][Counter-Blast 1], search your deck for a card...         ✗ refused
+[CONT](VC):If your opponent's vanguard is grade 3 or greater, ...         ✗ refused
+```
+
+A clause is played only when **every** part of it — the timing, each item of
+the cost, and each effect — is one of the known forms. Half an ability is never
+guessed at, so the CPU cannot invent power it does not have.
+
+The reach is small, and worth stating rather than implying: **246 cards of the
+15,155 that carry ability text**, about one in sixty. It covers on-attack and
+on-boost pumps, continuous bonuses, the draw on being ridden over, placement
+abilities, and the charges — and nothing that chooses a target, searches a
+deck, calls a unit, retires one, or reads the board to decide.
+
+What it refuses is not swallowed. When the CPU rides or calls a unit whose text
+it cannot follow, it says so in the log — "Blaster Blade has 2 abilities the
+board cannot play. Read the card if it matters." — so a test that depends on
+that card is a test you know to run by hand rather than one that quietly did
+not happen. Every hand-applied control works on the CPU's units too, so you can
+play its ability for it where the game you are testing turns on it.
+
+Your own abilities stay yours. The reader is deliberately not pointed at your
+side of the board: applying a cost you chose is part of playing the deck, and
+a program guessing at it would take the test away from you.
+
 ### Energy
 
 A deck carrying a ride deck crest gets its energy charged automatically,
@@ -402,7 +442,8 @@ afterwards, the way looking through it always does.
 
 ### What it will not do for you
 
-It will not play your cards' abilities, and neither will the CPU.
+It will not play your cards' abilities, and the CPU plays only the few it can
+actually read.
 
 Abilities are English prose in the card database — "[AUTO]:When this unit is
 placed on (VC), [COST][Counter-Blast 1], choose one of your opponent's
@@ -508,6 +549,12 @@ lib/
   store/catalog_backfill.dart    repairs cards saved before the database
   store/decklog_import.dart      turns a Deck Log deck into one of ours
   import/decklog.dart            the Deck Log client and payload reader
+  playtest/
+    playtest_state.dart          the board: sides, circles, units, the attack
+    playtest_engine.dart         the rules, and everything they can adjudicate
+    ability_reader.dart          the printed abilities it can and cannot read
+    playtest_ai.dart             the CPU's decisions, ability play included
+    playtest_controller.dart     what the screen asks the game to do
   screens/                       deck list, deck, add cards, card editor,
                                  breakdown, trigger icons, deck settings,
                                  settings
@@ -531,6 +578,14 @@ test/
   decklog_screen_test.dart       the import screen, driven end to end
   catalog_flow_test.dart         searching and adding a card, end to end
   app_flow_test.dart             the screens, driven end to end
+  playtest_engine_test.dart      the rules, one at a time
+  ability_reader_test.dart       what it reads, what it refuses, over the
+                                 whole card database
+  playtest_abilities_test.dart   the CPU actually playing them
+  playtest_ai_test.dart          the CPU's decisions, measured in self-play
+  playtest_flow_test.dart        the board, driven end to end
+  playtest_layout_test.dart      the board at four screen sizes
+  settings_screen_test.dart      the build it says it is
 ```
 
 ## Adding iOS

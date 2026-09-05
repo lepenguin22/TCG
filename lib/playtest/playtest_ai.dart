@@ -1,3 +1,4 @@
+import 'ability_reader.dart';
 import 'playtest_engine.dart';
 import 'playtest_state.dart';
 
@@ -40,7 +41,98 @@ class PlaytestAi {
     _stride();
     _callUnits();
     _reposition();
+    _playTiming(AbilityTiming.mainPhase);
+    _playTiming(AbilityTiming.activated);
+    // Continuous abilities are simply true while the unit stands there, and
+    // the bonuses they give wear off with the turn, so they are put back on
+    // once the board for this turn is settled.
+    _playTiming(AbilityTiming.continuous);
     state.phase = PlaytestPhase.battle;
+  }
+
+  // ------------------------------------------------------------------ abilities
+
+  /// Plays what the reader could make of one unit's card, for one timing.
+  ///
+  /// Costs are paid only where they leave the CPU able to keep playing: a
+  /// hand held for guarding is not spent on a discard, and damage is not
+  /// counter-blasted away to nothing.
+  void _playUnitAbilities(Circle circle, AbilityTiming timing) {
+    final unit = me.field[circle];
+    if (unit == null) return;
+
+    for (final ability in engine.abilitiesOf(unit.card).playable) {
+      if (ability.timing != timing &&
+          !(ability.timing == AbilityTiming.onPlaced &&
+              (timing == AbilityTiming.onCall ||
+                  timing == AbilityTiming.onRide))) {
+        continue;
+      }
+      if (!ability.worksOn(vanguard: circle == Circle.vanguard)) continue;
+      if (unit.usedAbilities.contains(ability.text)) continue;
+      if (!_worthPaying(ability)) continue;
+      engine.playAbility(me, circle, ability, discardable: _spare());
+    }
+  }
+
+  /// Every unit on the board, for the timings that are not about one unit.
+  void _playTiming(AbilityTiming timing) {
+    for (final circle in Circle.values) {
+      _playUnitAbilities(circle, timing);
+    }
+  }
+
+  /// Whether a cost is one the CPU should pay at all.
+  ///
+  /// The engine will happily pay anything affordable; the judgement about
+  /// whether it should is here, with the rest of the CPU's judgement.
+  bool _worthPaying(Ability ability) {
+    final cost = ability.cost;
+    // Cards in hand are guards. Paying one away is fine with a hand to spare
+    // and not fine when that hand is what is keeping the CPU alive.
+    if (cost.discard > 0 && me.hand.length <= 4) return false;
+    // Damage is a resource, but the last face-up card is worth keeping for
+    // whatever the deck really wanted it for.
+    if (cost.counterBlast > 0 && me.openDamage <= cost.counterBlast) {
+      return false;
+    }
+    // Resting itself costs an attack, which is worth more than any of the
+    // bonuses this reader can understand.
+    if (cost.restSelf) return false;
+    return true;
+  }
+
+  /// The hand in the order the CPU would rather lose it: worst guard first,
+  /// and never the perfect guard.
+  List<GameCard> _spare() {
+    final spare = me.hand.where((c) => !c.isSentinel).toList()
+      ..sort((a, b) => a.shield.compareTo(b.shield));
+    return spare;
+  }
+
+  /// Says once, in the log, that a unit has abilities the board cannot play.
+  ///
+  /// Without this the CPU quietly plays a deck of vanilla bodies and nothing
+  /// on screen admits it. With it, the player can read the card and apply it
+  /// for the CPU by hand if the test is about that card.
+  void _noteUnread(GameCard card) {
+    final unread = engine.abilitiesOf(card).unread;
+    if (unread.isEmpty) return;
+    state.note(
+      '${me.name}: ${card.name} has ${unread.length} '
+      '${unread.length == 1 ? 'ability' : 'abilities'} the board cannot play. '
+      'Read the card if it matters.',
+      by: me,
+    );
+  }
+
+  /// The abilities on an attack: the attacker's, and the booster's.
+  void playAttackAbilities(PendingAttack attack) {
+    _playUnitAbilities(attack.attackerCircle, AbilityTiming.onAttack);
+    final boosterCircle = attack.attackerCircle.boostedBy;
+    if (attack.booster != null && boosterCircle != null) {
+      _playUnitAbilities(boosterCircle, AbilityTiming.onBoost);
+    }
   }
 
   // ----------------------------------------------------------------- the board
@@ -54,7 +146,7 @@ class PlaytestAi {
     // The ride deck is the reliable climb, so take it whenever it is there.
     final fromDeck = engine.rideDeckOption(me);
     if (fromDeck != null) {
-      engine.ride(me, fromDeck, fromRideDeck: true);
+      _rideOnto(fromDeck, fromRideDeck: true);
       state.phase = PlaytestPhase.main;
       return;
     }
@@ -68,9 +160,28 @@ class PlaytestAi {
         final up = (b.grade > current ? 1 : 0) - (a.grade > current ? 1 : 0);
         return up != 0 ? up : b.power.compareTo(a.power);
       });
-      engine.ride(me, options.first, fromRideDeck: false);
+      _rideOnto(options.first, fromRideDeck: false);
     }
     state.phase = PlaytestPhase.main;
+  }
+
+  /// Rides, and plays what the ride sets off.
+  ///
+  /// "When rode upon" belongs to the unit being ridden over, which is on its
+  /// way to the soul by the time the ride is done, so it is read out of the
+  /// way first.
+  void _rideOnto(GameCard card, {required bool fromRideDeck}) {
+    final previous = me.vanguard;
+    if (previous != null) {
+      for (final ability in engine.abilitiesOf(previous.card).playable) {
+        if (ability.timing != AbilityTiming.onRodeUpon) continue;
+        if (!_worthPaying(ability)) continue;
+        engine.playAbility(me, Circle.vanguard, ability, discardable: _spare());
+      }
+    }
+    engine.ride(me, card, fromRideDeck: fromRideDeck);
+    _playUnitAbilities(Circle.vanguard, AbilityTiming.onRide);
+    _noteUnread(card);
   }
 
   /// Strides when the deck can, which is most of what a G zone is worth.
@@ -148,6 +259,8 @@ class PlaytestAi {
         continue;
       }
       engine.call(me, best, circle);
+      _playUnitAbilities(circle, AbilityTiming.onCall);
+      _noteUnread(best);
     }
   }
 

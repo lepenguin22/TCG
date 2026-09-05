@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -32,7 +34,14 @@ void main() {
           value: store,
           child: MaterialApp(
             theme: buildTheme(),
-            home: PlaytestScreen(yourDeck: deck, opponentDeck: deck),
+            home: PlaytestScreen(
+              yourDeck: deck,
+              opponentDeck: deck,
+              // A fixed shuffle: these tests reach for particular
+              // cards, and a board that is a different board every
+              // run fails one time in a hundred for no reason.
+              random: Random(7),
+            ),
           ),
         ),
       );

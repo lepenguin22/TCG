@@ -4,6 +4,7 @@ import '../games/game_definition.dart';
 import '../games/vanguard/vanguard_data.dart';
 import '../models/deck.dart';
 import '../store/deck_store.dart';
+import 'ability_reader.dart';
 import 'playtest_state.dart';
 
 /// The rules of a game of Vanguard, as far as they can be played without
@@ -787,6 +788,7 @@ class PlaytestEngine {
         by: side,
       );
       state.attack = null;
+      _endOfBattle();
       return;
     }
 
@@ -807,7 +809,16 @@ class PlaytestEngine {
     }
 
     state.attack = null;
+    _endOfBattle();
     _checkForEnd();
+  }
+
+  /// Clears what an ability gave "until end of that battle", which is a
+  /// shorter life than the end of turn everything else wears off at.
+  void _endOfBattle() {
+    for (final unit in [...state.you.units, ...state.opponent.units]) {
+      unit.clearBattleEffects();
+    }
   }
 
   void _damageCheck(PlaytestSide side) {
@@ -888,6 +899,109 @@ class PlaytestEngine {
       default:
         break;
     }
+  }
+
+  // ------------------------------------------------------ abilities off the card
+
+  /// The abilities the reader could make out on this card, cached: the same
+  /// card text is read for every copy on the board, every turn.
+  ///
+  /// Keyed by the text rather than the card, since the text is what is read
+  /// -- two cards printing the same ability share the answer, and a card that
+  /// is renamed or reprinted does not carry a stale one.
+  CardAbilities abilitiesOf(GameCard card) =>
+      _abilityCache[card.effect] ??= readAbilities(card.effect);
+
+  static final Map<String, CardAbilities> _abilityCache = {};
+
+  /// Whether [side] can pay for [ability] right now.
+  bool canPayFor(PlaytestSide side, FieldUnit unit, Ability ability) {
+    final cost = ability.cost;
+    if (cost.counterBlast > side.openDamage) return false;
+    if (cost.soulBlast > side.soul.length) return false;
+    if (cost.energy > side.energy) return false;
+    if (cost.discard > side.hand.length) return false;
+    if (cost.restSelf && unit.rested) return false;
+    return true;
+  }
+
+  /// Plays one ability off a card: pays what it costs, does what it says.
+  ///
+  /// [discardable] is the hand the caller is willing to pay a discard out of,
+  /// most valuable last, since which card to throw away is a decision and not
+  /// the engine's to make.
+  ///
+  /// Returns false without touching anything if the cost cannot be met, so a
+  /// half-paid ability is never left on the board.
+  bool playAbility(
+    PlaytestSide side,
+    Circle circle,
+    Ability ability, {
+    List<GameCard> discardable = const [],
+  }) {
+    final unit = side.field[circle];
+    if (unit == null || !canPayFor(side, unit, ability)) return false;
+
+    final cost = ability.cost;
+    if (cost.discard > 0) {
+      final pay = [
+        ...discardable.where(side.hand.contains),
+        ...side.hand,
+      ].take(cost.discard).toList();
+      if (pay.length < cost.discard) return false;
+      for (final card in pay) {
+        discard(side, card);
+      }
+    }
+    if (cost.counterBlast > 0) counterBlast(side, cost.counterBlast);
+    if (cost.soulBlast > 0) {
+      for (final card in side.soul.take(cost.soulBlast).toList()) {
+        soulBlast(side, card);
+      }
+    }
+    if (cost.energy > 0) {
+      side.energy = (side.energy - cost.energy).clamp(
+        0,
+        PlaytestSide.energyCap,
+      );
+    }
+    if (cost.restSelf) unit.rested = true;
+
+    final effect = ability.effect;
+    if (effect.selfPower != 0) {
+      if (effect.untilEndOfBattle) {
+        unit.battleBonus += effect.selfPower;
+      } else {
+        unit.powerBonus += effect.selfPower;
+      }
+    }
+    if (effect.allPower != 0) {
+      for (final other in side.units) {
+        other.powerBonus += effect.allPower;
+      }
+    }
+    if (effect.frontRowPower != 0) {
+      for (final entry in side.field.entries) {
+        if (entry.key.isFrontRow) {
+          entry.value.powerBonus += effect.frontRowPower;
+        }
+      }
+    }
+    if (effect.critical != 0) unit.criticalBonus += effect.critical;
+    for (var i = 0; i < effect.draw; i += 1) {
+      _draw(side);
+    }
+    if (effect.soulCharge > 0) soulCharge(side, effect.soulCharge);
+    if (effect.counterCharge > 0) counterCharge(side, effect.counterCharge);
+    if (effect.energyCharge > 0) _chargeEnergy(side, effect.energyCharge);
+
+    unit.usedAbilities.add(ability.text);
+    state.note(
+      '${side.name} plays ${unit.card.name}: ${ability.text}',
+      by: side,
+    );
+    _checkForEnd();
+    return true;
   }
 
   // ------------------------------------------------------- applied by the user
