@@ -26,6 +26,12 @@ on:
           are read.
         required: false
         default: ''
+      search:
+        description: >-
+          Look a card up by name and print what the site has, writing nothing.
+          For finding the number a card is really filed under.
+        required: false
+        default: ''
       push_to_branch:
         description: >-
           Branch to commit the regenerated files straight to. Leave empty to
@@ -58,7 +64,12 @@ jobs:
         env:
           EXPANSIONS: ${{ inputs.expansions }}
           CARDS: ${{ inputs.cards }}
+          SEARCH: ${{ inputs.search }}
         run: |
+          if [ -n "$SEARCH" ]; then
+            python3 tool/scrape_cardlist.py --search "$SEARCH"
+            exit 0
+          fi
           args=""
           for n in $EXPANSIONS; do
             args="$args --expansion $n"

@@ -169,6 +169,40 @@ def card_image(html: str) -> str:
     return match.group(1) if match else ""
 
 
+LISTING = re.compile(
+    r'href="/cardlist/\?cardno=([^"&]+)[^"]*"[^>]*>\s*'
+    r'<img src="([^"]+)"[^>]*alt="([^"]*)"'
+)
+
+
+def search(term: str) -> list[tuple[str, str, str]]:
+    """Cards whose page the site's own search turns up for [term].
+
+    A card asked for by a number the site does not know gives back the card
+    list index rather than a 404, which reads as "did not parse" and says
+    nothing about why. Searching for the name is how the number it is really
+    filed under gets found.
+    """
+    found: dict[str, tuple[str, str, str]] = {}
+    quoted = urllib.parse.quote(term)
+    for page in range(1, 10):
+        html = fetch(
+            f"{SITE}/cardlist/cardsearch/?keyword={quoted}&page={page}",
+            missing_ok=True,
+        )
+        if html is None:
+            break
+        fresh = 0
+        for match in LISTING.finditer(html):
+            number, image, name = (group.strip() for group in match.groups())
+            if number and number not in found:
+                found[number] = (number, name, image)
+                fresh += 1
+        if not fresh:
+            break
+    return list(found.values())
+
+
 def parse_card(number: str, name: str, image: str, html: str) -> dict[str, object]:
     """Reads one card's own page.
 
@@ -273,6 +307,9 @@ def main() -> int:
     # from the database with nothing short of re-reading thousands of cards
     # to find it. Asking for the number is cheaper and repeatable.
     parser.add_argument("--card", action="append", default=[])
+    # Look a card up by name and print what the site has, without writing
+    # anything. For working out the number a card is filed under.
+    parser.add_argument("--search", default="")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--from-expansion", type=int, default=243)
     parser.add_argument("--dump-type", default="")
@@ -281,6 +318,13 @@ def main() -> int:
     # nobody. A site redesign breaks hundreds at once, which still fails.
     parser.add_argument("--max-failures", type=int, default=5)
     args = parser.parse_args()
+
+    if args.search:
+        matches = search(args.search)
+        print(f'{len(matches)} cards match "{args.search}":')
+        for number, name, _ in matches:
+            print(f"  {number}  {name}")
+        return 0
 
     if args.card and not args.expansion:
         wanted = {}
@@ -360,11 +404,17 @@ def main() -> int:
                 continue
             card = parse_card(number, "", card_image(page), page)
             if not card:
-                # A named card is asked for one at a time, so when its page
-                # does not parse the page itself is the thing to look at --
-                # printing it here is what turns "did not parse" into a fix.
-                failures.append(f"{number}: page did not parse")
                 lines = strip_tags(page)
+                if not any(line.startswith("[VGE-") for line in lines):
+                    # The site answers an unknown number with the card list
+                    # index rather than a 404, so this is "no such card"
+                    # wearing the clothes of a parse failure.
+                    failures.append(f"{number}: the site has no such number")
+                    print(f"    {number}: no card page -- try --search")
+                    continue
+                # A real card page that the parser could not follow: the page
+                # is the thing to look at, so it is printed.
+                failures.append(f"{number}: page did not parse")
                 print(f"    --- {number} did not parse; its page reads ---")
                 for line in lines[:60]:
                     print(f"      {line[:90]}")
