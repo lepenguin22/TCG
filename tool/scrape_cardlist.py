@@ -67,6 +67,21 @@ STAT_LINE = re.compile(r"(Grade|Power|Critical|Shield)\s*([-\u2013\d][^A-Za-z]*)
 # the block knows where the stats stop.
 ABILITY_WORDS = ("Boost", "Intercept", "Twin Drive", "Triple Drive", "Sentinel")
 
+# Every card type the site prints. The card type is what the block is found
+# by: a card from a set is under a "[VGE-...]" product line, but a promo is
+# under "PR cards", and anchoring on the product meant every promo page read
+# as an unparseable one.
+CARD_TYPES = {
+    "Normal Unit",
+    "Trigger Unit",
+    "G Unit",
+    "Normal Order",
+    "Blitz Order",
+    "Set Order",
+    "Ride Deck Crest",
+    "Token",
+}
+
 
 def card_url(number: str) -> str:
     """A card's own page.
@@ -216,25 +231,35 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
     power and no shield, and anchoring on the grade dropped every one of them.
     """
     lines = strip_tags(html)
-    start = next((i for i, line in enumerate(lines) if line.startswith("[VGE-")), -1)
-    if start < 0:
-        return {}
-    product = lines[start]
-    block = lines[start + 1 :]
 
-    # The format line, identified by the card's own number following it.
-    end_at = -1
+    # The end of the block: the format line the card's own number follows.
+    ends_at = -1
     card_format = ""
-    for index, line in enumerate(block[:-1]):
+    for index, line in enumerate(lines[:-1]):
         if re.fullmatch(r"Standard|Premium|V Premium", line) and (
-            block[index + 1] == number
+            lines[index + 1] == number
         ):
-            end_at = index
+            ends_at = index
             card_format = line
             break
-    if end_at < 2:
+    if ends_at < 3:
         return {}
 
+    # The start of it: the card type, with the name above it and the product
+    # above that. Read backwards from the end so the navigation above the
+    # card cannot be mistaken for it, and matched whole so a card type named
+    # inside a rules line is not mistaken for the card's own.
+    type_at = -1
+    for index in range(ends_at - 1, 1, -1):
+        if lines[index] in CARD_TYPES:
+            type_at = index
+            break
+    if type_at < 2:
+        return {}
+
+    product = lines[type_at - 2]
+    block = lines[type_at - 1 :]
+    end_at = ends_at - (type_at - 1)
     card_type = block[1]
 
     # The stats, wherever they start, and whatever subset the card has.
