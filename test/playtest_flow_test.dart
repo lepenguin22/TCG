@@ -491,9 +491,34 @@ void main() {
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
 
+      // The deck opens on what can be done to it, without showing itself.
       await tapOnBoard(tester, find.text('Deck').last);
+      expect(find.text('Draw a card'), findsOneWidget);
       expect(find.text('Shuffle'), findsOneWidget);
+      expect(find.text('To hand'), findsNothing, reason: 'not revealed yet');
+
+      // Looking is the deliberate one.
+      await tester.tap(find.text('Look through the deck'));
+      await tester.pumpAndSettle();
       expect(find.text('To hand'), findsWidgets);
+    });
+
+    testWidgets('a card can be drawn without reading the deck', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      expect(find.textContaining('Hand '), findsWidgets);
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      await tester.tap(find.text('Draw a card'));
+      await tester.pumpAndSettle();
+
+      // One more card in hand, one fewer in the deck, and the deck was never
+      // laid out to take it.
+      await tapOnBoard(tester, find.text('Deck').last);
+      expect(find.textContaining('Deck (43)'), findsOneWidget);
+      expect(find.text('To hand'), findsNothing);
     });
 
     testWidgets('a stride deck shows a G zone', (tester) async {
@@ -916,6 +941,8 @@ void main() {
       // deck is whatever the shuffle left there, so scroll down the sheet
       // until a card the vanguard's grade allows comes into view.
       await tapOnBoard(tester, find.text('Deck').last);
+      await tester.tap(find.text('Look through the deck'));
+      await tester.pumpAndSettle();
       expect(find.text('To hand'), findsWidgets);
       for (var i = 0; i < 12 && find.text('Call').evaluate().isEmpty; i += 1) {
         await tester.drag(find.byType(Scrollable).last, const Offset(0, -220));

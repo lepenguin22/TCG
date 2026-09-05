@@ -777,8 +777,72 @@ void _showSoulSheet(
   );
 }
 
-/// The deck: a count, a shuffle, and a search for the abilities that need one.
+/// The deck: what can be done to it without looking at it.
+///
+/// Drawing is the common thing and looking is the rare one, so the list of
+/// every card comes up only when it is asked for. Opening the deck to draw a
+/// card meant reading the whole deck to take the top of it, which is not a
+/// thing the game lets anyone do.
 void _showDeckSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              title: 'Deck (${side.deck.length})',
+              caption: side.deck.isEmpty
+                  ? 'Empty. The next card drawn loses the game.'
+                  : null,
+            ),
+            _SheetAction(
+              icon: Icons.download_outlined,
+              label: 'Draw a card',
+              detail: 'The top card, face down to everyone but you.',
+              onTap: () {
+                game.drawCard(side);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+            _SheetAction(
+              icon: Icons.shuffle,
+              label: 'Shuffle',
+              detail: 'For an ability that says to.',
+              onTap: () {
+                game.shuffleDeck(side);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+            _SheetAction(
+              icon: Icons.search,
+              label: 'Look through the deck',
+              detail:
+                  'Every card, to search or to call one. '
+                  'Only when a card tells you to.',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _showDeckSearchSheet(context, game, side);
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The whole deck, listed, for the abilities that search it.
+void _showDeckSearchSheet(
   BuildContext context,
   PlaytestController game,
   PlaytestSide side,
@@ -794,19 +858,9 @@ void _showDeckSheet(
     callable: true,
     header: (sheetContext) => [
       const Text(
-        'The whole deck is listed here so an ability that searches can be '
-        'played: take a card to hand, or call it straight to a circle where '
-        'the card says to. It shuffles itself either way. Only look when a '
-        'card tells you to.',
+        'The whole deck: take a card to hand, or call it straight to a circle '
+        'where the card says to. It shuffles itself either way.',
         style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-      ),
-      const SizedBox(height: 10),
-      OutlinedButton(
-        onPressed: () {
-          game.shuffleDeck(side);
-          Navigator.of(sheetContext).pop();
-        },
-        child: const Text('Shuffle'),
       ),
       const SizedBox(height: 12),
     ],

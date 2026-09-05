@@ -484,8 +484,11 @@ come into it, so they are on the board and tappable rather than left as numbers:
   down, a counter-charge turns them back, and a spent card still counts towards
   the six that ends the game.
 - **Soul** takes a soul-blast per card and a soul-charge off the top of the deck.
-- **Deck** shuffles, and lists itself so an ability that searches can be played —
-  it reshuffles after a search. It is there for the cards that tell you to look.
+- **Deck** opens on what can be done to it without looking at it: **draw a
+  card**, shuffle, or — deliberately, one tap further in — look through the
+  whole thing for an ability that searches, which reshuffles afterwards.
+  Drawing is the common thing and looking is the rare one, so reading the deck
+  is never the price of taking the top card off it.
 - **Drop** hands a card back where something returns one, and sends one under
   the deck for the costs that ask for that.
 
