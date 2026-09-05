@@ -360,7 +360,14 @@ def main() -> int:
                 continue
             card = parse_card(number, "", card_image(page), page)
             if not card:
+                # A named card is asked for one at a time, so when its page
+                # does not parse the page itself is the thing to look at --
+                # printing it here is what turns "did not parse" into a fix.
                 failures.append(f"{number}: page did not parse")
+                lines = strip_tags(page)
+                print(f"    --- {number} did not parse; its page reads ---")
+                for line in lines[:60]:
+                    print(f"      {line[:90]}")
                 continue
             existing[number] = card
             print(f"  {number}: {card['name']} ({card['productName']})")
