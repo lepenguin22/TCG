@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:tcg_decks/games/vanguard/vanguard_data.dart';
 import 'package:tcg_decks/playtest/playtest_controller.dart';
 import 'package:tcg_decks/playtest/playtest_state.dart';
 import 'package:tcg_decks/screens/playtest_screen.dart';
@@ -1389,6 +1390,50 @@ void main() {
       // It opened the unit sheet instead, which is what a tap means when
       // attacking is not on offer.
       expect(find.text('+1 critical'), findsOneWidget);
+    });
+
+    testWidgets('a removed over trigger shows on the board', (tester) async {
+      // A deck of nothing but over triggers, so the first damage check is one.
+      final (store, deck) = await buildDeck();
+      for (final name in ['Critical Trigger', 'Beater', 'Booster']) {
+        final card = store.cards.firstWhere((c) => c.name == name);
+        store.setQuantity(deck.id, card.id, zoneMain, 0);
+      }
+      final over = store.saveCard(
+        gameId: 'vanguard',
+        name: 'Over Trigger',
+        attributes: {
+          'grade': '0',
+          'cardType': 'trigger',
+          'trigger': 'over',
+          'power': '15000',
+          'shield': '0',
+        },
+      );
+      store.addToDeck(deck.id, over.id, zoneMain, quantity: 50);
+      await pump(tester, store, store.decks.firstWhere((d) => d.id == deck.id));
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      expect(find.text('Removed'), findsNothing, reason: 'nothing gone yet');
+
+      // Take a damage by hand, which checks the top card.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      await tester.tap(find.text('Take damage'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      // No damage taken, and the card is on the removed pile instead.
+      expect(find.text('No damage'), findsNWidgets(2));
+      expect(find.text('Removed'), findsOneWidget);
+
+      await tapOnBoard(tester, find.text('Removed'));
+      expect(find.textContaining('Removed from the game'), findsOneWidget);
+      expect(find.textContaining('Nothing comes back'), findsOneWidget);
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

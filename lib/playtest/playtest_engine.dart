@@ -960,10 +960,21 @@ class PlaytestEngine {
     for (var i = 0; i < driveCount(pending.attacker); i += 1) {
       if (side.deck.isEmpty) break;
       final card = side.deck.removeLast();
-      side.hand.add(card);
+      // An over trigger is removed from the game as it resolves: it does not
+      // reach the hand the rest of a drive check does.
+      final over = card.trigger == 'over';
+      if (over) {
+        side.removed.add(card);
+      } else {
+        side.hand.add(card);
+      }
       flipped.add(card);
       state.triggerZone.add(CheckedCard(card, CheckKind.drive, side.name));
-      state.note('${side.name} drive checks ${card.name}.', by: side);
+      state.note(
+        '${side.name} drive checks ${card.name}'
+        '${over ? ', which is removed from the game' : ''}.',
+        by: side,
+      );
       _applyTrigger(side, card, pending.attacker);
     }
     // Recorded even when nothing was flipped, since a vanguard on no drive
@@ -1031,11 +1042,18 @@ class PlaytestEngine {
       return;
     }
     final card = side.deck.removeLast();
-    side.damage.add(card);
+    // The same for a damage check, which is a good deal better than a card in
+    // hand: the card removed is the damage, so the damage is not taken.
+    final over = card.trigger == 'over';
+    if (over) {
+      side.removed.add(card);
+    } else {
+      side.damage.add(card);
+    }
     state.triggerZone.add(CheckedCard(card, CheckKind.damage, side.name));
     state.note(
-      '${side.name} damage checks ${card.name} '
-      '(${side.damageCount} damage).',
+      '${side.name} damage checks ${card.name}'
+      '${over ? ', which is removed from the game rather than taken as damage' : ' (${side.damageCount} damage)'}.',
       by: side,
     );
     // A trigger found in damage helps the player who took the hit, and its

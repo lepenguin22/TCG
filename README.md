@@ -329,7 +329,11 @@ moved them to, which every format the app supports is played under, whatever
 an old printing's own text says. Critical adds that power and a critical, draw
 draws, front spreads it across the front row rather than onto one unit, heal
 heals when you are not ahead on damage, stand stands a unit. An over trigger is
-its own number, +100000, and the rest of what it does is the card's text. Both
+its own number, +100000, and the rest of what it does is the card's text. It is
+also **removed from the game** as it resolves: from a drive check it does not
+join the hand, and from a damage check it is not taken as damage, so a deck
+that over-triggers into its sixth damage does not lose to it. What was removed
+sits on its own pile in the zone rail, readable but out of play for good. Both
 players draw on their own first turn; nobody skips it. Nobody attacks on turn
 one either: whoever goes first is a turn ahead on the board, so they do not
 swing, and the control bar says so rather than leaving a tap unanswered.
@@ -491,6 +495,9 @@ come into it, so they are on the board and tappable rather than left as numbers:
   is never the price of taking the top card off it.
 - **Drop** hands a card back where something returns one, and sends one under
   the deck for the costs that ask for that.
+- **Removed** only appears once something is out of the game — an over trigger
+  that resolved, so far. It opens read-only: the cards are there to be read,
+  and nothing comes back from it.
 
 Cards go **under the deck** as well as to the drop zone, since a good many
 costs are paid that way and where a card ends up decides what can fetch it

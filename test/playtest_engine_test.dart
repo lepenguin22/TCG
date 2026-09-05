@@ -1232,6 +1232,57 @@ void main() {
       );
     });
 
+    test('an over trigger drive checked is removed from the game', () async {
+      final (store, deck) = await deckOfTriggers('over');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.state.turn = 2; // nobody attacks on turn one
+      engine.state.phase = PlaytestPhase.battle;
+      final hand = you.hand.length;
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheck();
+
+      expect(you.hand.length, hand, reason: 'it did not reach hand');
+      expect(you.removed, hasLength(1));
+      expect(you.removed.single.trigger, 'over');
+      expect(
+        you.vanguard!.powerBonus,
+        PlaytestEngine.overTriggerPower,
+        reason: 'it still did what it does on the way out',
+      );
+      expect(
+        engine.state.triggerZone.map((c) => c.card),
+        contains(you.removed.single),
+        reason: 'and it is still readable in the trigger zone',
+      );
+    });
+
+    test('an over trigger damage checked is not taken as damage', () async {
+      final (store, deck) = await deckOfTriggers('over');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      engine.dealDamage(you);
+
+      expect(you.damageCount, 0, reason: 'the card was removed, not taken');
+      expect(you.removed, hasLength(1));
+      expect(you.vanguard!.powerBonus, PlaytestEngine.overTriggerPower);
+    });
+
+    test('an ordinary trigger is unaffected', () async {
+      final (store, deck) = await deckOfTriggers('critical');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      engine.dealDamage(you);
+      expect(you.damageCount, 1);
+      expect(you.removed, isEmpty);
+    });
+
     test('a trigger in damage helps the player taking the hit', () async {
       final (store, deck) = await deckOfTriggers('critical');
       final engine = engineFor(store, deck);

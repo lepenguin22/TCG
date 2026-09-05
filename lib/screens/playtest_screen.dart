@@ -462,6 +462,30 @@ class _ZoneRail extends StatelessWidget {
           highlight: side.crestInPlay,
           onTap: () => _showCrestSheet(context, game, side),
         ),
+        // Cards removed from the game, which only an over trigger does. The
+        // pile appears once there is something in it, since a game with none
+        // does not need the space.
+        if (side.removed.isNotEmpty)
+          _Pile(
+            label: 'Removed',
+            count: side.removed.length,
+            onTap: () => _showPileSheet(
+              context,
+              game,
+              side,
+              title: 'Removed from the game',
+              cards: side.removed,
+              header: (_) => [
+                const Text(
+                  'An over trigger is removed as it resolves, rather than '
+                  'reaching hand from a drive check or the damage zone from '
+                  'a damage one. Nothing comes back from here.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
         // Only a deck that strides has a G zone, so it only appears for one.
         if (side.gZone.isNotEmpty)
           _Pile(

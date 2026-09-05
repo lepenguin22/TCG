@@ -161,6 +161,13 @@ class PlaytestSide {
   /// The G zone, which only a Premium deck that strides has.
   final List<GameCard> gZone = [];
 
+  /// Cards removed from the game.
+  ///
+  /// An over trigger goes here when it is checked: it is not put in hand from
+  /// a drive check and not left in the damage zone from a damage one. The
+  /// pile exists so what left is visible rather than simply gone.
+  final List<GameCard> removed = [];
+
   /// The G zone cards that are face up.
   ///
   /// A G unit comes back face up when its stride ends, and abilities turn
