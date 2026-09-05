@@ -393,4 +393,13 @@ class PlaytestController extends ChangeNotifier {
     engine.bottomDeckUnit(side, circle);
     _sync();
   }
+
+  void toggleLock(PlaytestSide side, Circle circle) {
+    if (side.field[circle]?.locked ?? false) {
+      engine.unlock(side, circle);
+    } else {
+      engine.lock(side, circle);
+    }
+    _sync();
+  }
 }

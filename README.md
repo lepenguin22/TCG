@@ -310,6 +310,22 @@ heals when you are not ahead on damage, stand stands a unit. An over trigger is
 its own number, +100000, and the rest of what it does is the card's text. Both
 players draw on their own first turn; nobody skips it.
 
+### Lock
+
+A locked card is turned face down on its circle, and the board treats it as
+what it is: **not a unit**. It cannot attack, boost, be attacked or be chosen,
+a front trigger passes it by, it does not move or swap up its column, and
+nothing can be called over it — the circle is held shut, which is the whole
+point of locking one.
+
+Lock is on any rear-guard's sheet, on your board and the CPU's, since the card
+being locked is usually the opponent's. It shows face down on the circle, art
+upside down under a lock, with no power on it.
+
+It unlocks on its own at the end of its owner's turn, which is the rule: a lock
+laid on your turn costs them that unit for exactly one turn of theirs. **Unlock**
+is on the locked card's sheet for the effects that turn it back over early.
+
 Rear-guards move between the rows of their own column during your main phase,
 which is how a booster becomes an attacker or an attacker drops back to push.
 Tap one and the sheet offers the move, or the swap when its opposite number is

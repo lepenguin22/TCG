@@ -1815,6 +1815,230 @@ void main() {
     });
   });
 
+  group('locking', () {
+    /// A game with a rear-guard of each side's on the board to lock.
+    Future<(PlaytestEngine, PlaytestSide, PlaytestSide)> boardWithRearGuards(
+      DeckStore store,
+      Deck deck,
+    ) async {
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+      for (final side in [you, foe]) {
+        engine.ride(side, engine.rideDeckOption(side)!, fromRideDeck: true);
+        for (final circle in [Circle.frontLeft, Circle.backCenter]) {
+          final card = side.hand.firstWhere(
+            (c) => engine.canCall(side, c, circle),
+          );
+          engine.call(side, card, circle);
+        }
+      }
+      return (engine, you, foe);
+    }
+
+    test('a locked card is face down and is not a unit', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+      final before = you.units.length;
+
+      engine.lock(you, Circle.frontLeft);
+      expect(you.field[Circle.frontLeft]!.locked, isTrue);
+      expect(you.units.length, before - 1, reason: 'no longer a unit');
+      expect(
+        you.field[Circle.frontLeft],
+        isNotNull,
+        reason: 'but still on its circle',
+      );
+    });
+
+    test('a locked card cannot attack', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+      engine.state.phase = PlaytestPhase.battle;
+      expect(engine.attackers(you), contains(Circle.frontLeft));
+
+      engine.lock(you, Circle.frontLeft);
+      expect(engine.attackers(you), isNot(contains(Circle.frontLeft)));
+    });
+
+    test('a locked card cannot be attacked', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, _, foe) = await boardWithRearGuards(store, deck);
+      expect(engine.targets(foe), contains(Circle.frontLeft));
+
+      engine.lock(foe, Circle.frontLeft);
+      expect(engine.targets(foe), isNot(contains(Circle.frontLeft)));
+    });
+
+    test('a locked booster does not boost', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+      engine.state.phase = PlaytestPhase.battle;
+      engine.lock(you, Circle.backCenter);
+
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+        boost: true,
+      );
+      expect(attack.booster, isNull);
+      expect(attack.attackPower, you.vanguard!.power);
+      expect(
+        you.field[Circle.backCenter]!.rested,
+        isFalse,
+        reason: 'it was not tapped for a boost it did not give',
+      );
+    });
+
+    /// A card in hand this side could call, drawing until one turns up: the
+    /// hand is thin by the time a board has been built.
+    GameCard callable(PlaytestEngine engine, PlaytestSide side, Circle to) {
+      for (var i = 0; i < 40; i += 1) {
+        for (final card in side.hand) {
+          if (engine.canCall(side, card, to)) return card;
+        }
+        engine.drawCard(side);
+      }
+      throw StateError('no callable card');
+    }
+
+    test('nothing is called over a locked card', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+      final spare = callable(engine, you, Circle.backLeft);
+      engine.lock(you, Circle.frontLeft);
+      expect(engine.canCall(you, spare, Circle.frontLeft), isFalse);
+      engine.call(you, spare, Circle.frontLeft);
+      expect(
+        you.field[Circle.frontLeft]!.locked,
+        isTrue,
+        reason: 'the locked card still holds the circle',
+      );
+      expect(you.hand, contains(spare), reason: 'and the call did not happen');
+    });
+
+    test('a locked card does not move, and nothing swaps with it', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+      engine.state.phase = PlaytestPhase.main;
+      expect(engine.canMove(you, Circle.frontLeft), isTrue);
+
+      engine.lock(you, Circle.frontLeft);
+      expect(engine.canMove(you, Circle.frontLeft), isFalse);
+
+      // And the unit behind it cannot swap forward into it either.
+      engine.call(you, callable(engine, you, Circle.backLeft), Circle.backLeft);
+      expect(engine.canMove(you, Circle.backLeft), isFalse);
+    });
+
+    test('a front trigger passes a locked card by', () async {
+      // A deck of nothing but front triggers, so the damage check below is
+      // certain to turn one up.
+      SharedPreferences.setMockInitialValues({});
+      final store = DeckStore();
+      await store.load();
+      final deck = store.createDeck(name: 'Front', formatId: formatStandard);
+      for (var grade = 0; grade <= 3; grade += 1) {
+        final card = store.saveCard(
+          gameId: 'vanguard',
+          name: 'Ride $grade',
+          attributes: {
+            'grade': '$grade',
+            'cardType': 'normal',
+            'power': '10000',
+          },
+        );
+        store.addToDeck(deck.id, card.id, zoneRide);
+      }
+      final trigger = store.saveCard(
+        gameId: 'vanguard',
+        name: 'Front trigger',
+        attributes: {
+          'grade': '0',
+          'cardType': 'trigger',
+          'trigger': 'front',
+          'power': '5000',
+          'shield': '15000',
+        },
+      );
+      store.addToDeck(deck.id, trigger.id, zoneMain, quantity: 50);
+
+      final engine = engineFor(store, store.decks.first);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      final card = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.frontLeft),
+      );
+      engine.call(you, card, Circle.frontLeft);
+      engine.lock(you, Circle.frontLeft);
+
+      engine.dealDamage(you);
+      expect(
+        you.vanguard!.powerBonus,
+        PlaytestEngine.triggerPower,
+        reason: 'the front row got it',
+      );
+      expect(
+        you.field[Circle.frontLeft]!.powerBonus,
+        0,
+        reason: 'except the card that is face down',
+      );
+    });
+
+    test('it unlocks at the end of its owner\'s turn', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = await boardWithRearGuards(store, deck);
+
+      // You lock one of theirs on your turn. It is still locked while they
+      // take their turn -- that is the whole cost of it.
+      engine.lock(foe, Circle.frontLeft);
+      engine.endTurn();
+      expect(
+        foe.field[Circle.frontLeft]!.locked,
+        isTrue,
+        reason: 'locked through their turn',
+      );
+
+      engine.endTurn();
+      expect(
+        foe.field[Circle.frontLeft]!.locked,
+        isFalse,
+        reason: 'their turn ended, so it unlocks',
+      );
+      expect(you.field[Circle.frontLeft]!.locked, isFalse);
+    });
+
+    test('an effect can unlock it early', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+      engine.lock(you, Circle.frontLeft);
+
+      engine.unlock(you, Circle.frontLeft);
+      expect(you.field[Circle.frontLeft]!.locked, isFalse);
+      expect(engine.state.log.last.text, contains('unlocks'));
+    });
+
+    test('unlocking everything turns the whole board back over', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+      engine.lock(you, Circle.frontLeft);
+      engine.lock(you, Circle.backCenter);
+
+      engine.unlockAll(you);
+      expect(you.units.length, 3, reason: 'vanguard and both rear-guards');
+    });
+
+    test('the vanguard is never locked', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = await boardWithRearGuards(store, deck);
+
+      engine.lock(you, Circle.vanguard);
+      expect(you.vanguard!.locked, isFalse);
+    });
+  });
+
   group('the CPU', () {
     test('rides up its ride deck on its own turn', () async {
       final (store, deck) = await buildDeck();

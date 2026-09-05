@@ -253,6 +253,10 @@ class PlaytestEngine {
     final side = state.active;
     // A stride lasts one turn, so the G unit goes back before anything else.
     endStride(side);
+    // Locked cards come back face up at the end of their owner's turn, which
+    // is the turn after the one they were locked on: a lock costs the player
+    // their use of that unit for exactly one turn of their own.
+    unlockAll(side);
     for (final unit in side.units) {
       unit.clearTurnEffects();
     }
@@ -521,6 +525,9 @@ class PlaytestEngine {
   /// grade 3 hitting the field on turn one.
   bool canCall(PlaytestSide side, GameCard card, Circle circle) {
     if (circle == Circle.vanguard || !card.isUnit) return false;
+    // A locked card holds its circle: it is face down, not a unit that can be
+    // retired to make room.
+    if (side.field[circle]?.locked ?? false) return false;
     // A G unit is strided, never called: it lives in the G zone and only ever
     // reaches the field on top of the vanguard.
     if (card.cardType == 'g-unit') return false;
@@ -537,10 +544,14 @@ class PlaytestEngine {
   ///
   /// A unit already on the circle is retired to make room.
   void call(PlaytestSide side, GameCard card, Circle circle) {
+    // Checked before the card is taken out of wherever it is: a call that
+    // cannot happen must not cost the card it was going to be made with.
+    final existing = side.field[circle];
+    if (existing != null && existing.locked) return;
+
     final from = _takeFrom(side, card, deck: true);
     if (from == null) return;
 
-    final existing = side.field[circle];
     if (existing != null) {
       side.drop.add(existing.card);
       state.note(
@@ -587,10 +598,15 @@ class PlaytestEngine {
   ///
   /// Moving is a main phase action, so it cannot be used to shuffle the board
   /// around mid-battle after seeing what an attack ran into.
-  bool canMove(PlaytestSide side, Circle circle) =>
-      state.phase == PlaytestPhase.main &&
-      side.field[circle] != null &&
-      moveTargetOf(circle) != null;
+  bool canMove(PlaytestSide side, Circle circle) {
+    if (state.phase != PlaytestPhase.main) return false;
+    final unit = side.field[circle];
+    if (unit == null || unit.locked) return false;
+    final to = moveTargetOf(circle);
+    if (to == null) return false;
+    // Nor can it swap with a locked card, which does not move either.
+    return !(side.field[to]?.locked ?? false);
+  }
 
   /// Moves a rear-guard between the rows of its column, swapping with
   /// whatever is already there.
@@ -625,6 +641,42 @@ class PlaytestEngine {
     }
   }
 
+  /// Locks a card: turns it face down on its circle.
+  ///
+  /// A locked card is not a unit. It cannot attack, boost, be attacked or be
+  /// chosen for anything, and nothing can be called over it -- it simply
+  /// holds the circle shut, which is the whole point of locking one.
+  ///
+  /// The vanguard is never locked, so only rear-guards are offered it.
+  void lock(PlaytestSide side, Circle circle) {
+    if (circle == Circle.vanguard) return;
+    final unit = side.field[circle];
+    if (unit == null || unit.locked) return;
+    unit.locked = true;
+    state.note('${side.name} locks ${unit.card.name}.', by: side);
+  }
+
+  /// Turns a locked card face up again, for the effect that unlocks early.
+  ///
+  /// The rule unlocks it on its own at the end of its owner's turn; this is
+  /// for the cards that say otherwise.
+  void unlock(PlaytestSide side, Circle circle) {
+    final unit = side.field[circle];
+    if (unit == null || !unit.locked) return;
+    unit.locked = false;
+    state.note('${side.name} unlocks ${unit.card.name}.', by: side);
+  }
+
+  /// Unlocks everything this side has face down.
+  ///
+  /// The end of its owner's turn does this by the rules; an ability that
+  /// unlocks the board calls it directly.
+  void unlockAll(PlaytestSide side) {
+    for (final entry in side.occupied.toList()) {
+      if (entry.value.locked) unlock(side, entry.key);
+    }
+  }
+
   /// Sends a unit on the field to the drop zone, as a retire cost or an
   /// opponent's ability says to.
   void retire(PlaytestSide side, Circle circle) {
@@ -654,14 +706,15 @@ class PlaytestEngine {
   /// The back row boosts rather than attacks.
   List<Circle> attackers(PlaytestSide side) => [
     for (final entry in side.field.entries)
-      if (entry.key.isFrontRow && !entry.value.rested) entry.key,
+      if (entry.key.isFrontRow && !entry.value.rested && entry.value.isActive)
+        entry.key,
   ];
 
   /// What an attack may be aimed at: the vanguard, or a rear-guard standing in
   /// the front row. A unit in the back row cannot be reached.
   List<Circle> targets(PlaytestSide side) => [
     for (final entry in side.field.entries)
-      if (entry.key.isFrontRow) entry.key,
+      if (entry.key.isFrontRow && entry.value.isActive) entry.key,
   ];
 
   /// Declares an attack, resting the attacker and any booster behind it.
@@ -679,7 +732,7 @@ class PlaytestEngine {
     final boosterCircle = from.boostedBy;
     if (boost && boosterCircle != null) {
       final candidate = side.field[boosterCircle];
-      if (candidate != null && !candidate.rested) {
+      if (candidate != null && !candidate.rested && candidate.isActive) {
         booster = candidate;
         candidate.rested = true;
       }
@@ -866,7 +919,9 @@ class PlaytestEngine {
         // The front trigger spreads its power across the front row instead of
         // giving it all to one unit, which is why it is not the target here.
         for (final entry in side.field.entries) {
-          if (entry.key.isFrontRow) entry.value.powerBonus += triggerPower;
+          if (entry.key.isFrontRow && entry.value.isActive) {
+            entry.value.powerBonus += triggerPower;
+          }
         }
         state.note('Front trigger: +$triggerPower to the front row.', by: side);
       case 'heal':
@@ -982,7 +1037,7 @@ class PlaytestEngine {
     }
     if (effect.frontRowPower != 0) {
       for (final entry in side.field.entries) {
-        if (entry.key.isFrontRow) {
+        if (entry.key.isFrontRow && entry.value.isActive) {
           entry.value.powerBonus += effect.frontRowPower;
         }
       }

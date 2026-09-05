@@ -1109,12 +1109,14 @@ class _CircleSlot extends StatelessWidget {
         game.state.phase == PlaytestPhase.battle &&
         game.selectedAttacker != null &&
         circle.isFrontRow &&
-        unit != null;
+        unit != null &&
+        unit.isActive;
     final isAttacker =
         isYours &&
         game.state.yourTurn &&
         game.state.phase == PlaytestPhase.battle &&
         unit != null &&
+        unit.isActive &&
         !unit.rested &&
         circle.isFrontRow;
 
@@ -1188,6 +1190,47 @@ class _UnitTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A locked card is face down on the table, so it is face down here: the
+    // art upside down and dimmed under a lock, with its power hidden, since
+    // a locked card has none to give.
+    if (unit.locked) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Opacity(
+            opacity: 0.25,
+            child: RotatedBox(
+              quarterTurns: 2,
+              child: CardImage(url: unit.card.imageUrl, width: 140),
+            ),
+          ),
+          Container(color: AppColors.surface.withValues(alpha: 0.6)),
+          const Center(
+            child: Icon(Icons.lock_outline, size: 20, color: AppColors.warning),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.7),
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              child: const Text(
+                'LOCKED',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.warning,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -1956,92 +1999,122 @@ void _showUnitSheet(
                   ? game.engine.driveCount(unit)
                   : null,
             ),
-            // Moving between the rows of a column is a rule the engine keeps,
-            // not something applied by hand, so it sits above that line.
-            if (side == game.you && game.engine.canMove(side, circle)) ...[
+            // A locked card is face down and can do nothing: there is only
+            // one thing to offer, which is turning it back over.
+            if (unit.locked) ...[
               const SizedBox(height: 14),
-              _MoveAction(
-                game: game,
-                side: side,
-                circle: circle,
-                onDone: () => Navigator.of(sheetContext).pop(),
+              const Text(
+                'Locked. It is face down, so it is not a unit: it cannot '
+                'attack, boost, be attacked or be chosen, and nothing can be '
+                'called over it. It unlocks on its own at the end of its '
+                "owner's turn.",
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
-            ],
-            const SizedBox(height: 14),
-            const Text(
-              'Applied by hand',
-              style: TextStyle(
-                color: AppColors.textFaint,
-                fontSize: 11,
-                letterSpacing: 0.6,
-                fontWeight: FontWeight.w700,
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () {
+                  game.toggleLock(side, circle);
+                  Navigator.of(sheetContext).pop();
+                },
+                child: const Text('Unlock'),
               ),
-            ),
-            const SizedBox(height: 8),
-            _PowerControl(game: game, side: side, circle: circle, unit: unit),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                // Critical is the other half of what an ability gives a unit:
-                // how many damage a hit on the vanguard is worth.
-                OutlinedButton(
-                  onPressed: () => game.addCritical(side, circle, 1),
-                  child: const Text('+1 critical'),
-                ),
-                OutlinedButton(
-                  onPressed: unit.critical <= 0
-                      ? null
-                      : () => game.addCritical(side, circle, -1),
-                  child: const Text('-1 critical'),
-                ),
-                // Only the vanguard drive checks, so the drive controls only
-                // appear where they would do something.
-                if (circle == Circle.vanguard) ...[
-                  OutlinedButton(
-                    onPressed: () => game.addDrive(side, circle, 1),
-                    child: const Text('+1 drive'),
-                  ),
-                  OutlinedButton(
-                    onPressed: game.engine.driveCount(unit) <= 0
-                        ? null
-                        : () => game.addDrive(side, circle, -1),
-                    child: const Text('-1 drive'),
-                  ),
-                ],
-                OutlinedButton(
-                  onPressed: () => game.toggleRest(side, circle),
-                  child: Text(unit.rested ? 'Stand' : 'Rest'),
-                ),
-                if (circle != Circle.vanguard) ...[
-                  OutlinedButton(
-                    onPressed: () {
-                      game.retire(side, circle);
-                      Navigator.of(sheetContext).pop();
-                    },
-                    child: const Text('Retire'),
-                  ),
-                  // A cost that puts a unit back in the deck rather than the
-                  // drop zone, which is a different place for it to end up.
-                  OutlinedButton(
-                    onPressed: () {
-                      game.bottomDeckUnit(side, circle);
-                      Navigator.of(sheetContext).pop();
-                    },
-                    child: const Text('To bottom of deck'),
-                  ),
-                ],
-                OutlinedButton(
-                  onPressed: () => game.drawCard(side),
-                  child: const Text('Draw a card'),
-                ),
-                OutlinedButton(
-                  onPressed: () => game.dealDamage(side),
-                  child: const Text('Take damage'),
+            ] else ...[
+              // Moving between the rows of a column is a rule the engine keeps,
+              // not something applied by hand, so it sits above that line.
+              if (side == game.you && game.engine.canMove(side, circle)) ...[
+                const SizedBox(height: 14),
+                _MoveAction(
+                  game: game,
+                  side: side,
+                  circle: circle,
+                  onDone: () => Navigator.of(sheetContext).pop(),
                 ),
               ],
-            ),
+              const SizedBox(height: 14),
+              const Text(
+                'Applied by hand',
+                style: TextStyle(
+                  color: AppColors.textFaint,
+                  fontSize: 11,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _PowerControl(game: game, side: side, circle: circle, unit: unit),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  // Critical is the other half of what an ability gives a unit:
+                  // how many damage a hit on the vanguard is worth.
+                  OutlinedButton(
+                    onPressed: () => game.addCritical(side, circle, 1),
+                    child: const Text('+1 critical'),
+                  ),
+                  OutlinedButton(
+                    onPressed: unit.critical <= 0
+                        ? null
+                        : () => game.addCritical(side, circle, -1),
+                    child: const Text('-1 critical'),
+                  ),
+                  // Only the vanguard drive checks, so the drive controls only
+                  // appear where they would do something.
+                  if (circle == Circle.vanguard) ...[
+                    OutlinedButton(
+                      onPressed: () => game.addDrive(side, circle, 1),
+                      child: const Text('+1 drive'),
+                    ),
+                    OutlinedButton(
+                      onPressed: game.engine.driveCount(unit) <= 0
+                          ? null
+                          : () => game.addDrive(side, circle, -1),
+                      child: const Text('-1 drive'),
+                    ),
+                  ],
+                  OutlinedButton(
+                    onPressed: () => game.toggleRest(side, circle),
+                    child: Text(unit.rested ? 'Stand' : 'Rest'),
+                  ),
+                  if (circle != Circle.vanguard) ...[
+                    // Locking is done to a rear-guard, most often the
+                    // opponent's, so it is offered on both sides of the board.
+                    OutlinedButton(
+                      onPressed: () {
+                        game.toggleLock(side, circle);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: Text(unit.locked ? 'Unlock' : 'Lock'),
+                    ),
+                    OutlinedButton(
+                      onPressed: () {
+                        game.retire(side, circle);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('Retire'),
+                    ),
+                    // A cost that puts a unit back in the deck rather than the
+                    // drop zone, which is a different place for it to end up.
+                    OutlinedButton(
+                      onPressed: () {
+                        game.bottomDeckUnit(side, circle);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('To bottom of deck'),
+                    ),
+                  ],
+                  OutlinedButton(
+                    onPressed: () => game.drawCard(side),
+                    child: const Text('Draw a card'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => game.dealDamage(side),
+                    child: const Text('Take damage'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

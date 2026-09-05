@@ -1024,6 +1024,64 @@ void main() {
       );
     });
 
+    testWidgets('a rear-guard can be locked and unlocked', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+
+      // Lock it, and the circle turns face down.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+      expect(find.text('Lock'), findsOneWidget);
+      await tester.tap(find.text('Lock'));
+      await tester.pumpAndSettle();
+      expect(find.text('LOCKED'), findsOneWidget);
+
+      // Its sheet offers nothing but turning it back over.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+      expect(find.text('Unlock'), findsOneWidget);
+      expect(find.text('Retire'), findsNothing, reason: 'it is not a unit');
+      expect(find.text('+1 critical'), findsNothing);
+
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+      expect(find.text('LOCKED'), findsNothing);
+    });
+
+    testWidgets('the CPU\'s units can be locked too', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // Its starting vanguard is all it has, and a vanguard is never locked.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+      expect(find.text('Lock'), findsNothing);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

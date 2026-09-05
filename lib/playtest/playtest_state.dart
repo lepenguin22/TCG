@@ -92,6 +92,15 @@ class FieldUnit {
   /// it stands.
   bool rested = false;
 
+  /// A locked card is turned face down on its circle and is not a unit at
+  /// all: it cannot attack, boost, be attacked or be chosen, and nothing can
+  /// be called over it. It unlocks at the end of its owner's turn.
+  bool locked = false;
+
+  /// Whether this is a unit rather than a face-down card, which is the
+  /// question almost every rule about it is really asking.
+  bool get isActive => !locked;
+
   /// Power added by triggers and by abilities the player applied by hand.
   /// Cleared at end of turn, as temporary power always is.
   int powerBonus = 0;
@@ -207,10 +216,17 @@ class PlaytestSide {
   /// Running out of cards to check is the other way to lose.
   bool get isDecked => deck.isEmpty;
 
-  Iterable<FieldUnit> get units => field.values;
+  /// The units on the field. Locked cards are face down and are not units,
+  /// so they are not here -- which is what keeps them out of every rule that
+  /// asks what this side has standing.
+  Iterable<FieldUnit> get units => field.values.where((u) => u.isActive);
+
+  /// Everything on the field, locked cards included. For the board, which
+  /// still has to draw them, and for unlocking them again.
+  Iterable<MapEntry<Circle, FieldUnit>> get occupied => field.entries;
 
   Iterable<MapEntry<Circle, FieldUnit>> get rearGuards =>
-      field.entries.where((e) => e.key.isRearGuard);
+      field.entries.where((e) => e.key.isRearGuard && e.value.isActive);
 }
 
 /// Who takes the first turn.
