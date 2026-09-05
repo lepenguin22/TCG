@@ -296,8 +296,24 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
             trigger = match.group(1).lower()
             continue
         rules.append(line)
-    # The last line with no ability marker in it is flavour text, not rules.
-    if rules and "[" not in rules[-1]:
+    # Flavour text sits after the rules and carries neither a bracketed
+    # marker nor a bullet, so everything past the last line that has one is
+    # flavour. Popping a single line was not enough: a card with two lines of
+    # it kept one, which is how two printings of one card ended up as two
+    # cards -- they are identified by what they do, and one of them said
+    # something about the sea.
+    #
+    # A card with no marked line anywhere has nothing to measure the end of
+    # its rules by, so it keeps all but a plainly unmarked last line, which
+    # is what this always did.
+    marked = [
+        index
+        for index, line in enumerate(rules)
+        if "[" in line or line.startswith("・")
+    ]
+    if marked:
+        del rules[marked[-1] + 1 :]
+    elif rules and "[" not in rules[-1]:
         rules.pop()
 
     return {
