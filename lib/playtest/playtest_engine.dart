@@ -357,15 +357,52 @@ class PlaytestEngine {
         .toList();
   }
 
+  /// Whether the ride deck's next grade can actually be ridden.
+  ///
+  /// It costs a card out of hand, so an empty hand cannot pay for it however
+  /// much the ride deck is holding.
+  bool canRideFromDeck(PlaytestSide side) =>
+      rideDeckOption(side) != null && side.hand.isNotEmpty;
+
   bool canRide(PlaytestSide side) =>
       !state.ridden &&
       state.phase == PlaytestPhase.ride &&
-      (rideDeckOption(side) != null || handRideOptions(side).isNotEmpty);
+      (canRideFromDeck(side) || handRideOptions(side).isNotEmpty);
+
+  /// The card the hand would rather lose to pay for a ride: the worst guard,
+  /// and never the perfect guard.
+  ///
+  /// Only a suggestion. Which card to discard is a real decision, so the
+  /// board asks; this is what it opens on, and what the CPU takes.
+  GameCard? rideCostSuggestion(PlaytestSide side) {
+    final spare = side.hand.where((c) => !c.isSentinel).toList()
+      ..sort((a, b) => a.shield.compareTo(b.shield));
+    return spare.isNotEmpty ? spare.first : side.hand.firstOrNull;
+  }
 
   /// Rides [card], from the ride deck or from hand. The unit it replaces goes
   /// to the soul, as a ridden-over vanguard always does.
-  void ride(PlaytestSide side, GameCard card, {required bool fromRideDeck}) {
+  /// Rides [card], from the ride deck or out of hand.
+  ///
+  /// A ride out of the ride deck costs a card discarded from hand, which is
+  /// what a ride deck is paid for with. [discard] names the card to pay with;
+  /// left out, the hand's worst guard pays, and either way the log says which
+  /// card it was. With nothing in hand the ride cannot be paid for and does
+  /// not happen.
+  ///
+  /// Riding out of hand costs nothing but the card itself.
+  void ride(
+    PlaytestSide side,
+    GameCard card, {
+    required bool fromRideDeck,
+    GameCard? discard,
+  }) {
+    var paid = '';
     if (fromRideDeck) {
+      final cost = discard ?? rideCostSuggestion(side);
+      if (cost == null || !side.hand.remove(cost)) return;
+      side.drop.add(cost);
+      paid = ', discarding ${cost.name}';
       side.rideDeck.remove(card);
     } else {
       side.hand.remove(card);
@@ -376,7 +413,7 @@ class PlaytestEngine {
     state.ridden = true;
     state.note(
       '${side.name} rides ${card.name} '
-      '(grade ${card.grade})${fromRideDeck ? ' from the ride deck' : ''}.',
+      '(grade ${card.grade})${fromRideDeck ? ' from the ride deck' : ''}$paid.',
       by: side,
     );
     _placeCrest(side);

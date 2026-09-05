@@ -318,7 +318,9 @@ Choosing the roll re-rolls it on every restart rather than fixing it once.
 The board runs the game the way it sits on a table: your opponent's six circles
 across the top, yours below, your hand along the bottom, and a control bar that
 only ever offers the move the rules are waiting for. It plays out an opening
-mulligan, the ride deck climbed a grade at a time, calling to the front and back
+mulligan, the ride deck climbed a grade at a time — each of those rides paid
+for with a card discarded from hand, which the board asks you to pick and an
+empty hand cannot afford — calling to the front and back
 rows, boosting from behind, attacks that only the front row can make or receive,
 drive checks sized to the vanguard's grade, damage checks, guarding with shields
 and perfect guards, and the sixth damage that ends it. Triggers resolve

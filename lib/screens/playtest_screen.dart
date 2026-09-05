@@ -2077,12 +2077,16 @@ void _showRideSheet(BuildContext context, PlaytestController game) {
                   style: const TextStyle(color: AppColors.text),
                 ),
                 subtitle: Text(
-                  'Ride deck · grade ${fromDeck.grade}',
+                  'Ride deck · grade ${fromDeck.grade} · '
+                  '${game.you.hand.isEmpty ? 'needs a card to discard' : 'discard a card to ride it'}',
                   style: const TextStyle(color: AppColors.textMuted),
                 ),
+                // The discard is a choice, so it is asked for rather than
+                // taken: which card leaves the hand decides the next turn.
+                enabled: game.engine.canRideFromDeck(game.you),
                 onTap: () {
-                  game.ride(fromDeck, fromRideDeck: true);
                   Navigator.of(sheetContext).pop();
+                  _showRideCostSheet(context, game, fromDeck);
                 },
               ),
             for (final card in fromHand)
@@ -2110,6 +2114,65 @@ void _showRideSheet(BuildContext context, PlaytestController game) {
 }
 
 /// What a card in hand can do, and what it says.
+/// Paying for a ride out of the ride deck.
+///
+/// The cost is one card discarded from hand, and which one is a real decision
+/// -- the shield you keep, the grade you keep for a stride -- so the hand is
+/// laid out and the choice is yours.
+void _showRideCostSheet(
+  BuildContext context,
+  PlaytestController game,
+  GameCard riding,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (_, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            SectionHeader(
+              title: 'Ride ${riding.name}',
+              caption: 'Discard a card from hand to pay for it.',
+            ),
+            for (final card in game.you.hand)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CardImage(url: card.imageUrl, width: 32),
+                title: Text(
+                  card.name,
+                  style: const TextStyle(color: AppColors.text, fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Grade ${card.grade}'
+                  '${card.shield > 0 ? ' · ${card.shield} shield' : ''}'
+                  '${card.isSentinel ? ' · perfect guard' : ''}',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+                trailing: TextButton(
+                  onPressed: () {
+                    game.ride(riding, fromRideDeck: true, discard: card);
+                    Navigator.of(sheetContext).pop();
+                  },
+                  child: const Text('Discard'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 void _showHandSheet(
   BuildContext context,
   PlaytestController game,

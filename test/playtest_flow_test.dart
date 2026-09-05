@@ -540,6 +540,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
+      await tester.pumpAndSettle();
 
       await tapOnBoard(tester, find.text('Crest').last);
       // Going first, so it is down but has charged nothing yet.
@@ -567,6 +570,9 @@ void main() {
       await tester.tap(find.text('Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Next'));
       await tester.pump();
@@ -749,6 +755,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Next'));
       await tester.pump();
 
@@ -852,6 +861,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Next'));
       await tester.pump();
       await tester.tap(find.text('Next'));
@@ -903,6 +915,9 @@ void main() {
       await tester.tap(find.text('Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Next'));
       await tester.pump();
@@ -956,6 +971,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Next'));
       await tester.pump();
 
@@ -974,8 +992,9 @@ void main() {
       await tester.tap(find.text('To bottom of deck'));
       await tester.pumpAndSettle();
 
-      // The circle is empty again and nothing went to the drop zone, which
-      // is what separates this from a retire.
+      // The circle is empty again, and the drop holds only what paid for the
+      // ride -- the unit went under the deck, which is what separates this
+      // from a retire.
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('circle-You-backLeft')),
@@ -984,7 +1003,8 @@ void main() {
         findsOneWidget,
       );
       await tapOnBoard(tester, find.text('Drop').last);
-      expect(find.textContaining('Drop zone (0)'), findsOneWidget);
+      expect(find.textContaining('Drop zone (1)'), findsOneWidget);
+      expect(find.text('Booster'), findsNothing, reason: 'not retired');
     });
 
     testWidgets('the vanguard is never offered the bottom of the deck', (
@@ -1059,6 +1079,9 @@ void main() {
       await tester.tap(find.text('Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Next'));
       await tester.pump();
@@ -1202,6 +1225,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
+      // A ride out of the ride deck costs a card, and which one is asked.
+      await tester.tap(find.text('Discard').first);
+      await tester.pumpAndSettle();
 
       await tapOnBoard(tester, find.text('Crest').last);
       expect(find.textContaining('Crest zone (1)'), findsOneWidget);
@@ -1231,6 +1257,36 @@ void main() {
       expect(find.textContaining('Charges 3'), findsOneWidget);
       expect(find.textContaining('Charges no energy'), findsOneWidget);
       expect(find.text('Take it out'), findsNWidgets(2));
+    });
+
+    testWidgets('the ride deck asks which card pays for it', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('discard a card to ride it'),
+        findsOneWidget,
+        reason: 'the cost is on the row',
+      );
+
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+
+      // The hand is laid out to choose from rather than a card being taken.
+      expect(find.textContaining('Discard a card from hand'), findsOneWidget);
+      expect(find.text('Discard'), findsWidgets);
+
+      await tester.tap(find.text('Discard').first);
+      await tester.pumpAndSettle();
+
+      // The ride happened and the discard is in the drop zone.
+      expect(find.text('Ride'), findsNothing, reason: 'ridden already');
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.textContaining('Drop zone (1)'), findsOneWidget);
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

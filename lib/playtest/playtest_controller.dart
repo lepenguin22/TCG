@@ -122,8 +122,8 @@ class PlaytestController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- your turn
 
-  void ride(GameCard card, {required bool fromRideDeck}) {
-    engine.ride(you, card, fromRideDeck: fromRideDeck);
+  void ride(GameCard card, {required bool fromRideDeck, GameCard? discard}) {
+    engine.ride(you, card, fromRideDeck: fromRideDeck, discard: discard);
     _sync();
   }
 

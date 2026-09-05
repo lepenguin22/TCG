@@ -752,6 +752,11 @@ void main() {
       while (engine.rideDeckOption(you) != null) {
         engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
       }
+      // Three rides cost three cards out of hand, so draw back up before
+      // asking the hand to pay for a stride as well.
+      for (var i = 0; i < 3; i += 1) {
+        engine.drawCard(you);
+      }
       final cost = <GameCard>[];
       var total = 0;
       for (final card in you.hand) {
@@ -1530,6 +1535,100 @@ void main() {
     });
   });
 
+  group('the ride deck costs a card', () {
+    test('riding out of the ride deck discards one from hand', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final hand = you.hand.length;
+      final paying = you.hand.last;
+
+      engine.ride(
+        you,
+        engine.rideDeckOption(you)!,
+        fromRideDeck: true,
+        discard: paying,
+      );
+
+      expect(you.hand.length, hand - 1);
+      expect(you.hand.contains(paying), isFalse);
+      expect(you.drop, contains(paying), reason: 'discarded, not exiled');
+      expect(you.vanguard!.card.grade, 1, reason: 'and the ride happened');
+      expect(engine.state.log.last.text, contains('discarding ${paying.name}'));
+    });
+
+    test('riding out of hand costs nothing but the card', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final option = engine.handRideOptions(you).first;
+      final hand = you.hand.length;
+
+      engine.ride(you, option, fromRideDeck: false);
+      expect(you.hand.length, hand - 1, reason: 'the ridden card alone');
+      expect(you.drop, isEmpty);
+    });
+
+    test('an empty hand cannot pay for it', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      you.hand.clear();
+
+      expect(engine.rideDeckOption(you), isNotNull, reason: 'it is there');
+      expect(engine.canRideFromDeck(you), isFalse, reason: 'but unpayable');
+      expect(engine.canRide(you), isFalse);
+
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      expect(you.vanguard!.card.grade, 0, reason: 'the ride did not happen');
+    });
+
+    test('unasked, the worst guard in hand pays', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      // A sentinel and a small shield in hand: the sentinel is the card the
+      // game is won with, so it is never the one spent.
+      final sentinel = store.saveCard(
+        gameId: 'vanguard',
+        name: 'Perfect Guard',
+        attributes: {'grade': '1', 'cardType': 'sentinel', 'shield': '0'},
+      );
+      you.hand.clear();
+      you.hand.add(GameCard(9001, sentinel));
+      final cheap = you.deck.lastWhere((c) => c.shield > 0 && c.shield < 15000);
+      you.deck.remove(cheap);
+      you.hand.add(cheap);
+
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      expect(you.drop, contains(cheap));
+      expect(
+        you.hand.map((c) => c.name),
+        contains('Perfect Guard'),
+        reason: 'the perfect guard is not spent on a ride',
+      );
+    });
+
+    test('the CPU pays for its own rides', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine);
+      engine.beginPlay();
+      engine.endTurn();
+      final cpu = engine.state.opponent;
+      final hand = cpu.hand.length;
+
+      ai.takeStep(); // the ride
+      expect(cpu.vanguard!.card.grade, 1);
+      expect(cpu.hand.length, hand - 1);
+      expect(cpu.drop, hasLength(1));
+    });
+  });
+
   group('playing a crest by hand', () {
     /// The Energy Generator's own text, which is what the rules are read off.
     CardDefinition crestCard(DeckStore store) => store.saveCard(
@@ -1771,6 +1870,11 @@ void main() {
         engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
       }
       expect(you.vanguard!.card.grade, 3);
+      // Three rides cost three cards, so the hand needs topping back up
+      // before it can pay for a stride as well.
+      for (var i = 0; i < 3; i += 1) {
+        engine.drawCard(you);
+      }
       expect(engine.canStride(you), isTrue);
     });
 
@@ -1784,6 +1888,11 @@ void main() {
       }
       final heart = you.vanguard!.card;
       final gUnit = you.gZone.first;
+      // The rides cost three cards; draw back up so the stride's own cost is
+      // what is being tested.
+      for (var i = 0; i < 3; i += 1) {
+        engine.drawCard(you);
+      }
 
       // Two grade 2s pay for it; one alone would not.
       expect(engine.isStrideCost([you.hand.first]), isFalse);
@@ -1814,6 +1923,9 @@ void main() {
         engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
       }
       expect(engine.driveCount(you.vanguard!), 2, reason: 'twin at grade 3');
+      for (var i = 0; i < 3; i += 1) {
+        engine.drawCard(you);
+      }
 
       final cost = <GameCard>[];
       var total = 0;

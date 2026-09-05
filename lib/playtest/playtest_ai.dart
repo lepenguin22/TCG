@@ -176,8 +176,11 @@ class PlaytestAi {
       return false;
     }
 
-    // The ride deck is the reliable climb, so take it whenever it is there.
-    final fromDeck = engine.rideDeckOption(me);
+    // The ride deck is the reliable climb, so take it whenever it is there
+    // and there is a card in hand to pay the discard it costs.
+    final fromDeck = engine.canRideFromDeck(me)
+        ? engine.rideDeckOption(me)
+        : null;
     if (fromDeck != null) {
       _rideOnto(fromDeck, fromRideDeck: true);
       state.phase = PlaytestPhase.main;
@@ -213,7 +216,14 @@ class PlaytestAi {
         engine.playAbility(me, Circle.vanguard, ability, discardable: _spare());
       }
     }
-    engine.ride(me, card, fromRideDeck: fromRideDeck);
+    // Paid with the card the hand would rather lose, which is the same
+    // judgement it makes for every other discard.
+    engine.ride(
+      me,
+      card,
+      fromRideDeck: fromRideDeck,
+      discard: fromRideDeck ? _spare().firstOrNull : null,
+    );
     _playUnitAbilities(Circle.vanguard, AbilityTiming.onRide);
     _noteUnread(card);
   }
