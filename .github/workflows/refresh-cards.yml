@@ -85,17 +85,19 @@ jobs:
           fi
 
       - name: Rebuild the catalog
+        if: inputs.search == ''
         run: dart run tool/build_catalog.dart
 
       # The catalog feeds the deck rules, so a bad regeneration must not reach
       # a pull request: these are the same checks the APK build runs.
       - name: Verify the new catalog
+        if: inputs.search == ''
         run: flutter test test/card_catalog_test.dart
 
       # Straight onto a branch when one is named: a single promo picked up by
       # number does not need a pull request of its own.
       - name: Push to the branch that asked for it
-        if: inputs.push_to_branch != ''
+        if: inputs.push_to_branch != '' && inputs.search == ''
         env:
           BRANCH: ${{ inputs.push_to_branch }}
         run: |
@@ -115,7 +117,7 @@ jobs:
           git push origin "HEAD:$BRANCH"
 
       - name: Open a pull request if anything changed
-        if: inputs.push_to_branch == ''
+        if: inputs.push_to_branch == '' && inputs.search == ''
         uses: peter-evans/create-pull-request@v7
         with:
           branch: chore/refresh-card-database
