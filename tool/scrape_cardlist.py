@@ -404,19 +404,18 @@ def main() -> int:
                 continue
             card = parse_card(number, "", card_image(page), page)
             if not card:
+                # The page is the only thing that explains a failure here, so
+                # it is printed rather than summarised. Whether the product
+                # line the parser anchors on is even there is the first
+                # question, so it is answered first.
                 lines = strip_tags(page)
-                if not any(line.startswith("[VGE-") for line in lines):
-                    # The site answers an unknown number with the card list
-                    # index rather than a 404, so this is "no such card"
-                    # wearing the clothes of a parse failure.
-                    failures.append(f"{number}: the site has no such number")
-                    print(f"    {number}: no card page -- try --search")
-                    continue
-                # A real card page that the parser could not follow: the page
-                # is the thing to look at, so it is printed.
+                anchored = any(line.startswith("[VGE-") for line in lines)
                 failures.append(f"{number}: page did not parse")
-                print(f"    --- {number} did not parse; its page reads ---")
-                for line in lines[:60]:
+                print(
+                    f"    --- {number} did not parse "
+                    f"(product line found: {anchored}); its page reads ---"
+                )
+                for line in lines[:70]:
                     print(f"      {line[:90]}")
                 continue
             existing[number] = card

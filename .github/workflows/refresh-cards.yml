@@ -32,6 +32,12 @@ on:
           For finding the number a card is really filed under.
         required: false
         default: ''
+      dry_run:
+        description: >-
+          Read the cards and stop: no rebuild, no tests, no commit. For
+          working out why a card will not read.
+        required: false
+        default: ''
       push_to_branch:
         description: >-
           Branch to commit the regenerated files straight to. Leave empty to
@@ -85,19 +91,19 @@ jobs:
           fi
 
       - name: Rebuild the catalog
-        if: inputs.search == ''
+        if: inputs.search == '' && inputs.dry_run == ''
         run: dart run tool/build_catalog.dart
 
       # The catalog feeds the deck rules, so a bad regeneration must not reach
       # a pull request: these are the same checks the APK build runs.
       - name: Verify the new catalog
-        if: inputs.search == ''
+        if: inputs.search == '' && inputs.dry_run == ''
         run: flutter test test/card_catalog_test.dart
 
       # Straight onto a branch when one is named: a single promo picked up by
       # number does not need a pull request of its own.
       - name: Push to the branch that asked for it
-        if: inputs.push_to_branch != '' && inputs.search == ''
+        if: inputs.push_to_branch != '' && inputs.search == '' && inputs.dry_run == ''
         env:
           BRANCH: ${{ inputs.push_to_branch }}
         run: |
@@ -117,7 +123,7 @@ jobs:
           git push origin "HEAD:$BRANCH"
 
       - name: Open a pull request if anything changed
-        if: inputs.push_to_branch == '' && inputs.search == ''
+        if: inputs.push_to_branch == '' && inputs.search == '' && inputs.dry_run == ''
         uses: peter-evans/create-pull-request@v7
         with:
           branch: chore/refresh-card-database
