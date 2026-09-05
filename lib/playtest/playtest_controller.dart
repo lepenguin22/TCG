@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../store/deck_store.dart';
 import 'playtest_ai.dart';
@@ -56,7 +57,12 @@ class PlaytestController extends ChangeNotifier {
       random: random,
     );
     ai = PlaytestAi(engine);
+    gameId = yourDeck.gameId;
   }
+
+  /// The game being played, for the screens that need to ask its rules or its
+  /// card database something -- choosing a crest to play, among them.
+  late final String gameId;
 
   late final PlaytestEngine engine;
   late final PlaytestAi ai;
@@ -391,6 +397,16 @@ class PlaytestController extends ChangeNotifier {
 
   void bottomDeckUnit(PlaytestSide side, Circle circle) {
     engine.bottomDeckUnit(side, circle);
+    _sync();
+  }
+
+  void playCrest(PlaytestSide side, CardDefinition card) {
+    engine.playCrest(side, card);
+    _sync();
+  }
+
+  void removeCrest(PlaytestSide side) {
+    engine.removeCrest(side);
     _sync();
   }
 

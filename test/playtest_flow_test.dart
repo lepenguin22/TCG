@@ -1106,6 +1106,48 @@ void main() {
       expect(find.text('Lock'), findsNothing);
     });
 
+    testWidgets('a deck with no crest can be given one', (tester) async {
+      final (store, deck) = await buildDeck();
+      // A crest in the library but not in the deck, which is the case a
+      // stride deck is in: no crest of its own, one available to play.
+      store.saveCard(
+        gameId: 'vanguard',
+        name: 'Energy Generator',
+        attributes: {
+          'cardType': 'ride-deck-crest',
+          'effect':
+              '[AUTO]: At the beginning of your ride phase, '
+              '[Energy-Charge 3].',
+        },
+      );
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // The crest zone is on the board even with nothing in it.
+      expect(find.text('Crest'), findsNWidgets(2));
+      await tapOnBoard(tester, find.text('Crest').last);
+      expect(find.textContaining('crest zone'), findsWidgets);
+      expect(find.text('Energy Generator'), findsOneWidget);
+
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      // It is in play, and its own sheet takes over from the chooser.
+      await tapOnBoard(tester, find.text('Crest').last);
+      expect(find.textContaining('It charges 3'), findsOneWidget);
+      expect(find.text('Take it out of the crest zone'), findsOneWidget);
+
+      await tester.tap(find.text('Take it out of the crest zone'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(tester, find.text('Crest').last);
+      expect(
+        find.text('Energy Generator'),
+        findsOneWidget,
+        reason: 'offered again',
+      );
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

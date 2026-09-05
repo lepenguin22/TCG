@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tcg_decks/games/vanguard/vanguard_data.dart';
+import 'package:tcg_decks/models/card_definition.dart';
 import 'package:tcg_decks/models/deck.dart';
 import 'package:tcg_decks/playtest/playtest_ai.dart';
 import 'package:tcg_decks/playtest/playtest_engine.dart';
@@ -1524,6 +1525,113 @@ void main() {
       }
       expect(sawYouFirst, isTrue);
       expect(sawCpuFirst, isTrue);
+    });
+  });
+
+  group('playing a crest by hand', () {
+    /// The Energy Generator's own text, which is what the rules are read off.
+    CardDefinition crestCard(DeckStore store) => store.saveCard(
+      gameId: 'vanguard',
+      name: 'Energy Generator',
+      attributes: {
+        'cardType': 'ride-deck-crest',
+        'effect':
+            '[AUTO]Ride Deck:When you ride, put this card into the crest '
+            'zone, and if you went second, [Energy-Charge 3].\n'
+            '[CONT]: You may have up to ten energy.\n'
+            '[AUTO]: At the beginning of your ride phase, [Energy-Charge 3].',
+      },
+    );
+
+    test('a deck with no crest can be given one', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      expect(you.crest, isNull, reason: 'this deck brings none');
+
+      engine.playCrest(you, crestCard(store));
+      expect(you.crest!.name, 'Energy Generator');
+      expect(you.crestInPlay, isTrue);
+      expect(engine.crestCharge(you), 3, reason: 'read off its own text');
+    });
+
+    test('going first, playing it charges nothing yet', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      expect(you.goesFirst, isTrue);
+
+      engine.playCrest(you, crestCard(store));
+      expect(you.energy, 0, reason: 'the three is for going second');
+    });
+
+    test('going second, playing it pays the three it owes', () async {
+      final (store, deck) = await buildDeck();
+      final engine = PlaytestEngine.start(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
+        random: Random(7),
+      );
+      engine.beginPlay();
+      final you = engine.state.you;
+      expect(you.goesFirst, isFalse);
+
+      engine.playCrest(you, crestCard(store));
+      expect(you.energy, 3);
+    });
+
+    test('it charges every ride phase from then on', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.playCrest(you, crestCard(store));
+      expect(you.energy, 0);
+
+      engine.endTurn(); // to the CPU
+      engine.endTurn(); // back to you
+      expect(you.energy, 3, reason: 'your ride phase charged it');
+    });
+
+    test('it can be taken back out, and the energy stays', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.playCrest(you, crestCard(store));
+      engine.setEnergy(you, 5);
+
+      engine.removeCrest(you);
+      expect(you.crest, isNull);
+      expect(you.crestInPlay, isFalse);
+      expect(you.energy, 5, reason: 'spent or not, it was charged');
+      expect(engine.crestCharge(you), 0, reason: 'nothing charges it now');
+    });
+
+    test('a second crest replaces the first', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.playCrest(you, crestCard(store));
+
+      final other = store.saveCard(
+        gameId: 'vanguard',
+        name: 'Another Crest',
+        attributes: {
+          'cardType': 'ride-deck-crest',
+          'effect':
+              '[AUTO]: At the beginning of your ride phase, '
+              '[Energy-Charge 1].',
+        },
+      );
+      engine.playCrest(you, other);
+      expect(you.crest!.name, 'Another Crest');
+      expect(engine.crestCharge(you), 1, reason: 'the new one\'s number');
     });
   });
 

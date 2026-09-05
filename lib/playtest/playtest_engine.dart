@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../games/game_definition.dart';
 import '../games/vanguard/vanguard_data.dart';
+import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../store/deck_store.dart';
 import 'ability_reader.dart';
@@ -201,6 +202,35 @@ class PlaytestEngine {
     if (side.crestInPlay) {
       _chargeEnergy(side, crestCharge(side));
     }
+  }
+
+  /// Puts a crest into the crest zone by hand.
+  ///
+  /// A Divinez deck brings its crest in its ride deck and the first ride puts
+  /// it there on its own. Every other deck brings none -- a stride deck least
+  /// of all -- so a playtest that wants one has to say which, and this is
+  /// where it says it. What happens afterwards is the same either way: the
+  /// crest charges on its own from the next ride phase, and pays the three
+  /// its text owes whoever went second, since that is what the card says.
+  void playCrest(PlaytestSide side, CardDefinition card) {
+    side.crest = GameCard(_nextInstanceId++, card);
+    side.crestInPlay = false;
+    _placeCrest(side);
+  }
+
+  /// Takes the crest back out of the crest zone.
+  ///
+  /// The energy it charged stays: it was spent or it was not, and taking the
+  /// card away does not unspend it.
+  void removeCrest(PlaytestSide side) {
+    final crest = side.crest;
+    if (crest == null) return;
+    side.crest = null;
+    side.crestInPlay = false;
+    state.note(
+      '${side.name} takes ${crest.name} out of the crest zone.',
+      by: side,
+    );
   }
 
   /// How much energy this side's crest charges each turn.

@@ -453,8 +453,13 @@ fire mid-battle, so each of those piles offers a **Call** beside its own action
 for any unit the vanguard's grade allows, and a circle takes it in the battle
 phase as readily as in the main one. A call out of the deck shuffles it
 afterwards, the way looking through it always does.
-- **Crest** appears for a deck that brings one, greyed until it reaches the
-  crest zone on your first ride, and showing the energy it has charged.
+- **Crest** is always there, greyed until something reaches it. A deck
+  carrying a ride deck crest puts it in on the first ride; a deck carrying
+  none — a stride deck among them — opens an empty crest zone that offers the
+  crests the card database knows, plus any you have entered yourself, so the
+  right one can be played by hand. It charges from the next ride phase like
+  any other, pays the three its text owes whoever went second, and can be
+  taken back out again.
 - **G zone** appears only for a deck that has one. With a grade 3 vanguard and
   grade 3 worth of cards in hand to discard, a G unit strides on top of the
   vanguard: it triple drives, the unit underneath stays as the heart, and both

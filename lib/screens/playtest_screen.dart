@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../games/card_catalog.dart';
+import '../games/game_definition.dart';
+import '../games/games.dart';
+import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../playtest/playtest_controller.dart';
 import '../playtest/playtest_state.dart';
@@ -449,15 +453,15 @@ class _ZoneRail extends StatelessWidget {
           count: side.soul.length,
           onTap: () => _showSoulSheet(context, game, side),
         ),
-        // The crest, once a deck brings one. It charges the energy on its
-        // own, so it is worth being able to see and read.
-        if (side.crest != null)
-          _Pile(
-            label: 'Crest',
-            count: side.crestInPlay ? side.energy : 0,
-            highlight: side.crestInPlay,
-            onTap: () => _showCrestSheet(context, game, side),
-          ),
+        // The crest. Shown even with none in play, since an empty crest zone
+        // is where one gets played from -- a deck that brings no crest of its
+        // own is exactly the deck that wants to choose one.
+        _Pile(
+          label: 'Crest',
+          count: side.crestInPlay ? side.energy : 0,
+          highlight: side.crestInPlay,
+          onTap: () => _showCrestSheet(context, game, side),
+        ),
         // Only a deck that strides has a G zone, so it only appears for one.
         if (side.gZone.isNotEmpty)
           _Pile(
@@ -816,7 +820,10 @@ void _showCrestSheet(
   PlaytestSide side,
 ) {
   final crest = side.crest;
-  if (crest == null) return;
+  if (crest == null) {
+    _showCrestChooser(context, game, side);
+    return;
+  }
   final charge = game.engine.crestCharge(side);
 
   showModalBottomSheet<void>(
@@ -883,11 +890,151 @@ void _showCrestSheet(
                 ),
               ],
             ),
+            const SizedBox(height: 14),
+            // A crest played by hand is one chosen by hand, so it can be
+            // chosen again. A crest that came out of the ride deck goes back
+            // the same way, which is what makes a mis-tap recoverable.
+            OutlinedButton(
+              onPressed: () {
+                game.removeCrest(side);
+                Navigator.of(sheetContext).pop();
+              },
+              child: const Text('Take it out of the crest zone'),
+            ),
           ],
         ),
       ),
     ),
   );
+}
+
+/// Choosing a crest to play, for a deck that brings none of its own.
+///
+/// A Divinez deck carries its crest in its ride deck and never needs this. A
+/// stride deck carries none at all, so the crest a playtest wants has to be
+/// named -- and the ones worth naming are the ones the card database knows,
+/// plus anything the player has entered themselves.
+void _showCrestChooser(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  final store = context.read<DeckStore>();
+  final definition = gameById(game.gameId);
+  final fromLibrary = store.cards
+      .where(
+        (card) =>
+            card.gameId == definition.id &&
+            card.attributes['cardType'] == 'ride-deck-crest',
+      )
+      .toList();
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: FutureBuilder<List<CatalogCard>>(
+        future: _crestOptions(context, definition),
+        builder: (builderContext, snapshot) {
+          final catalogCrests = snapshot.data ?? const <CatalogCard>[];
+          final options = <CardDefinition>[
+            ...fromLibrary,
+            for (final entry in catalogCrests)
+              if (!fromLibrary.any((c) => c.name == entry.name))
+                CardDefinition(
+                  id: 'catalog:${entry.attributes['cardNo'] ?? entry.name}',
+                  gameId: definition.id,
+                  name: entry.name,
+                  attributes: entry.attributes,
+                  createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+                  updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+                ),
+          ];
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionHeader(title: '${side.name}: crest zone'),
+                const Text(
+                  'Empty. A deck that carries a ride deck crest puts it here '
+                  'on its first ride; a deck that carries none — a stride '
+                  'deck among them — can be given one here instead. It then '
+                  'charges its energy every ride phase like any other.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Text(
+                    'Reading the card database…',
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                  ),
+                if (snapshot.connectionState != ConnectionState.waiting &&
+                    options.isEmpty)
+                  const Text(
+                    'No ride deck crest to play. Add one to your library and '
+                    'it will show up here.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                for (final option in options)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CardImage(
+                      url: option.attributes['imageUrl'],
+                      width: 32,
+                    ),
+                    title: Text(
+                      option.name,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      option.attributes['effect']?.split('\n').last ??
+                          'A ride deck crest.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    trailing: TextButton(
+                      onPressed: () {
+                        game.playCrest(side, option);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('Play'),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+/// The ride deck crests the card database knows, or none where it is not
+/// there to be read -- a test, or a build with no catalog.
+Future<List<CatalogCard>> _crestOptions(
+  BuildContext context,
+  GameDefinition game,
+) async {
+  final asset = game.catalogAsset;
+  if (asset == null) return const [];
+  final catalog = context.read<CardCatalog?>();
+  if (catalog == null) return const [];
+  final cards = await catalog.load(asset);
+  return cards
+      .where((card) => card.attributes['cardType'] == 'ride-deck-crest')
+      .toList();
 }
 
 /// The G zone, and the stride it exists for.
