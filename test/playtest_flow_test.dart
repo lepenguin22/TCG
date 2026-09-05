@@ -198,7 +198,7 @@ void main() {
       expect(game.boostSelected, isFalse);
     });
 
-    test('the CPU going first has already played when you take over', () async {
+    test('the CPU going first waits to be stepped through', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(
         store: store,
@@ -211,14 +211,90 @@ void main() {
 
       game.confirmMulligan();
       // Turn one belongs to the CPU, so keeping your hand hands straight over
-      // to it rather than giving you a board you cannot act on.
+      // to it -- and its main phase is yours to step through rather than a
+      // finished board handed back to you.
       expect(game.state.turn, 1);
+      expect(game.stage, PlaytestStage.cpuTurn);
+      expect(
+        game.cpu.vanguard!.card.grade,
+        0,
+        reason: 'still its starting vanguard, not ridden up',
+      );
+
+      for (var i = 0; i < 20 && game.stage == PlaytestStage.cpuTurn; i += 1) {
+        game.cpuStep();
+      }
       expect(
         game.stage,
         anyOf(PlaytestStage.guarding, PlaytestStage.yours),
         reason: 'it played its turn out',
       );
-      expect(game.cpu.vanguard, isNotNull);
+      expect(game.cpu.vanguard!.card.grade, 1, reason: 'it rode up');
+    });
+
+    test('the CPU plays one action per step', () async {
+      final (store, deck) = await buildDeck();
+      final game = PlaytestController(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
+        random: Random(4),
+      );
+      game.confirmMulligan();
+
+      // The ride is the first thing it does, and it is the only thing that
+      // first tap does.
+      game.cpuStep();
+      expect(game.cpu.vanguard!.card.grade, 1, reason: 'it rode');
+      expect(game.cpu.units, hasLength(1), reason: 'and called nothing yet');
+      expect(game.lastCpuAction, contains('rides'));
+
+      // Each tap after that puts at most one more unit on the board.
+      var units = game.cpu.units.length;
+      while (game.stage == PlaytestStage.cpuTurn) {
+        game.cpuStep();
+        final now = game.cpu.units.length;
+        expect(
+          now - units,
+          lessThanOrEqualTo(1),
+          reason: 'one action at a time',
+        );
+        units = now;
+      }
+      expect(units, greaterThan(1), reason: 'it did build a board');
+    });
+
+    test('stepping to the end is the same board as playing it out', () async {
+      Future<PlaytestController> game(bool stepped) async {
+        final (store, deck) = await buildDeck();
+        final controller = PlaytestController(
+          store: store,
+          yourDeck: deck,
+          opponentDeck: deck,
+          turnOrder: TurnOrder.cpuFirst,
+          random: Random(9),
+        );
+        controller.confirmMulligan();
+        if (stepped) {
+          while (controller.stage == PlaytestStage.cpuTurn) {
+            controller.cpuStep();
+          }
+        } else {
+          // What the CPU does when nobody is watching it: the same steps,
+          // run to the end in one go.
+          controller.ai.takeTurn();
+        }
+        return controller;
+      }
+
+      final stepped = await game(true);
+      final atOnce = await game(false);
+      expect(
+        stepped.cpu.units.map((u) => u.card.name).toList(),
+        atOnce.cpu.units.map((u) => u.card.name).toList(),
+      );
+      expect(stepped.cpu.hand.length, atOnce.cpu.hand.length);
     });
 
     test('a rear-guard attack skips the drive check', () async {
@@ -917,6 +993,35 @@ void main() {
 
       await tapOnBoard(tester, find.text('Drop').last);
       expect(find.textContaining('Drop zone (0)'), findsOneWidget);
+    });
+
+    testWidgets('the CPU main phase is stepped from the board', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      // Battle to the end phase, and the end phase hands the turn over.
+      await tester.tap(find.text('End turn'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+
+      // The board hands over to the CPU and waits, rather than showing a
+      // finished board with no account of how it got there.
+      expect(find.text('The CPU takes its turn.'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('rides'),
+        findsOneWidget,
+        reason: 'it says what it just did',
+      );
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

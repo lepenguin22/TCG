@@ -21,6 +21,10 @@ enum PlaytestStage {
   /// top before it resolves.
   yourAttack,
 
+  /// The CPU is playing its main phase, one action per tap, so what it did
+  /// can be read as it happens rather than found finished.
+  cpuTurn,
+
   /// The CPU is attacking and is waiting for you to guard.
   guarding,
 
@@ -216,9 +220,35 @@ class PlaytestController extends ChangeNotifier {
 
   // ----------------------------------------------------------------- cpu turn
 
+  /// Hands the turn to the CPU. Nothing is played yet: its main phase is
+  /// stepped through from the board, one action at a time.
   void _runCpuTurn() {
-    ai.takeTurn();
+    lastCpuAction = null;
+    stage = PlaytestStage.cpuTurn;
+  }
+
+  /// What the CPU last did, for the line above the Continue button.
+  String? lastCpuAction;
+
+  /// Plays the CPU's next single action, or moves it on to attacking when its
+  /// main phase is done.
+  void cpuStep() {
+    final before = state.log.length;
+    if (ai.takeStep()) {
+      // Everything the engine noted for that one action: a call and the
+      // ability it set off are one step and read as one line.
+      final done = state.log
+          .skip(before)
+          .map((entry) => entry.text)
+          .where((text) => !text.startsWith('---'))
+          .join(' ');
+      lastCpuAction = done.isEmpty ? null : done;
+      _sync();
+      return;
+    }
+    lastCpuAction = null;
     _nextCpuAttack();
+    _sync();
   }
 
   void _nextCpuAttack() {

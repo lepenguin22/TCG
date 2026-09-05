@@ -33,21 +33,40 @@ class PlaytestAi {
 
   PlaytestSide get foe => me == state.you ? state.opponent : state.you;
 
-  /// Plays this side's turn up to the point where it starts attacking.
+  /// Plays this side's turn out to the point where it starts attacking.
+  ///
+  /// The same steps [takeStep] gives one at a time, run to the end. Used where
+  /// nobody is watching -- a test, or a CPU playing itself.
   void takeTurn() {
-    if (state.isOver) return;
+    while (takeStep()) {}
+  }
 
-    _ride();
-    _stride();
-    _callUnits();
-    _reposition();
-    _playTiming(AbilityTiming.mainPhase);
-    _playTiming(AbilityTiming.activated);
+  /// Does the next single thing this side wants to do, and stops.
+  ///
+  /// The main phase used to happen all at once, which meant a player looked
+  /// up from their own turn to find a finished board and no account of how it
+  /// got there. One action per call lets the screen show them in order.
+  ///
+  /// Returns false when there is nothing left to do before attacking, having
+  /// moved the game into the battle phase.
+  bool takeStep() {
+    if (state.isOver) return false;
+
+    // In the order the turn happens in: ride, then stride, then the board,
+    // then what the board sets off.
+    if (_rideStep()) return true;
+    if (_strideStep()) return true;
+    if (_callStep()) return true;
+    if (_repositionStep()) return true;
+    if (_abilityStep(AbilityTiming.mainPhase)) return true;
+    if (_abilityStep(AbilityTiming.activated)) return true;
     // Continuous abilities are simply true while the unit stands there, and
     // the bonuses they give wear off with the turn, so they are put back on
     // once the board for this turn is settled.
-    _playTiming(AbilityTiming.continuous);
+    if (_abilityStep(AbilityTiming.continuous)) return true;
+
     state.phase = PlaytestPhase.battle;
+    return false;
   }
 
   // ------------------------------------------------------------------ abilities
@@ -57,10 +76,15 @@ class PlaytestAi {
   /// Costs are paid only where they leave the CPU able to keep playing: a
   /// hand held for guarding is not spent on a discard, and damage is not
   /// counter-blasted away to nothing.
-  void _playUnitAbilities(Circle circle, AbilityTiming timing) {
+  bool _playUnitAbilities(
+    Circle circle,
+    AbilityTiming timing, {
+    bool stopAfterOne = false,
+  }) {
     final unit = me.field[circle];
-    if (unit == null) return;
+    if (unit == null) return false;
 
+    var played = false;
     for (final ability in engine.abilitiesOf(unit.card).playable) {
       if (ability.timing != timing &&
           !(ability.timing == AbilityTiming.onPlaced &&
@@ -71,15 +95,20 @@ class PlaytestAi {
       if (!ability.worksOn(vanguard: circle == Circle.vanguard)) continue;
       if (unit.usedAbilities.contains(ability.text)) continue;
       if (!_worthPaying(ability)) continue;
-      engine.playAbility(me, circle, ability, discardable: _spare());
+      if (engine.playAbility(me, circle, ability, discardable: _spare())) {
+        played = true;
+        if (stopAfterOne) return true;
+      }
     }
+    return played;
   }
 
-  /// Every unit on the board, for the timings that are not about one unit.
-  void _playTiming(AbilityTiming timing) {
+  /// The next ability of this timing anywhere on the board, and only that one.
+  bool _abilityStep(AbilityTiming timing) {
     for (final circle in Circle.values) {
-      _playUnitAbilities(circle, timing);
+      if (_playUnitAbilities(circle, timing, stopAfterOne: true)) return true;
     }
+    return false;
   }
 
   /// Whether a cost is one the CPU should pay at all.
@@ -137,10 +166,14 @@ class PlaytestAi {
 
   // ----------------------------------------------------------------- the board
 
-  void _ride() {
+  bool _rideStep() {
+    if (state.phase != PlaytestPhase.ride &&
+        state.phase != PlaytestPhase.draw) {
+      return false;
+    }
     if (!engine.canRide(me)) {
       state.phase = PlaytestPhase.main;
-      return;
+      return false;
     }
 
     // The ride deck is the reliable climb, so take it whenever it is there.
@@ -148,21 +181,22 @@ class PlaytestAi {
     if (fromDeck != null) {
       _rideOnto(fromDeck, fromRideDeck: true);
       state.phase = PlaytestPhase.main;
-      return;
+      return true;
     }
 
     // Otherwise ride out of hand, going up a grade before going sideways, and
     // taking the biggest of the options at that grade.
     final options = engine.handRideOptions(me);
-    if (options.isNotEmpty) {
-      final current = me.vanguard?.card.grade ?? 0;
-      options.sort((a, b) {
-        final up = (b.grade > current ? 1 : 0) - (a.grade > current ? 1 : 0);
-        return up != 0 ? up : b.power.compareTo(a.power);
-      });
-      _rideOnto(options.first, fromRideDeck: false);
-    }
     state.phase = PlaytestPhase.main;
+    if (options.isEmpty) return false;
+
+    final current = me.vanguard?.card.grade ?? 0;
+    options.sort((a, b) {
+      final up = (b.grade > current ? 1 : 0) - (a.grade > current ? 1 : 0);
+      return up != 0 ? up : b.power.compareTo(a.power);
+    });
+    _rideOnto(options.first, fromRideDeck: false);
+    return true;
   }
 
   /// Rides, and plays what the ride sets off.
@@ -185,8 +219,8 @@ class PlaytestAi {
   }
 
   /// Strides when the deck can, which is most of what a G zone is worth.
-  void _stride() {
-    if (!engine.canStride(me)) return;
+  bool _strideStep() {
+    if (!engine.canStride(me)) return false;
 
     // The biggest G unit: with no ability text to weigh, power is what is
     // left to choose on.
@@ -210,12 +244,13 @@ class PlaytestAi {
       cost.add(card);
       total += card.grade;
     }
-    if (total < 3) return;
+    if (total < 3) return false;
     engine.stride(me, gUnits.first, cost);
+    return true;
   }
 
-  /// Fills the board, without emptying the hand of everything that guards.
-  void _callUnits() {
+  /// Calls the next unit the board wants, and only that one.
+  bool _callStep() {
     // Front row first -- those are the circles that attack -- but the boost
     // behind the vanguard comes before a second attacker, because the
     // vanguard attacks every single turn and wants the help every time.
@@ -231,7 +266,7 @@ class PlaytestAi {
       // How much hand to keep back for guarding. Deeper in damage means more
       // attacks that have to be answered, so more is held.
       final reserve = me.damageCount >= 4 ? 4 : 3;
-      if (me.hand.length <= reserve) return;
+      if (me.hand.length <= reserve) return false;
 
       final callable = me.hand
           .where((c) => engine.canCall(me, c, circle))
@@ -261,7 +296,9 @@ class PlaytestAi {
       engine.call(me, best, circle);
       _playUnitAbilities(circle, AbilityTiming.onCall);
       _noteUnread(best);
+      return true;
     }
+    return false;
   }
 
   /// Moves a rear-guard up out of the back row when there is nothing in front
@@ -275,14 +312,16 @@ class PlaytestAi {
   /// empty front circle, the better board is the bigger unit in front with
   /// this one boosting it -- so this only picks up what calling could not
   /// fill, which is the board left over after an attacker was retired.
-  void _reposition() {
+  bool _repositionStep() {
     for (final back in [Circle.backLeft, Circle.backRight]) {
       final unit = me.field[back];
       if (unit == null) continue;
       final front = engine.moveTargetOf(back);
       if (front == null || me.field[front] != null) continue;
       engine.moveUnit(me, back);
+      return true;
     }
+    return false;
   }
 
   // ------------------------------------------------------------------ attacking

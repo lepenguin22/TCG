@@ -1645,6 +1645,19 @@ class _Controls extends StatelessWidget {
           ),
         ];
 
+      // The CPU's main phase, a tap at a time: what it just did, and the
+      // button that lets it do the next thing.
+      case PlaytestStage.cpuTurn:
+        return [
+          Expanded(
+            child: Text(
+              game.lastCpuAction ?? 'The CPU takes its turn.',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          ),
+          FilledButton(onPressed: game.cpuStep, child: const Text('Continue')),
+        ];
+
       case PlaytestStage.cpuAttack:
         return [
           const Expanded(

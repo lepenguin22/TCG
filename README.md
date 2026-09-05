@@ -470,6 +470,23 @@ That still answers the questions a deck list cannot. Does it ride through grade
 3 reliably? Does the mulligan leave a workable hand? Are sixteen triggers enough
 to keep up in the damage race? How much shield is left in hand by turn four?
 
+### Watching the CPU play
+
+Its main phase happens one action at a time. It used to run the whole thing on
+the tap that ended your turn, which meant looking up from your own board to
+find a finished one and no account of how it got there — six cards played, a
+ride, and whatever abilities went with them, all in a single frame.
+
+Now the control bar hands over and waits: **Continue** plays the CPU's next
+single action and says what it was — the ride, one call, a move up a column,
+one ability — so its turn can be read as it happens rather than reconstructed
+from the log afterwards. A call and the ability that call sets off are one
+action, since that is one decision.
+
+Nothing about what it decides changed, only when you see it: stepping through
+to the end leaves exactly the board that playing it out in one go would have,
+which is what a test checks.
+
 ### How the CPU decides
 
 Everything it does comes from what the engine can see — power, shield,
