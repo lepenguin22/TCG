@@ -202,6 +202,9 @@ class PlaytestController extends ChangeNotifier {
   /// Declares one of your attacks. The CPU guards it straight away, so what
   /// you see next is the real fight and not a guess at it.
   void attack({required Circle from, required Circle to, bool boost = false}) {
+    // The turn one rule, kept here as well as in what the board offers: a
+    // caller that has not asked cannot make an attack that is not allowed.
+    if (!engine.canAttack(you)) return;
     final pending = engine.declareAttack(from: from, to: to, boost: boost);
     ai.guard(pending);
     stage = PlaytestStage.yourAttack;

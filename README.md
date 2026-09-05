@@ -330,7 +330,9 @@ an old printing's own text says. Critical adds that power and a critical, draw
 draws, front spreads it across the front row rather than onto one unit, heal
 heals when you are not ahead on damage, stand stands a unit. An over trigger is
 its own number, +100000, and the rest of what it does is the card's text. Both
-players draw on their own first turn; nobody skips it.
+players draw on their own first turn; nobody skips it. Nobody attacks on turn
+one either: whoever goes first is a turn ahead on the board, so they do not
+swing, and the control bar says so rather than leaving a tap unanswered.
 
 ### Lock
 

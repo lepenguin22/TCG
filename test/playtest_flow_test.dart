@@ -15,6 +15,16 @@ import 'playtest_engine_test.dart'
 
 void main() {
   group('the playtest controller', () {
+    /// Steps the CPU's first turn out, so the board is on your turn two.
+    ///
+    /// Nobody attacks on turn one, so a test about attacking gives that turn
+    /// to the CPU and plays it through.
+    void pastTheFirstTurn(PlaytestController game) {
+      for (var i = 0; i < 30 && game.stage == PlaytestStage.cpuTurn; i += 1) {
+        game.cpuStep();
+      }
+    }
+
     test('a game begins waiting on your mulligan', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(
@@ -92,9 +102,11 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
         random: Random(11),
       );
       game.confirmMulligan();
+      pastTheFirstTurn(game);
       game.nextPhase();
       game.nextPhase();
       expect(game.state.phase, PlaytestPhase.battle);
@@ -122,9 +134,11 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
         random: Random(3),
       );
       game.confirmMulligan();
+      pastTheFirstTurn(game);
       game.ride(game.engine.rideDeckOption(game.you)!, fromRideDeck: true);
       game.nextPhase();
 
@@ -151,9 +165,11 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
         random: Random(3),
       );
       game.confirmMulligan();
+      pastTheFirstTurn(game);
       game.ride(game.engine.rideDeckOption(game.you)!, fromRideDeck: true);
       game.nextPhase();
 
@@ -390,7 +406,12 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Future<void> pump(WidgetTester tester, DeckStore store, deck) async {
+    Future<void> pump(
+      WidgetTester tester,
+      DeckStore store,
+      deck, {
+      TurnOrder turnOrder = TurnOrder.youFirst,
+    }) async {
       await tester.pumpWidget(
         ChangeNotifierProvider<DeckStore>.value(
           value: store,
@@ -399,6 +420,7 @@ void main() {
             home: PlaytestScreen(
               yourDeck: deck,
               opponentDeck: deck,
+              turnOrder: turnOrder,
               // A fixed shuffle: these tests reach for particular
               // cards, and a board that is a different board every
               // run fails one time in a hundred for no reason.
@@ -552,6 +574,20 @@ void main() {
     /// A card in hand of a grade low enough to call under a grade 1
     /// vanguard. Hand tiles label themselves with their grade, which is the
     /// only handle a widget test has on which card is which.
+    /// Plays the CPU's first turn out, so the board is on your turn two.
+    ///
+    /// Nobody attacks on turn one -- whoever goes first does not -- so a test
+    /// about attacking starts by handing that turn to the CPU and stepping
+    /// through it.
+    Future<void> pastTheFirstTurn(WidgetTester tester) async {
+      for (var i = 0; i < 30; i += 1) {
+        final step = find.text('Continue');
+        if (step.evaluate().isEmpty) break;
+        await tester.tap(step);
+        await tester.pumpAndSettle();
+      }
+    }
+
     Finder callableHandCard() {
       for (final label in ['G1', 'G0']) {
         if (find.text(label).evaluate().isNotEmpty) return find.text(label);
@@ -713,9 +749,12 @@ void main() {
 
     testWidgets('drive is offered on the vanguard alone', (tester) async {
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck);
+      // The drive check is only reached by attacking, and nobody attacks on
+      // turn one, so the CPU takes it.
+      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
       await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await tester.pumpAndSettle();
+      await pastTheFirstTurn(tester);
 
       await tapOnBoard(
         tester,
@@ -783,9 +822,11 @@ void main() {
       tester,
     ) async {
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck);
+      // The CPU takes turn one, which is the turn nobody attacks on.
+      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
       await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await tester.pumpAndSettle();
+      await pastTheFirstTurn(tester);
 
       // Nothing to show before a battle starts.
       expect(find.text('GUARDIAN'), findsNothing);
@@ -821,9 +862,11 @@ void main() {
       tester,
     ) async {
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck);
+      // The CPU takes turn one, which is the turn nobody attacks on.
+      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
       await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await tester.pumpAndSettle();
+      await pastTheFirstTurn(tester);
       await tester.tap(find.text('Next'));
       await tester.pump();
       await tester.tap(find.text('Next'));
@@ -1287,6 +1330,38 @@ void main() {
       expect(find.text('Ride'), findsNothing, reason: 'ridden already');
       await tapOnBoard(tester, find.text('Drop').last);
       expect(find.textContaining('Drop zone (1)'), findsOneWidget);
+    });
+
+    testWidgets('turn one says why you cannot attack', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      // The battle phase, and the board says the rule rather than simply
+      // not responding to a tap.
+      expect(
+        find.textContaining('whoever goes first does not attack'),
+        findsOneWidget,
+      );
+
+      // And tapping a unit does not start an attack.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      expect(
+        find.textContaining('Drive check ×'),
+        findsNothing,
+        reason: 'no attack was declared',
+      );
+      // It opened the unit sheet instead, which is what a tap means when
+      // attacking is not on offer.
+      expect(find.text('+1 critical'), findsOneWidget);
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

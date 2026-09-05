@@ -1334,6 +1334,7 @@ class _CircleSlot extends StatelessWidget {
         isYours &&
         game.state.yourTurn &&
         game.state.phase == PlaytestPhase.battle &&
+        game.engine.canAttack(game.you) &&
         unit != null &&
         unit.isActive &&
         !unit.rested &&
@@ -2004,6 +2005,10 @@ class _Controls extends StatelessWidget {
           PlaytestPhase.battle =>
             game.holding != null
                 ? 'Tap a circle to call ${game.holding!.name}.'
+                : !game.engine.canAttack(game.you)
+                // The turn one rule, said rather than left as a board that
+                // does not respond.
+                ? 'Turn one — whoever goes first does not attack.'
                 : game.selectedAttacker == null
                 ? 'Battle — tap one of your front row units to attack with.'
                 : game.availableBooster == null

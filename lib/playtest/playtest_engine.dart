@@ -847,10 +847,18 @@ class PlaytestEngine {
 
   /// The units that could attack right now: standing, and in the front row.
   /// The back row boosts rather than attacks.
+  /// Whether this side may attack at all this turn.
+  ///
+  /// Whoever goes first does not attack on their first turn: they are a turn
+  /// ahead on the board and would be swinging into a vanguard that has had no
+  /// turn to answer with. It is the oldest balancing rule in the game.
+  bool canAttack(PlaytestSide side) => !(state.turn == 1 && side.goesFirst);
+
   List<Circle> attackers(PlaytestSide side) => [
-    for (final entry in side.field.entries)
-      if (entry.key.isFrontRow && !entry.value.rested && entry.value.isActive)
-        entry.key,
+    if (canAttack(side))
+      for (final entry in side.field.entries)
+        if (entry.key.isFrontRow && !entry.value.rested && entry.value.isActive)
+          entry.key,
   ];
 
   /// What an attack may be aimed at: the vanguard, or a rear-guard standing in

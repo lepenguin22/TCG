@@ -377,6 +377,8 @@ void main() {
       );
       engine.call(you, unit, Circle.backLeft);
       // Stuck in the back row, it is not an attacker.
+      // Nobody attacks on turn one, and this is not a test about that.
+      engine.state.turn = 2;
       engine.state.phase = PlaytestPhase.battle;
       expect(engine.attackers(you), isNot(contains(Circle.backLeft)));
 
@@ -500,6 +502,8 @@ void main() {
     test('a unit called mid-battle can attack from the front row', () async {
       final (store, deck) = await buildDeck();
       final (engine, you) = ready(store, deck);
+      // Nobody attacks on turn one, and this is not a test about that.
+      engine.state.turn = 2;
       engine.state.phase = PlaytestPhase.battle;
 
       // The abilities this exists for fire during the battle phase.
@@ -1535,6 +1539,76 @@ void main() {
     });
   });
 
+  group('nobody attacks on turn one', () {
+    test('whoever goes first has no attackers on turn one', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.state.phase = PlaytestPhase.battle;
+
+      expect(you.goesFirst, isTrue);
+      expect(engine.state.turn, 1);
+      expect(engine.canAttack(you), isFalse);
+      expect(
+        engine.attackers(you),
+        isEmpty,
+        reason: 'the vanguard is standing, and still cannot swing',
+      );
+    });
+
+    test('whoever goes second attacks on their own first turn', () async {
+      final (store, deck) = await buildDeck();
+      final engine = PlaytestEngine.start(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
+        random: Random(7),
+      );
+      engine.beginPlay();
+      final you = engine.state.you;
+      expect(you.goesFirst, isFalse);
+
+      engine.endTurn(); // the CPU's turn one ends; yours is turn two
+      engine.state.phase = PlaytestPhase.battle;
+      expect(engine.state.turn, 2);
+      expect(engine.canAttack(you), isTrue);
+      expect(engine.attackers(you), contains(Circle.vanguard));
+    });
+
+    test('the first player attacks from their second turn on', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      engine.endTurn(); // to the CPU
+      engine.endTurn(); // back to you, turn three
+      engine.state.phase = PlaytestPhase.battle;
+      expect(engine.canAttack(you), isTrue);
+    });
+
+    test('the CPU going first does not attack either', () async {
+      final (store, deck) = await buildDeck();
+      final engine = PlaytestEngine.start(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        turnOrder: TurnOrder.cpuFirst,
+        random: Random(4),
+      );
+      final ai = PlaytestAi(engine);
+      engine.beginPlay();
+      final cpu = engine.state.opponent;
+      expect(cpu.goesFirst, isTrue);
+
+      ai.takeTurn();
+      expect(engine.state.phase, PlaytestPhase.battle, reason: 'it got there');
+      expect(ai.nextAttack(), isNull, reason: 'and swings at nothing');
+    });
+  });
+
   group('the ride deck costs a card', () {
     test('riding out of the ride deck discards one from hand', () async {
       final (store, deck) = await buildDeck();
@@ -2323,6 +2397,8 @@ void main() {
     test('a locked card cannot attack', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = await boardWithRearGuards(store, deck);
+      // Nobody attacks on turn one, and this is not a test about that.
+      engine.state.turn = 2;
       engine.state.phase = PlaytestPhase.battle;
       expect(engine.attackers(you), contains(Circle.frontLeft));
 
