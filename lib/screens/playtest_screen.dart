@@ -1481,6 +1481,17 @@ class _UnitTile extends StatelessWidget {
                         : Colors.white,
                   ),
                 ),
+                // A hollowed unit is on loan: it fights this turn and is
+                // retired at the end of it, which the board has to say.
+                if (unit.hollowed)
+                  const Text(
+                    ' ☠',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 // One critical is the default and not worth the space; a
                 // unit carrying more, or reduced to none, is.
                 if (unit.criticalBonus != 0)

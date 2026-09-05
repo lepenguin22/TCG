@@ -72,6 +72,70 @@ void main() {
       expect(ability!.effect.selfPower, 2000);
     });
 
+    test('a condition about the crest is read, not refused', () {
+      final ability = only(
+        '[AUTO](RC):When this unit attacks, if you have a "Vampire Princess '
+        'of Night Fog, Nightrose" crest, this unit gets [Power]+5000 until '
+        'end of that battle.',
+      );
+      expect(ability, isNotNull);
+      expect(
+        ability!.condition.crestNamed,
+        'vampire princess of night fog, nightrose',
+        reason: 'names are folded; the board matches without case',
+      );
+      expect(ability.effect.selfPower, 5000);
+    });
+
+    test('a Generation Break in the header is a condition', () {
+      final ability = only(
+        '[CONT](RC)[Generation Break 2]:During your turn, if this unit is '
+        'hollowed, this unit gets [Power]+10000.',
+      );
+      expect(ability!.condition.generationBreak, 2);
+      expect(ability.condition.hollowed, isTrue);
+      expect(ability.timing, AbilityTiming.continuous);
+    });
+
+    test('the Hollow keyword is an ability of its own', () {
+      final ability = only(
+        '[AUTO]:Hollow (When placed on (RC), you may have it become '
+        'hollowed. If you do, retire it at the end of turn)',
+      );
+      expect(ability!.timing, AbilityTiming.onCall);
+      expect(ability.effect.becomeHollowed, isTrue);
+      expect(ability.zones, {'RC'});
+    });
+
+    test('power for each face up card in the G zone scales', () {
+      final ability = only(
+        '[CONT]:During your turn, if you have a grade 3 or greater vanguard '
+        'with "Nightrose" in its card name, all of your front row units get '
+        '[Power] +5000 for each face up card in your G zone.',
+      );
+      expect(ability!.effect.frontRowPower, 5000);
+      expect(ability.effect.perFaceUpG, isTrue);
+      expect(ability.condition.vanguardGrade, 3);
+      expect(ability.condition.vanguardNamed, 'nightrose');
+    });
+
+    test('the stride discard is a timing', () {
+      final ability = only(
+        '[AUTO]:When this card is discarded from hand while paying the cost '
+        'for [Stride], draw a card.',
+      );
+      expect(ability!.timing, AbilityTiming.onDiscardedForStride);
+      expect(ability.effect.draw, 1);
+    });
+
+    test('a drop count is read where the card spells the number', () {
+      final ability = only(
+        '[AUTO](RC):When this unit attacks, if your drop has ten or more '
+        'cards, this unit gets [Power]+10000 until end of that battle.',
+      );
+      expect(ability!.condition.dropAtLeast, 10);
+    });
+
     group('refuses what it cannot follow', () {
       const refused = <String, String>{
         'a choice of target':
@@ -88,6 +152,9 @@ void main() {
             'do, draw a card.',
         'a condition it cannot check':
             "[CONT](VC):If your opponent's vanguard is grade 3 or greater, "
+            'this unit gets [Power]+5000.',
+        'a condition about a zone it does not count':
+            '[CONT](RC):If your order zone has three or more set orders, '
             'this unit gets [Power]+5000.',
         'a cost it cannot pay':
             '[ACT](VC):[COST][Put a card from your hand into your soul], '

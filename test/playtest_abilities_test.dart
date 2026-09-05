@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tcg_decks/games/vanguard/vanguard_data.dart';
 import 'package:tcg_decks/models/deck.dart';
+import 'package:tcg_decks/playtest/ability_reader.dart';
 import 'package:tcg_decks/playtest/playtest_ai.dart';
 import 'package:tcg_decks/playtest/playtest_engine.dart';
 import 'package:tcg_decks/playtest/playtest_state.dart';
@@ -281,6 +282,174 @@ void main() {
       // One card left the hand for the circle, and nothing was drawn: your
       // abilities stay yours to play.
       expect(you.hand.length, before - 1);
+    });
+  });
+
+  group('the Nightrose deck', () {
+    /// The hollow keyword, and a bonus that only applies once hollowed.
+    const hollowKeyword =
+        '[AUTO]:Hollow (When placed on (RC), you may have it become '
+        'hollowed. If you do, retire it at the end of turn)';
+    const hollowPays =
+        '[CONT](RC):During your turn, if this unit is hollowed, this unit '
+        'gets [Power]+5000.';
+
+    test('a unit is hollowed when its own text pays for it', () async {
+      final (store, deck) = await deckWith(
+        boosterEffect: '$hollowKeyword\n$hollowPays',
+      );
+      final (engine, _) = cpuTurn(store, deck);
+      final cpu = engine.state.opponent;
+      final booster = cpu.units.firstWhere((u) => u.card.name == 'Booster');
+
+      expect(booster.hollowed, isTrue);
+      expect(booster.powerBonus, 5000, reason: 'and the bonus it bought');
+      expect(logHas(engine, 'hollows Booster'), isTrue);
+    });
+
+    test('a unit with nothing to gain is not thrown away', () async {
+      final (store, deck) = await deckWith(boosterEffect: hollowKeyword);
+      final (engine, _) = cpuTurn(store, deck);
+      final cpu = engine.state.opponent;
+
+      for (final unit in cpu.units) {
+        expect(unit.hollowed, isFalse, reason: 'nothing paid for the body');
+      }
+    });
+
+    test('a hollowed unit is retired at the end of the turn', () async {
+      final (store, deck) = await deckWith(
+        boosterEffect: '$hollowKeyword\n$hollowPays',
+      );
+      final (engine, _) = cpuTurn(store, deck);
+      final cpu = engine.state.opponent;
+      expect(cpu.units.any((u) => u.hollowed), isTrue);
+
+      engine.endTurn();
+      expect(cpu.units.any((u) => u.hollowed), isFalse);
+      expect(
+        cpu.drop.any((c) => c.name == 'Booster'),
+        isTrue,
+        reason: 'the body was the price',
+      );
+    });
+
+    test('a crest condition is answered by the crest zone', () async {
+      const needsCrest =
+          '[AUTO](RC):When this unit attacks, if you have a "Nightrose" '
+          'crest, this unit gets [Power]+5000 until end of that battle.';
+      final (store, deck) = await deckWith(boosterEffect: needsCrest);
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine, engine.state.you);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      // The ride cost a card, so make sure the unit under test is in hand.
+      final unit = you.deck.lastWhere((c) => c.name == 'Booster');
+      you.deck.remove(unit);
+      you.hand.add(unit);
+      engine.call(you, unit, Circle.frontLeft);
+      engine.state.phase = PlaytestPhase.battle;
+
+      // No crest: the ability does not fire.
+      var attack = engine.declareAttack(
+        from: Circle.frontLeft,
+        to: Circle.vanguard,
+      );
+      ai.playAttackAbilities(attack);
+      expect(you.field[Circle.frontLeft]!.battleBonus, 0);
+      engine.state.attack = null;
+      you.field[Circle.frontLeft]!.rested = false;
+
+      // With it, the same attack is 5000 bigger.
+      engine.playCrest(
+        you,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Vampire Princess of Night Fog, Nightrose',
+          attributes: {'cardType': 'crest', 'effect': '[CONT]:You can stride.'},
+        ),
+      );
+      attack = engine.declareAttack(
+        from: Circle.frontLeft,
+        to: Circle.vanguard,
+      );
+      ai.playAttackAbilities(attack);
+      expect(you.field[Circle.frontLeft]!.battleBonus, 5000);
+    });
+
+    test('the crest pays for each face up card in the G zone', () async {
+      const crestText =
+          '[CONT]:During your turn, if you have a grade 1 or greater '
+          'vanguard with "Ride" in its card name, all of your front row '
+          'units get [Power] +5000 for each face up card in your G zone.';
+      final (store, deck) = await deckWith(boosterEffect: '');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      engine.playCrest(
+        you,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Nightrose crest',
+          attributes: {'cardType': 'crest', 'effect': crestText},
+        ),
+      );
+
+      // A crest is not a unit, so its continuous ability is applied through
+      // the vanguard it is read from -- with an empty G zone it pays nothing.
+      final ability = readAbilities(crestText).playable.single;
+      expect(engine.playAbility(you, Circle.vanguard, ability), isTrue);
+      expect(you.vanguard!.powerBonus, 0, reason: 'no face up cards yet');
+
+      you.gZone.add(you.deck.removeLast());
+      you.faceUpG.add(you.gZone.last.instanceId);
+      you.vanguard!.usedAbilities.clear();
+      expect(engine.playAbility(you, Circle.vanguard, ability), isTrue);
+      expect(you.vanguard!.powerBonus, 5000, reason: 'one face up card');
+    });
+
+    test('a card discarded for a stride does what it says', () async {
+      final (store, deck) = await deckWith(
+        boosterEffect:
+            '[AUTO]:When this card is discarded from hand while '
+            'paying the cost for [Stride], draw a card.',
+      );
+      // A G zone to stride into, and a grade 3 vanguard to stride over.
+      final gUnit = store.saveCard(
+        gameId: 'vanguard',
+        name: 'Stride Beast',
+        attributes: {'grade': '4', 'cardType': 'g-unit', 'power': '15000'},
+      );
+      store.addToDeck(deck.id, gUnit.id, zoneG, quantity: 8);
+      final engine = engineFor(
+        store,
+        store.decks.firstWhere((d) => d.id == deck.id),
+      );
+      engine.beginPlay();
+      final you = engine.state.you;
+      for (var i = 0; i < 3; i += 1) {
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      }
+      // A hand of the cards that draw when discarded.
+      you.hand.clear();
+      // Three grade 1s pay the grade 3 a stride costs, and each of them
+      // draws a card as it goes.
+      for (final card in you.deck.where((c) => c.name == 'Booster').take(3)) {
+        you.hand.add(card);
+      }
+      you.deck.removeWhere(you.hand.contains);
+
+      engine.stride(you, you.gZone.first, [...you.hand]);
+
+      expect(you.isStriding, isTrue);
+      expect(
+        you.hand.length,
+        3,
+        reason: 'three discarded, and each drew a card back',
+      );
+      expect(logHas(engine, 'discarded from hand while paying'), isTrue);
     });
   });
 

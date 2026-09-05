@@ -383,11 +383,39 @@ A clause is played only when **every** part of it — the timing, each item of
 the cost, and each effect — is one of the known forms. Half an ability is never
 guessed at, so the CPU cannot invent power it does not have.
 
-The reach is small, and worth stating rather than implying: **246 cards of the
-15,155 that carry ability text**, about one in sixty. It covers on-attack and
-on-boost pumps, continuous bonuses, the draw on being ridden over, placement
-abilities, and the charges — and nothing that chooses a target, searches a
-deck, calls a unit, retires one, or reads the board to decide.
+The reach is small, and worth stating rather than implying: **577 cards of the
+15,163 that carry ability text**, about one in twenty-six. It covers on-attack
+and on-boost pumps, continuous bonuses, the draw on being ridden over,
+placement abilities, the charges, the **hollow** keyword, and a card discarded
+to pay for a stride.
+
+It also reads the **conditions the board can answer** — a named crest in the
+crest zone, a named vanguard of at least a grade, a Generation Break, a drop
+zone that deep, whether the unit is hollowed, whether its controller went
+second — and power written as *"+5000 for each face up card in your G zone"*,
+which is multiplied rather than added once. A condition it cannot answer is
+still a refusal, never an assumption that it holds.
+
+What it still refuses: anything that chooses a target, searches a deck, calls
+a unit, retires one, or asks the board something it cannot count.
+
+A worked example, and the reason the reader grew: the Stride Deckset
+-Nightrose- (`DZ-SS03`). Nothing in it could be played at all — 0 of its 36
+clauses — because every card asks a question: is its crest out, is this unit
+hollowed, how deep is the drop, how many G zone cards are face up. Teaching
+the reader those questions, the **hollow** keyword and the crest's own
+*"+5000 for each face up card"* took it to 11 of 36, including the crest that
+the whole deck is built on. `tool/ability_coverage.dart` is what measures
+that, deck by deck:
+
+```bash
+dart run tool/ability_coverage.dart DZ-SS03        # a set
+dart run tool/ability_coverage.dart --name Harri   # a card name
+```
+
+It prints every clause marked played or not read, then tallies what the
+unread ones ask for, so the next pattern written is the one that buys the
+most.
 
 What it refuses is not swallowed. When the CPU rides or calls a unit whose text
 it cannot follow, it says so in the log — "Blaster Blade has 2 abilities the

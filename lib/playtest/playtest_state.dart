@@ -97,6 +97,10 @@ class FieldUnit {
   /// be called over it. It unlocks at the end of its owner's turn.
   bool locked = false;
 
+  /// A hollowed unit fights this turn and is retired at the end of it. The
+  /// bargain a Nightrose deck is built on: the power now, the body later.
+  bool hollowed = false;
+
   /// Whether this is a unit rather than a face-down card, which is the
   /// question almost every rule about it is really asking.
   bool get isActive => !locked;

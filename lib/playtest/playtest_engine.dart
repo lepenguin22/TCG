@@ -286,6 +286,17 @@ class PlaytestEngine {
 
   void endTurn() {
     final side = state.active;
+    // A hollowed unit was borrowed for the turn, and the turn is over.
+    for (final entry in side.occupied.toList()) {
+      if (entry.value.hollowed) {
+        state.note(
+          '${side.name}: ${entry.value.card.name} was hollowed, '
+          'and is retired.',
+          by: side,
+        );
+        retire(side, entry.key);
+      }
+    }
     // A stride lasts one turn, so the G unit goes back before anything else.
     endStride(side);
     // Locked cards come back face up at the end of their owner's turn, which
@@ -491,6 +502,13 @@ class PlaytestEngine {
     for (final paid in cost) {
       side.hand.remove(paid);
       side.drop.add(paid);
+      // "When this card is discarded from hand while paying the cost for
+      // [Stride]" -- the cost itself is a timing.
+      for (final ability in abilitiesOf(paid).playable) {
+        if (ability.timing == AbilityTiming.onDiscardedForStride) {
+          playCardAbility(side, paid, ability);
+        }
+      }
     }
 
     // A G unit that was already strided goes back where it came from, face
@@ -1094,6 +1112,60 @@ class PlaytestEngine {
 
   static final Map<String, CardAbilities> _abilityCache = {};
 
+  /// Whether the board answers an ability's condition.
+  ///
+  /// Only the conditions the reader admits to understanding reach here, so a
+  /// false answer means the card said something checkable and the board does
+  /// not meet it -- never that the condition was too hard to read.
+  bool meets(PlaytestSide side, FieldUnit? unit, AbilityCondition condition) {
+    if (condition.isAlways) return true;
+
+    final crest = condition.crestNamed;
+    if (crest != null &&
+        !side.crestZone.any(
+          (c) => c.name.toLowerCase().contains(crest.toLowerCase()),
+        )) {
+      return false;
+    }
+
+    final named = condition.vanguardNamed;
+    final vanguard = side.vanguard;
+    if (named != null) {
+      if (vanguard == null) return false;
+      if (!vanguard.card.name.toLowerCase().contains(named.toLowerCase())) {
+        return false;
+      }
+    }
+    final grade = condition.vanguardGrade;
+    if (grade != null && (vanguard?.card.grade ?? -1) < grade) return false;
+
+    if (condition.hollowed && !(unit?.hollowed ?? false)) return false;
+    if (condition.wentSecond && side.goesFirst) return false;
+
+    final drop = condition.dropAtLeast;
+    if (drop != null && side.drop.length < drop) return false;
+
+    final faceUp = condition.generationBreak;
+    if (faceUp != null && side.generationBreak < faceUp) return false;
+
+    return true;
+  }
+
+  /// Hollows a unit: it stays and fights, and is retired at the end of turn.
+  ///
+  /// A choice, not an automatic consequence -- the card says "you may" -- so
+  /// it is offered rather than taken, on the board and in the CPU alike.
+  void hollow(PlaytestSide side, Circle circle) {
+    final unit = side.field[circle];
+    if (unit == null || unit.hollowed || unit.locked) return;
+    unit.hollowed = true;
+    state.note(
+      '${side.name} hollows ${unit.card.name} '
+      '(retired at end of turn).',
+      by: side,
+    );
+  }
+
   /// Whether [side] can pay for [ability] right now.
   bool canPayFor(PlaytestSide side, FieldUnit unit, Ability ability) {
     final cost = ability.cost;
@@ -1121,6 +1193,8 @@ class PlaytestEngine {
   }) {
     final unit = side.field[circle];
     if (unit == null || !canPayFor(side, unit, ability)) return false;
+    // What the card asks about the board, before anything is paid for it.
+    if (!meets(side, unit, ability.condition)) return false;
 
     final cost = ability.cost;
     if (cost.discard > 0) {
@@ -1148,25 +1222,30 @@ class PlaytestEngine {
     if (cost.restSelf) unit.rested = true;
 
     final effect = ability.effect;
+    // "for each face up card in your G zone" multiplies what it gives, so a
+    // crest that pays 5000 a card pays nothing until a stride has come back.
+    final times = effect.perFaceUpG ? side.generationBreak : 1;
     if (effect.selfPower != 0) {
+      final power = effect.selfPower * times;
       if (effect.untilEndOfBattle) {
-        unit.battleBonus += effect.selfPower;
+        unit.battleBonus += power;
       } else {
-        unit.powerBonus += effect.selfPower;
+        unit.powerBonus += power;
       }
     }
     if (effect.allPower != 0) {
       for (final other in side.units) {
-        other.powerBonus += effect.allPower;
+        other.powerBonus += effect.allPower * times;
       }
     }
     if (effect.frontRowPower != 0) {
       for (final entry in side.field.entries) {
         if (entry.key.isFrontRow && entry.value.isActive) {
-          entry.value.powerBonus += effect.frontRowPower;
+          entry.value.powerBonus += effect.frontRowPower * times;
         }
       }
     }
+    if (effect.becomeHollowed) hollow(side, circle);
     if (effect.critical != 0) unit.criticalBonus += effect.critical;
     for (var i = 0; i < effect.draw; i += 1) {
       _draw(side);
@@ -1180,6 +1259,23 @@ class PlaytestEngine {
       '${side.name} plays ${unit.card.name}: ${ability.text}',
       by: side,
     );
+    _checkForEnd();
+    return true;
+  }
+
+  /// Plays an ability off a card that is not on the field -- one discarded to
+  /// pay for a stride, say -- where only the effects that need no unit can
+  /// happen.
+  bool playCardAbility(PlaytestSide side, GameCard card, Ability ability) {
+    if (!meets(side, null, ability.condition)) return false;
+    final effect = ability.effect;
+    for (var i = 0; i < effect.draw; i += 1) {
+      _draw(side);
+    }
+    if (effect.soulCharge > 0) soulCharge(side, effect.soulCharge);
+    if (effect.counterCharge > 0) counterCharge(side, effect.counterCharge);
+    if (effect.energyCharge > 0) _chargeEnergy(side, effect.energyCharge);
+    state.note('${side.name} plays ${card.name}: ${ability.text}', by: side);
     _checkForEnd();
     return true;
   }

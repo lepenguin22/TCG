@@ -95,8 +95,14 @@ class PlaytestAi {
       if (!ability.worksOn(vanguard: circle == Circle.vanguard)) continue;
       if (unit.usedAbilities.contains(ability.text)) continue;
       if (!_worthPaying(ability)) continue;
+      if (!_worthHollowing(ability, unit)) continue;
       if (engine.playAbility(me, circle, ability, discardable: _spare())) {
         played = true;
+        // Hollowing is a placement all of its own: what the unit becomes is
+        // what its other abilities were waiting for.
+        if (ability.effect.becomeHollowed) {
+          _playUnitAbilities(circle, AbilityTiming.onHollowed);
+        }
         if (stopAfterOne) return true;
       }
     }
@@ -129,6 +135,24 @@ class PlaytestAi {
     // bonuses this reader can understand.
     if (cost.restSelf) return false;
     return true;
+  }
+
+  /// Whether hollowing this unit is a trade worth making.
+  ///
+  /// "You may have it become hollowed" costs the body at end of turn, so it
+  /// is only worth it where the card pays for it -- a unit whose own text
+  /// does something when it is hollowed. A unit that gains nothing is left
+  /// alone rather than thrown away for the look of it.
+  bool _worthHollowing(Ability ability, FieldUnit unit) {
+    if (!ability.effect.becomeHollowed) return true;
+    final text = engine
+        .abilitiesOf(unit.card)
+        .playable
+        .where((a) => !a.effect.becomeHollowed)
+        .any(
+          (a) => a.condition.hollowed || a.timing == AbilityTiming.onHollowed,
+        );
+    return text;
   }
 
   /// The hand in the order the CPU would rather lose it: worst guard first,

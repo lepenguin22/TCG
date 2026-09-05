@@ -415,6 +415,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void hollow(PlaytestSide side, Circle circle) {
+    engine.hollow(side, circle);
+    _sync();
+  }
+
   void toggleLock(PlaytestSide side, Circle circle) {
     if (side.field[circle]?.locked ?? false) {
       engine.unlock(side, circle);
