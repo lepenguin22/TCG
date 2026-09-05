@@ -72,6 +72,10 @@ const cardTypeOptions = <FieldOption>[
   FieldOption('order-set', 'Set Order'),
   FieldOption('g-unit', 'G Unit'),
   FieldOption('ride-deck-crest', 'Ride Deck Crest'),
+  // The crest a Stride Deckset brings. Not a deck card -- an ability puts it
+  // into the crest zone -- but a card the app has to know, since a deck built
+  // around it does nothing without it.
+  FieldOption('crest', 'Crest'),
   FieldOption('token', 'Token'),
 ];
 

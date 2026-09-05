@@ -137,6 +137,22 @@ flutter test test/card_catalog_test.dart
 Or run the **Refresh card database** workflow from the Actions tab, which does
 the same thing and opens a pull request.
 
+### The cards that are not deck cards
+
+A Stride Deckset's crest is filed by the card list under no card type at all
+— "Others", the same label it gives a Plant token and a marker — so the
+generator dropped it with them, and a deck built around Nightrose or Harri
+could be imported, checked and played out with the one card that makes it
+work missing entirely.
+
+They are kept now, typed `crest`, identified by the line that is the whole
+point of them: *"[CONT]:You can perform [Stride]"*. That is a narrow rule on
+purpose. The rest of what the card list calls "Others" really is undeckable
+noise, and a broader rule would put Plant tokens in the card search.
+
+Being in the database does not make one a deck card: a deck holding one is an
+error, since an ability puts it into play from outside the deck.
+
 ### One entry per card, not per name
 
 The game remakes cards under their old names. An 8000 power original and its
@@ -453,13 +469,18 @@ fire mid-battle, so each of those piles offers a **Call** beside its own action
 for any unit the vanguard's grade allows, and a circle takes it in the battle
 phase as readily as in the main one. A call out of the deck shuffles it
 afterwards, the way looking through it always does.
-- **Crest** is always there, greyed until something reaches it. A deck
-  carrying a ride deck crest puts it in on the first ride; a deck carrying
-  none — a stride deck among them — opens an empty crest zone that offers the
-  crests the card database knows, plus any you have entered yourself, so the
-  right one can be played by hand. It charges from the next ride phase like
-  any other, pays the three its text owes whoever went second, and can be
-  taken back out again.
+- **Crest** is always there, greyed until something reaches it. There are two
+  kinds and they arrive differently. A **ride deck crest** — the Energy
+  Generator — comes with the deck and puts itself in on the first ride. A
+  **stride deck's crest** — `DZ-SS03/T01EN` Nightrose, `DZ-SS02/T01EN` Harri
+  and the rest — is not in the deck at all: an ability puts it into play, so
+  the empty crest zone offers them and you play the right one when that
+  ability fires. Either can be taken back out again.
+
+  What it charges is read off the card, so a stride crest charges nothing —
+  it is permission to stride, not an energy engine — while the Energy
+  Generator charges its three every ride phase and pays the three it owes
+  whoever went second.
 - **G zone** appears only for a deck that has one. With a grade 3 vanguard and
   grade 3 worth of cards in hand to discard, a G unit strides on top of the
   vanguard: it triple drives, the unit underneath stays as the heart, and both

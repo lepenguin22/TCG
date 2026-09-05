@@ -245,7 +245,14 @@ class PlaytestEngine {
       r'Energy-Charge\s+(\d+)',
       caseSensitive: false,
     ).firstMatch(crest.effect);
-    return int.tryParse(match?.group(1) ?? '') ?? 3;
+    final printed = int.tryParse(match?.group(1) ?? '');
+    if (printed != null) return printed;
+    // A crest whose text says nothing about energy charges none: a stride
+    // deck's crest is permission to stride, not an energy engine. The three
+    // is only for a crest with no text at all, which is the Energy Generator
+    // as the database once carried it -- blank, and charging three in every
+    // game that has ever been played with it.
+    return crest.effect.trim().isEmpty ? 3 : 0;
   }
 
   /// Adds energy, up to the ten the crest allows.

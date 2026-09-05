@@ -848,14 +848,20 @@ void _showCrestSheet(
             _CardHeading(card: crest),
             const SizedBox(height: 14),
             Text(
-              side.crestInPlay
-                  ? '${side.energy} energy, of a maximum of '
+              !side.crestInPlay
+                  ? 'Still in the ride deck. It reaches the crest zone on the '
+                        'first ride — which is why whoever goes first charges '
+                        'nothing on turn one.'
+                  : charge == 0
+                  // A stride deck's crest charges nothing: it is permission
+                  // to stride, not an energy engine, and saying it charges
+                  // zero every turn would read as a fault.
+                  ? 'In the crest zone. It charges no energy of its own — '
+                        'what it does is on the card.'
+                  : '${side.energy} energy, of a maximum of '
                         '${PlaytestSide.energyCap}. It charges $charge at the '
                         'beginning of every one of ${side.name == 'You' ? 'your' : 'its'} '
-                        'ride phases, on its own.'
-                  : 'Still in the ride deck. It reaches the crest zone on the '
-                        'first ride — which is why whoever goes first charges '
-                        'nothing on turn one.',
+                        'ride phases, on its own.',
               style: const TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 12,
@@ -925,7 +931,7 @@ void _showCrestChooser(
       .where(
         (card) =>
             card.gameId == definition.id &&
-            card.attributes['cardType'] == 'ride-deck-crest',
+            _crestTypes.contains(card.attributes['cardType']),
       )
       .toList();
 
@@ -961,10 +967,10 @@ void _showCrestChooser(
               children: [
                 SectionHeader(title: '${side.name}: crest zone'),
                 const Text(
-                  'Empty. A deck that carries a ride deck crest puts it here '
-                  'on its first ride; a deck that carries none — a stride '
-                  'deck among them — can be given one here instead. It then '
-                  'charges its energy every ride phase like any other.',
+                  'Empty. A ride deck crest puts itself here on the first '
+                  'ride. A stride deck\'s crest does not: an ability puts it '
+                  'into play, so it is played here, by you, when that '
+                  'ability fires.',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
@@ -1021,7 +1027,13 @@ void _showCrestChooser(
   );
 }
 
-/// The ride deck crests the card database knows, or none where it is not
+/// What counts as a crest: the ride deck crest a Divinez deck carries, and
+/// the crest a Stride Deckset's own ability puts into the crest zone --
+/// DZ-SS03/T01EN Nightrose and its like, which are what let those decks
+/// stride at all.
+const _crestTypes = {'ride-deck-crest', 'crest'};
+
+/// The crests the card database knows, or none where it is not
 /// there to be read -- a test, or a build with no catalog.
 Future<List<CatalogCard>> _crestOptions(
   BuildContext context,
@@ -1033,7 +1045,7 @@ Future<List<CatalogCard>> _crestOptions(
   if (catalog == null) return const [];
   final cards = await catalog.load(asset);
   return cards
-      .where((card) => card.attributes['cardType'] == 'ride-deck-crest')
+      .where((card) => _crestTypes.contains(card.attributes['cardType']))
       .toList();
 }
 

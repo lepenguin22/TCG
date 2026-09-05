@@ -87,7 +87,8 @@ class VanguardGame extends GameDefinition {
 
   @override
   CardBadge? badgeOf(CardDefinition card) {
-    if (card.attributes['cardType'] == 'ride-deck-crest') {
+    const crests = {'ride-deck-crest', 'crest'};
+    if (crests.contains(card.attributes['cardType'])) {
       return const CardBadge('CR', Color(0xFF4FC08D));
     }
     final trigger = card.attribute('trigger');

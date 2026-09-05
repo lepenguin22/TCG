@@ -1148,6 +1148,35 @@ void main() {
       );
     });
 
+    testWidgets('a stride deck crest charges nothing and says so', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      store.saveCard(
+        gameId: 'vanguard',
+        name: 'Masked Magician, Harri',
+        attributes: {
+          'cardType': 'crest',
+          'effect':
+              '[CONT]:You can perform [Stride], and cannot ride grade 3 '
+              'or greater cards without "Harri" in their card names.',
+        },
+      );
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(tester, find.text('Crest').last);
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Crest').last);
+      // It is permission to stride, not an energy engine, so it does not
+      // claim to charge zero every turn.
+      expect(find.textContaining('charges no energy'), findsOneWidget);
+      expect(find.textContaining('It charges 0'), findsNothing);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

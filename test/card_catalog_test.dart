@@ -183,6 +183,7 @@ void main() {
         'order-set',
         'g-unit',
         'ride-deck-crest',
+        'crest',
         'token',
       };
       final seen = cards.map((c) => c.attributes['cardType']).toSet();
@@ -478,6 +479,31 @@ void main() {
           .map((c) => '${c.name} (${c.attributes['cardNo']})')
           .toList();
       expect(wrong, isEmpty);
+    });
+
+    test('a stride deck\'s crest is in the catalog, typed as a crest', () {
+      // The crest a Stride Deckset brings is filed by the card list under no
+      // card type at all -- "Others", beside a Plant token -- so it used to
+      // be dropped with the tokens. A deck built around it does nothing
+      // without it, and a playtest cannot put it into play if the app has
+      // never heard of it.
+      final crests = cards
+          .where((c) => c.attributes['cardType'] == 'crest')
+          .toList();
+      expect(crests, hasLength(greaterThanOrEqualTo(6)));
+      for (final crest in crests) {
+        expect(
+          crest.attributes['effect'],
+          contains('You can perform [Stride]'),
+          reason: 'that permission is what makes it one',
+        );
+      }
+
+      final nightrose = crests.firstWhere(
+        (c) => c.allNumbers.contains('DZ-SS03/T01EN'),
+      );
+      expect(nightrose.name, contains('Nightrose'));
+      expect(nightrose.attributes['imageUrl'], contains('dzss03_t01'));
     });
 
     test('ride deck crests are in the catalog and are Divinez cards', () {

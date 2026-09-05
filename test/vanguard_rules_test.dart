@@ -229,6 +229,18 @@ void main() {
       );
     });
 
+    test('a crest put into play by an ability cannot be in a deck', () {
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 3 C').card = card('Nightrose crest', {
+        'cardType': 'crest',
+        'effect': '[CONT]:You can perform [Stride], and cannot ride...',
+      });
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('put into play by an ability')),
+      );
+    });
+
     test('over triggers are capped at one', () {
       final slots = legalStandardDeck();
       final crit = named(slots, 'Crit B')

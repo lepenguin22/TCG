@@ -126,6 +126,21 @@ List<ValidationIssue> _checkGZone({
       );
     }
   }
+  // A stride deck's crest and the tokens it is filed with are played, not
+  // deckbuilt: an ability puts them into play from outside the deck. They are
+  // in the database because a playtest needs them, which is exactly why a
+  // deck could pick one up by accident.
+  for (final item in [...ride, ...main, ...gZone]) {
+    const notDeckCards = {'crest', 'token'};
+    if (notDeckCards.contains(item.card.attributes['cardType'])) {
+      issues.add(
+        ValidationIssue.error(
+          '"${item.card.name}" is put into play by an ability, not built into '
+          'a deck, so it cannot be in one.',
+        ),
+      );
+    }
+  }
   return issues;
 }
 

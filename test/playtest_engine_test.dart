@@ -1597,6 +1597,53 @@ void main() {
       expect(you.energy, 3, reason: 'your ride phase charged it');
     });
 
+    test('a stride deck crest charges no energy', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      // The crest a Stride Deckset brings: permission to stride, and not a
+      // word about energy.
+      engine.playCrest(
+        you,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Vampire Princess of Night Fog, Nightrose',
+          attributes: {
+            'cardType': 'crest',
+            'effect':
+                '[CONT]:You can perform [Stride], and cannot ride grade 3 or '
+                'greater cards without "Nightrose" in their card names.',
+          },
+        ),
+      );
+
+      expect(engine.crestCharge(you), 0);
+      engine.endTurn();
+      engine.endTurn();
+      expect(you.energy, 0, reason: 'no ride phase charged anything');
+    });
+
+    test('a crest with no text at all still charges three', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      // The Energy Generator as the database once carried it: blank, and
+      // charging three in every game ever played with it.
+      engine.playCrest(
+        you,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Energy',
+          attributes: {'cardType': 'ride-deck-crest'},
+        ),
+      );
+      expect(engine.crestCharge(you), 3);
+    });
+
     test('it can be taken back out, and the energy stays', () async {
       final (store, deck) = await buildDeck();
       final engine = engineFor(store, deck);

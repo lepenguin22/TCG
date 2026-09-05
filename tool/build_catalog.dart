@@ -168,6 +168,17 @@ const _cardTypes = <String, String>{
   'Ride Deck Crest': 'ride-deck-crest',
 };
 
+/// The crest a Stride Deckset brings, which the card list files under no card
+/// type at all -- "Others", the same label it gives a Plant token and a
+/// marker -- so it was dropped along with them.
+///
+/// It is a real card: it goes into the crest zone when the deck's own ability
+/// puts it there, and it is what lets that deck stride at all. What tells it
+/// apart from the tokens it is filed with is its own first line, which is the
+/// permission it grants.
+bool _isStrideCrest(Map<String, dynamic> raw) =>
+    (raw['effect'] as String? ?? '').contains('You can perform [Stride]');
+
 /// Sets read from the official card list, which the mirror does not have.
 Future<List<({String name, List<dynamic> cards})>> _readExtraSets() async {
   final file = File('data/cardlist/extra_sets.json');
@@ -319,8 +330,11 @@ void main() async {
     for (final raw in cards.whereType<Map<String, dynamic>>()) {
       printings += 1;
       final name = (raw['name'] as String? ?? '').trim();
-      final cardType = _cardTypes[raw['type']];
-      // Tokens, markers and untyped rows are not deck cards.
+      final cardType =
+          _cardTypes[raw['type']] ?? (_isStrideCrest(raw) ? 'crest' : null);
+      // Tokens, markers and untyped rows are not deck cards. A stride crest
+      // is not one either -- it cannot be put in a deck -- but it is played,
+      // so it is kept.
       if (name.isEmpty || cardType == null) {
         skipped += 1;
         continue;
