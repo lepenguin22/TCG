@@ -230,7 +230,18 @@ Future<dynamic> _getJson(HttpClient client, String url) async {
 
 int? _asInt(Object? value) {
   if (value is int) return value;
-  if (value is String) return int.tryParse(value.replaceAll(',', ''));
+  if (value is String) {
+    final cleaned = value.replaceAll(',', '').trim();
+    // "15000+" is how a D-format G unit prints its power: the number is the
+    // number, and the plus is the card saying it grows. Reading that as no
+    // power at all made the printing look like one the mirror had misread,
+    // and a misread printing is folded into another of the same name -- which
+    // is how a stride unit came to show an older card's rules text.
+    final digits = cleaned.endsWith('+')
+        ? cleaned.substring(0, cleaned.length - 1)
+        : cleaned;
+    return int.tryParse(digits);
+  }
   return null;
 }
 

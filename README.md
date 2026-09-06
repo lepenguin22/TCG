@@ -444,8 +444,8 @@ A clause is played only when **every** part of it — the timing, each item of
 the cost, and each effect — is one of the known forms. Half an ability is never
 guessed at, so the CPU cannot invent power it does not have.
 
-The reach is still small, and worth stating rather than implying: **828 cards
-of the 15,163 that carry ability text**, about one in eighteen. It covers
+The reach is still small, and worth stating rather than implying: **849 cards
+of the 15,170 that carry ability text**, about one in eighteen. It covers
 on-attack and on-boost pumps, continuous bonuses, the draw on being ridden
 over, placement abilities, the charges, the **hollow** keyword, a card
 discarded to pay for a stride, and the timings a card pays out on rather than
@@ -495,7 +495,7 @@ dart run tool/ability_coverage.dart --name Harri   # a card name
 It prints every clause marked played or not read, then ranks **the phrase
 that stopped each unread one** — the reader's own answer, not a guess from
 keywords — so the next pattern written is the one that buys the most. That
-ranking is what took the reader from 577 cards to 828: the top of it was not
+ranking is what took the reader from 577 cards to 849: the top of it was not
 this deck's text at all but the shapes every deck shares, and teaching those
 five or six forms lifted every set at once.
 

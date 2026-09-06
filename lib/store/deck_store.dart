@@ -28,8 +28,11 @@ const _backfillKey = 'tcgdecks.v1.backfill';
 /// either are carrying the wrong card's abilities and artwork. Version 4
 /// carries the promos the database could never read before, and repairs cards
 /// saved under a number the database spells differently -- a Japanese
-/// printing, or one carrying its rarity.
-const cardBackfillVersion = 4;
+/// printing, or one carrying its rarity. Version 5 separates the D-format
+/// G units whose power is printed "15000+": the plus made the builder read
+/// them as printings it had misread, so each was folded into an older card of
+/// the same name and carried that card's rules text and artwork.
+const cardBackfillVersion = 5;
 
 /// How many decks and cards an import brought in.
 class ImportResult {

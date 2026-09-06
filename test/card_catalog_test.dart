@@ -233,6 +233,55 @@ void main() {
       );
     });
 
+    test('a G unit with "15000+" power is its own card', () {
+      // The plus is the card saying its power grows. Read as no power at all,
+      // the printing looked misread, and a misread printing is folded into
+      // another of the same name -- which put a G-era card's rules text on
+      // the D-format stride unit that replaced it.
+      final dragut = cards.firstWhere(
+        (c) => (c.attributes['cardNo'] ?? '').startsWith('DZ-BT15/016'),
+      );
+      expect(dragut.name, 'Pirate King of Redemption, Dragut');
+      expect(dragut.attributes['power'], '15000');
+      expect(
+        dragut.attributes['effect'],
+        contains('turn a card with the same card name as this unit'),
+        reason: 'its own text, not the G-CHB03 printing\'s',
+      );
+      expect(
+        dragut.attributes['effect'],
+        isNot(contains('Generation Break 2')),
+        reason: 'that clause belongs to the older card of the same name',
+      );
+      expect(
+        dragut.allNumbers.any((n) => n.startsWith('G-CHB03')),
+        isFalse,
+        reason: 'the G-era card is a different card, not another printing',
+      );
+
+      // And the older one is still there, with its own text.
+      final older = cards.firstWhere(
+        (c) =>
+            c.name == 'Pirate King of Redemption, Dragut' &&
+            (c.attributes['cardNo'] ?? '').startsWith('G-CHB03'),
+      );
+      expect(older.attributes['effect'], contains('Generation Break 2'));
+    });
+
+    test('no G-era card claims a D-format reprint as its own printing', () {
+      // The same fold, measured across the catalogue rather than on one card.
+      // A D-format reprint of a G unit is a rewritten card, so a G-series
+      // entry listing a DZ number among its printings is one of these folds:
+      // there were four before the builder learned to read "15000+".
+      final folded = cards.where(
+        (c) =>
+            c.attributes['cardType'] == 'g-unit' &&
+            (c.attributes['cardNo'] ?? '').startsWith('G-') &&
+            c.allNumbers.any((n) => n.startsWith('DZ-')),
+      );
+      expect(folded, isEmpty, reason: folded.map((c) => c.name).join(', '));
+    });
+
     test('a trigger icon is only ever on a trigger unit', () {
       final marked = cards.where((c) => c.attributes['trigger'] != null);
       expect(marked, isNotEmpty);
