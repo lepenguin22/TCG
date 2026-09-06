@@ -267,7 +267,9 @@ class PlaytestController extends ChangeNotifier {
     }
     final next = ai.nextAttack();
     if (next == null) {
-      // Nothing left to swing with, so the CPU's turn is done.
+      // Nothing left to swing with, so the CPU's turn is done -- but the
+      // abilities that pay out at the end of it come first.
+      ai.playEndOfTurnAbilities();
       engine.endTurn();
       stage = PlaytestStage.yours;
       return;
@@ -300,7 +302,15 @@ class PlaytestController extends ChangeNotifier {
 
   /// Resolves the CPU's attack and moves on to its next one.
   void resolveCpuAttack() {
-    engine.resolveAttack();
+    // The attack is gone by the time it has resolved, so which circle swung
+    // is remembered here for the abilities that pay out on a hit.
+    final attacker = state.attack?.attackerCircle;
+    final booster = state.attack?.booster == null ? null : attacker?.boostedBy;
+    final hit = engine.resolveAttack();
+    if (attacker != null) {
+      if (hit) ai.playHitAbilities(attacker);
+      ai.playEndOfBattleAbilities(attacker, booster);
+    }
     _nextCpuAttack();
     _sync();
   }

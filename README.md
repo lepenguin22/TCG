@@ -379,31 +379,54 @@ unambiguous, and refuses the rest:
 [AUTO]:When rode upon, draw a card.                                       ✓ played
 [AUTO](VC):When placed, [COST][Counter-Blast 1], draw a card.             ✓ played
 
+[AUTO](VC)[Limit-Break 4]:When this unit attacks, this unit gets
+                          [Power]+10000/[Critical]+1.                     ✓ played
+[AUTO](RC):When this unit attacks, [COST][retire this unit], draw a card. ✓ played
+[CONT](VC):If your opponent's vanguard is grade 3 or greater, ...         ✓ played
+
 [AUTO](VC):When this unit attacks, choose one of your rear-guards, and
            it gets [Power]+5000.                                          ✗ refused
 [ACT](VC):[COST][Counter-Blast 1], search your deck for a card...         ✗ refused
-[CONT](VC):If your opponent's vanguard is grade 3 or greater, ...         ✗ refused
+[AUTO]:When this unit is put on (GC), one of your units cannot be hit.    ✗ refused
 ```
 
 A clause is played only when **every** part of it — the timing, each item of
 the cost, and each effect — is one of the known forms. Half an ability is never
 guessed at, so the CPU cannot invent power it does not have.
 
-The reach is small, and worth stating rather than implying: **577 cards of the
-15,163 that carry ability text**, about one in twenty-six. It covers on-attack
-and on-boost pumps, continuous bonuses, the draw on being ridden over,
-placement abilities, the charges, the **hollow** keyword, and a card discarded
-to pay for a stride.
+The reach is still small, and worth stating rather than implying: **828 cards
+of the 15,163 that carry ability text**, about one in eighteen. It covers
+on-attack and on-boost pumps, continuous bonuses, the draw on being ridden
+over, placement abilities, the charges, the **hollow** keyword, a card
+discarded to pay for a stride, and the timings a card pays out on rather than
+fires on — **when its attack hits**, **at the end of the battle it attacked or
+boosted**, **when your G unit strides**, and **at the end of your turn**.
+
+The **costs** it can pay are the ones the board can actually spend: a
+counter-blast, a soul-blast, energy, a discard however the card words it, the
+top few cards of the deck into the drop, a G zone card turned face up, resting
+the unit, and the two that spend the unit itself — retiring it or putting it
+into the soul. Two costs written in one bracket (*"[Counter-Blast 1 &
+Soul-Blast 1]"*) are both paid. A cost whose number it cannot read is a
+refusal, never a free ability.
 
 It also reads the **conditions the board can answer** — a named crest in the
-crest zone, a named vanguard of at least a grade, a Generation Break, a drop
-zone that deep, whether the unit is hollowed, whether its controller went
-second — and power written as *"+5000 for each face up card in your G zone"*,
-which is multiplied rather than added once. A condition it cannot answer is
-still a refusal, never an assumption that it holds.
+crest zone, a named vanguard of at least a grade, a Generation Break, a Limit
+Break, a drop zone or damage zone or hand that deep, how many rear-guards are
+standing, the opponent's vanguard's grade, whether the unit is hollowed,
+whether its controller went second — and power written as *"+5000 for each
+face up card in your G zone"*, which is multiplied rather than added once. A
+condition it cannot answer is still a refusal, never an assumption that it
+holds.
+
+Two rules keep the widening honest. A clause that retires the unit and then
+gives that same unit power is refused rather than half-played, since the unit
+is gone by the time the bonus lands. And an ability that hands you a crest —
+*"you get a "Nightrose" crest"* — is not played at all unless the library
+actually holds that crest, so nothing is paid for a cost that cannot finish.
 
 What it still refuses: anything that chooses a target, searches a deck, calls
-a unit, retires one, or asks the board something it cannot count.
+a unit, retires somebody else's, or asks the board something it cannot count.
 
 A worked example, and the reason the reader grew: the Stride Deckset
 -Nightrose- (`DZ-SS03`). Nothing in it could be played at all — 0 of its 36
@@ -419,9 +442,16 @@ dart run tool/ability_coverage.dart DZ-SS03        # a set
 dart run tool/ability_coverage.dart --name Harri   # a card name
 ```
 
-It prints every clause marked played or not read, then tallies what the
-unread ones ask for, so the next pattern written is the one that buys the
-most.
+It prints every clause marked played or not read, then ranks **the phrase
+that stopped each unread one** — the reader's own answer, not a guess from
+keywords — so the next pattern written is the one that buys the most. That
+ranking is what took the reader from 577 cards to 828: the top of it was not
+this deck's text at all but the shapes every deck shares, and teaching those
+five or six forms lifted every set at once.
+
+Lines that are not an ability it failed to follow are not counted as one: a
+reminder in brackets, `[CONT]:Sentinel` — the board plays the perfect guard
+off the card type — and the stride cost, which the board's own stride pays.
 
 What it refuses is not swallowed. When the CPU rides or calls a unit whose text
 it cannot follow, it says so in the log — "Blaster Blade has 2 abilities the
@@ -612,12 +642,23 @@ reasoning can be argued with rather than being buried in a magic number.
   body is not worth diverting an attack for.
 - **It holds cards back**, three or four depending on damage, instead of
   emptying its hand onto the board and then having nothing to guard with.
+- **It never calls a grade 0.** A trigger put on a circle is a 5000 power body
+  traded for a 15000 shield, and calling them out was most of what made the
+  CPU look like it was dumping its hand for nothing: it kept no guard and
+  gained almost no board. Over a run of self-play games the previous version
+  called 148 of them; this one calls none, and its triggers stay in hand to
+  guard with.
 - **It moves a stranded rear-guard up** when nothing is in front of it to
   boost, turning a unit that was doing nothing into another attack. It does
   this after calling rather than before, because given a card for that circle
   the better board is the bigger unit in front with this one boosting it.
 - **It strides** where the deck has a G zone, paying with the fewest cards and
   never with the perfect guard.
+- **It weighs the costs that spend a unit.** Retiring the unit whose ability it
+  is, or putting it into the soul, is paid for a card drawn or a crest gained
+  and refused for power on somebody else — the body lost is worth more than
+  that. Milling is refused outright when the deck is thin enough that decking
+  out is the likelier end.
 
 The same policy can be pointed at both seats, so it plays itself and the
 results are measured rather than assumed: every game finishes, none stalls, and

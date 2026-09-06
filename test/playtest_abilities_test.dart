@@ -410,6 +410,193 @@ void main() {
       expect(you.vanguard!.powerBonus, 5000, reason: 'one face up card');
     });
 
+    test('the unit that pays with itself leaves the board', () async {
+      const text =
+          '[AUTO](RC):When this unit attacks, [COST][retire this unit], '
+          'draw a card.';
+      final (store, deck) = await deckWith(boosterEffect: text);
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      final unit = you.deck.lastWhere((c) => c.name == 'Booster');
+      you.deck.remove(unit);
+      you.hand.add(unit);
+      engine.call(you, unit, Circle.frontLeft);
+
+      final hand = you.hand.length;
+      final ability = readAbilities(text).playable.single;
+      expect(engine.playAbility(you, Circle.frontLeft, ability), isTrue);
+      expect(you.hand.length, hand + 1, reason: 'the card it drew');
+      expect(you.field[Circle.frontLeft], isNull, reason: 'it paid itself');
+      expect(you.drop.contains(unit), isTrue);
+    });
+
+    test('a vanguard cannot pay a cost that spends the unit', () async {
+      // There is no game state in which the vanguard leaves for a cost: an
+      // ability asking for it simply cannot be played from that circle.
+      const text = '[ACT](VC):[COST][put this unit into soul], draw a card.';
+      final (store, deck) = await deckWith(
+        boosterEffect: '',
+        vanguardEffect: text,
+      );
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+
+      final ability = readAbilities(text).playable.single;
+      expect(engine.playAbility(you, Circle.vanguard, ability), isFalse);
+      expect(you.vanguard, isNotNull);
+    });
+
+    test('the deck and the G zone are really paid out of', () async {
+      const text =
+          '[ACT](VC)[1/Turn]:[COST][discard the top three cards of the deck '
+          '& Turn a card from G zone face up], draw a card.';
+      final (store, deck) = await deckWith(
+        boosterEffect: '',
+        vanguardEffect: text,
+      );
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+
+      final ability = readAbilities(text).playable.single;
+      // Nothing in the G zone: the cost cannot be paid, so nothing happens.
+      final deckSize = you.deck.length;
+      expect(engine.playAbility(you, Circle.vanguard, ability), isFalse);
+      expect(you.deck.length, deckSize, reason: 'not half-paid');
+
+      you.gZone.add(you.deck.removeLast());
+      final before = you.deck.length;
+      final drop = you.drop.length;
+      expect(engine.playAbility(you, Circle.vanguard, ability), isTrue);
+      expect(
+        you.deck.length,
+        before - 3 - 1,
+        reason: 'three milled, one drawn',
+      );
+      expect(you.drop.length, drop + 3);
+      expect(you.generationBreak, 1, reason: 'the G card is face up');
+    });
+
+    test('a limit break waits for the damage it names', () async {
+      const text =
+          '[AUTO](VC)[Limit-Break 4](this ability is active if you have four '
+          'or more damage):When this unit attacks, this unit gets '
+          '[Power]+10000 until end of that battle.';
+      final (store, deck) = await deckWith(
+        boosterEffect: '',
+        vanguardEffect: text,
+      );
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      final ability = readAbilities(text).playable.single;
+
+      expect(engine.playAbility(you, Circle.vanguard, ability), isFalse);
+      while (you.damageCount < 4) {
+        you.damage.add(you.deck.removeLast());
+      }
+      expect(engine.playAbility(you, Circle.vanguard, ability), isTrue);
+      expect(you.vanguard!.battleBonus, 10000);
+    });
+
+    test('an ability that hands you a crest puts one in play', () async {
+      const text =
+          '[AUTO]:When this unit is placed on (RC), you get a "Vampire '
+          'Princess of Night Fog, Nightrose" crest.';
+      final (store, deck) = await deckWith(boosterEffect: text);
+      // The crest is not in any deck: it comes out of the card library, the
+      // way it does in the game.
+      store.saveCard(
+        gameId: 'vanguard',
+        name: 'Vampire Princess of Night Fog, Nightrose',
+        attributes: {'cardType': 'crest', 'effect': '[CONT]:You can stride.'},
+      );
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      final unit = you.deck.lastWhere((c) => c.name == 'Booster');
+      you.deck.remove(unit);
+      you.hand.add(unit);
+      engine.call(you, unit, Circle.frontLeft);
+
+      final ability = readAbilities(text).playable.single;
+      expect(engine.playAbility(you, Circle.frontLeft, ability), isTrue);
+      expect(you.crestZone.map((c) => c.name), contains(startsWith('Vampire')));
+    });
+
+    test('a crest the library does not have is not played half way', () async {
+      const text =
+          '[AUTO]:When this unit is placed on (RC), [COST][Counter-Blast 1], '
+          'and you get a "Nobody, Nothing" crest.';
+      final (store, deck) = await deckWith(boosterEffect: text);
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      you.damage.add(you.deck.removeLast());
+      final unit = you.deck.lastWhere((c) => c.name == 'Booster');
+      you.deck.remove(unit);
+      you.hand.add(unit);
+      engine.call(you, unit, Circle.frontLeft);
+
+      final ability = readAbilities(text).playable.single;
+      expect(engine.playAbility(you, Circle.frontLeft, ability), isFalse);
+      expect(you.openDamage, 1, reason: 'the counter-blast was not paid');
+    });
+
+    test('a hit pays out and a stopped attack does not', () async {
+      const text =
+          "[AUTO](VC):When this unit's attack hits a vanguard, draw a card.";
+      final (store, deck) = await deckWith(
+        boosterEffect: '',
+        vanguardEffect: text,
+      );
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine, engine.state.you);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      engine.state.phase = PlaytestPhase.battle;
+      engine.state.turn = 2;
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      final hand = you.hand.length;
+      final hit = engine.resolveAttack();
+      expect(hit, isTrue, reason: 'nothing guarded it');
+      ai.playHitAbilities(Circle.vanguard);
+      expect(you.hand.length, hand + 1);
+    });
+
+    test('the end of the battle is a timing of its own', () async {
+      const text =
+          '[AUTO](RC):At the end of the battle this unit boosted, '
+          '[Counter-Charge 1].';
+      final (store, deck) = await deckWith(boosterEffect: text);
+      final engine = engineFor(store, deck);
+      final ai = PlaytestAi(engine, engine.state.you);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      final unit = you.deck.lastWhere((c) => c.name == 'Booster');
+      you.deck.remove(unit);
+      you.hand.add(unit);
+      engine.call(you, unit, Circle.backCenter);
+      // A face down damage for the counter-charge to turn back up.
+      you.damage.add(you.deck.removeLast());
+      engine.counterBlast(you, 1);
+      expect(you.openDamage, 0);
+
+      ai.playEndOfBattleAbilities(Circle.vanguard, Circle.backCenter);
+      expect(you.openDamage, 1, reason: 'the booster paid it back');
+    });
+
     test('a card discarded for a stride does what it says', () async {
       final (store, deck) = await deckWith(
         boosterEffect:

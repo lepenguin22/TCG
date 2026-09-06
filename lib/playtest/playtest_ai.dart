@@ -134,6 +134,17 @@ class PlaytestAi {
     // Resting itself costs an attack, which is worth more than any of the
     // bonuses this reader can understand.
     if (cost.restSelf) return false;
+    // Retiring the unit, or putting it into the soul, gives up a body on the
+    // board. Worth it for a card drawn -- that is a card back -- and not for
+    // power on somebody else, which the missing unit outweighs.
+    if (cost.retireSelf || cost.selfToSoul) {
+      if (ability.effect.draw == 0 && ability.effect.crestNamed == null) {
+        return false;
+      }
+    }
+    // Milling is only ever paid out of a deck that can afford it: decking out
+    // loses the game outright.
+    if (cost.mill > 0 && me.deck.length <= cost.mill + 8) return false;
     return true;
   }
 
@@ -185,6 +196,35 @@ class PlaytestAi {
     final boosterCircle = attack.attackerCircle.boostedBy;
     if (attack.booster != null && boosterCircle != null) {
       _playUnitAbilities(boosterCircle, AbilityTiming.onBoost);
+    }
+  }
+
+  /// What the attacker gets for connecting.
+  ///
+  /// A whole class of cards pays out only on a hit -- "when this unit's
+  /// attack hits, [Counter-Blast 1], draw a card" -- and the CPU used to let
+  /// every one of them go by. The circle is passed in because the attack is
+  /// over by the time this is called.
+  void playHitAbilities(Circle attacker) {
+    _playUnitAbilities(attacker, AbilityTiming.onHit);
+  }
+
+  /// What the units in a battle get for having been in it, hit or not.
+  ///
+  /// "At the end of the battle this unit attacked" is a shape a couple of
+  /// hundred cards are built on, and the attacker and the booster are told
+  /// apart because the printed text tells them apart.
+  void playEndOfBattleAbilities(Circle attacker, Circle? booster) {
+    _playUnitAbilities(attacker, AbilityTiming.endOfBattleAttacked);
+    if (booster != null) {
+      _playUnitAbilities(booster, AbilityTiming.endOfBattleBoosted);
+    }
+  }
+
+  /// The abilities that pay out at the end of the CPU's own turn.
+  void playEndOfTurnAbilities() {
+    for (final circle in Circle.values) {
+      _playUnitAbilities(circle, AbilityTiming.endOfTurn);
     }
   }
 
@@ -284,6 +324,11 @@ class PlaytestAi {
     }
     if (total < 3) return false;
     engine.stride(me, gUnits.first, cost);
+    // The stride itself is a trigger: "when your G unit [Stride]" is printed
+    // on the units standing around it as often as on the strider.
+    for (final circle in Circle.values) {
+      _playUnitAbilities(circle, AbilityTiming.onStride);
+    }
     return true;
   }
 
@@ -306,8 +351,12 @@ class PlaytestAi {
       final reserve = me.damageCount >= 4 ? 4 : 3;
       if (me.hand.length <= reserve) return false;
 
+      // Grade 0s stay in hand. A trigger called to a circle is a 5000-power
+      // body that gives up a 15000 shield, and calling them out is most of
+      // what made the CPU look like it was emptying its hand for nothing --
+      // it kept no guard and gained almost no board.
       final callable = me.hand
-          .where((c) => engine.canCall(me, c, circle))
+          .where((c) => c.grade > 0 && engine.canCall(me, c, circle))
           .toList();
       if (callable.isEmpty) continue;
 

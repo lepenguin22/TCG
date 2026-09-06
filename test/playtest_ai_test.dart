@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tcg_decks/playtest/playtest_ai.dart';
 import 'package:tcg_decks/playtest/playtest_engine.dart';
+import 'package:tcg_decks/playtest/playtest_state.dart';
 
 import 'playtest_engine_test.dart' show buildDeck;
 
@@ -29,6 +30,7 @@ void main() {
       int earlyGuarded,
       int lateFaced,
       int lateGuarded,
+      int gradeZerosCalled,
     })
   >
   selfPlay({int count = 40}) async {
@@ -43,7 +45,8 @@ void main() {
         earlyFaced = 0,
         earlyGuarded = 0,
         lateFaced = 0,
-        lateGuarded = 0;
+        lateGuarded = 0,
+        gradeZerosCalled = 0;
 
     for (var seed = 0; seed < count; seed += 1) {
       final (store, deck) = await buildDeck();
@@ -62,6 +65,15 @@ void main() {
         final actor = engine.state.yourTurn ? first : second;
         final defender = engine.state.yourTurn ? second : first;
         actor.takeTurn();
+        // A grade 0 on a rear-guard circle is a trigger the CPU called out of
+        // its hand: the vanguard circle is not counted, since the game starts
+        // with a grade 0 standing there.
+        for (final circle in Circle.values) {
+          if (circle == Circle.vanguard) continue;
+          if ((actor.me.field[circle]?.card.grade ?? 1) == 0) {
+            gradeZerosCalled += 1;
+          }
+        }
 
         while (!engine.state.isOver) {
           final next = actor.nextAttack();
@@ -128,6 +140,7 @@ void main() {
       earlyGuarded: earlyGuarded,
       lateFaced: lateFaced,
       lateGuarded: lateGuarded,
+      gradeZerosCalled: gradeZerosCalled,
     );
   }
 
@@ -157,6 +170,14 @@ void main() {
       // for the job. Filling from the smallest up costs about twice as many.
       final perGuard = result.guardCards / result.guards;
       expect(perGuard, lessThan(1.6), reason: 'cards spent per guard');
+    });
+
+    test('it keeps its grade 0s in hand', () async {
+      final result = await selfPlay();
+      // A trigger called to a circle is a 5000-power body given in exchange
+      // for a 15000 shield, so the CPU does not make that trade: its rear
+      // guards are units, and its triggers stay back to guard with.
+      expect(result.gradeZerosCalled, 0);
     });
 
     test('it takes early damage and defends late ones', () async {

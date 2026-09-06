@@ -52,6 +52,21 @@ enum AbilityTiming {
   /// On being discarded from hand to pay for a stride.
   onDiscardedForStride,
 
+  /// On your own G unit striding, which is a whole deck's worth of abilities
+  /// in Premium: the stride is the trigger and the board is what benefits.
+  onStride,
+
+  /// On this unit's attack hitting.
+  onHit,
+
+  /// At the end of the battle this unit attacked in, or boosted in. The pair
+  /// are the same moment and different units, so they are told apart.
+  endOfBattleAttacked,
+  endOfBattleBoosted,
+
+  /// At the end of the turn, where a card pays itself back.
+  endOfTurn,
+
   /// At the beginning of the main phase.
   mainPhase,
 
@@ -78,6 +93,10 @@ class AbilityCondition {
     this.wentSecond = false,
     this.dropAtLeast,
     this.generationBreak,
+    this.damageAtLeast,
+    this.handAtLeast,
+    this.rearGuardsAtLeast,
+    this.foeVanguardGrade,
   });
 
   /// A crest with this in its name has to be in the crest zone.
@@ -103,6 +122,20 @@ class AbilityCondition {
   /// This many cards in the G zone have to be face up -- a Generation Break.
   final int? generationBreak;
 
+  /// The damage zone has to hold at least this many cards. A Limit Break is
+  /// this and nothing more: "[Limit-Break 4]" is four damage.
+  final int? damageAtLeast;
+
+  /// The hand has to hold at least this many cards.
+  final int? handAtLeast;
+
+  /// This many of the player's rear-guard circles have to be filled.
+  final int? rearGuardsAtLeast;
+
+  /// The opponent's vanguard has to be at least this grade, which is most of
+  /// what a card means by "if your opponent's vanguard is grade 3 or greater".
+  final int? foeVanguardGrade;
+
   bool get isAlways =>
       crestNamed == null &&
       vanguardNamed == null &&
@@ -110,7 +143,11 @@ class AbilityCondition {
       !hollowed &&
       !wentSecond &&
       dropAtLeast == null &&
-      generationBreak == null;
+      generationBreak == null &&
+      damageAtLeast == null &&
+      handAtLeast == null &&
+      rearGuardsAtLeast == null &&
+      foeVanguardGrade == null;
 
   AbilityCondition merge(AbilityCondition other) => AbilityCondition(
     crestNamed: other.crestNamed ?? crestNamed,
@@ -120,6 +157,10 @@ class AbilityCondition {
     wentSecond: wentSecond || other.wentSecond,
     dropAtLeast: other.dropAtLeast ?? dropAtLeast,
     generationBreak: other.generationBreak ?? generationBreak,
+    damageAtLeast: other.damageAtLeast ?? damageAtLeast,
+    handAtLeast: other.handAtLeast ?? handAtLeast,
+    rearGuardsAtLeast: other.rearGuardsAtLeast ?? rearGuardsAtLeast,
+    foeVanguardGrade: other.foeVanguardGrade ?? foeVanguardGrade,
   );
 }
 
@@ -130,21 +171,47 @@ class AbilityCost {
     this.soulBlast = 0,
     this.energy = 0,
     this.discard = 0,
+    this.mill = 0,
+    this.flipG = 0,
     this.restSelf = false,
+    this.retireSelf = false,
+    this.selfToSoul = false,
   });
 
   final int counterBlast;
   final int soulBlast;
   final int energy;
   final int discard;
+
+  /// Cards off the top of your own deck into the drop -- "[discard the top
+  /// three cards of the deck]". A cost in a deck that wants a deep drop and a
+  /// real one everywhere else.
+  final int mill;
+
+  /// G zone cards to turn face up, which is both a cost and what a
+  /// Generation Break counts.
+  final int flipG;
+
   final bool restSelf;
+
+  /// Retiring the unit whose ability it is, which is why a clause that also
+  /// gives that unit something is refused rather than read.
+  final bool retireSelf;
+
+  /// Putting the unit itself into the soul, which takes it off the field the
+  /// same way retiring it does.
+  final bool selfToSoul;
 
   bool get isFree =>
       counterBlast == 0 &&
       soulBlast == 0 &&
       energy == 0 &&
       discard == 0 &&
-      !restSelf;
+      mill == 0 &&
+      flipG == 0 &&
+      !restSelf &&
+      !retireSelf &&
+      !selfToSoul;
 }
 
 /// What an ability does, in the terms the engine can carry out.
@@ -161,6 +228,7 @@ class AbilityEffect {
     this.untilEndOfBattle = false,
     this.becomeHollowed = false,
     this.perFaceUpG = false,
+    this.crestNamed,
   });
 
   /// Power to the unit whose ability this is.
@@ -191,6 +259,11 @@ class AbilityEffect {
   /// multiplies it rather than adding it once.
   final bool perFaceUpG;
 
+  /// A crest this puts into the crest zone, by name. A deck whose every other
+  /// ability asks `if you have a "..." crest` does nothing at all until the
+  /// one card that says `you get a "..." crest` is played.
+  final String? crestNamed;
+
   bool get isNothing =>
       selfPower == 0 &&
       allPower == 0 &&
@@ -200,7 +273,8 @@ class AbilityEffect {
       soulCharge == 0 &&
       counterCharge == 0 &&
       energyCharge == 0 &&
-      !becomeHollowed;
+      !becomeHollowed &&
+      crestNamed == null;
 
   AbilityEffect merge(AbilityEffect other) => AbilityEffect(
     selfPower: selfPower + other.selfPower,
@@ -214,6 +288,7 @@ class AbilityEffect {
     untilEndOfBattle: untilEndOfBattle || other.untilEndOfBattle,
     becomeHollowed: becomeHollowed || other.becomeHollowed,
     perFaceUpG: perFaceUpG || other.perFaceUpG,
+    crestNamed: other.crestNamed ?? crestNamed,
   );
 }
 
@@ -267,9 +342,40 @@ class CardAbilities {
 final _reminder = RegExp(r'\([^)]{9,}\)');
 final _header = RegExp(
   r'^\[(auto|act|cont)\](\(([a-z/]{1,9})\))?'
-  r'((?:\[1/turn\]|\[generation break \d+\])*):(.*)$',
+  r'((?:\[1/turn\]|\[generation break \d+\]|\[limit[- ]break \d+\])*)'
+  r':(.*)$',
 );
-final _costBlock = RegExp(r'\[cost\]((?:\[[^\]]+\])+),?\s*');
+
+/// Where a clause's [COST] block sits, and what is in it.
+///
+/// Not a regular expression, because the brackets nest: "[COST][[Rest] this
+/// unit]" is one cost, and a pattern that stops at the first close bracket
+/// reads it as half of one.
+({int start, int end, String costs})? _costSpan(String body) {
+  const marker = '[cost]';
+  final at = body.indexOf(marker);
+  if (at < 0) return null;
+  var i = at + marker.length;
+  final costsStart = i;
+  while (i < body.length && body[i] == '[') {
+    var depth = 0;
+    while (i < body.length) {
+      if (body[i] == '[') depth += 1;
+      if (body[i] == ']') depth -= 1;
+      i += 1;
+      if (depth == 0) break;
+    }
+    if (depth != 0) return null; // A bracket that never closes.
+  }
+  if (i == costsStart) return null;
+  final costs = body.substring(costsStart, i);
+  var end = i;
+  if (end < body.length && body[end] == ',') end += 1;
+  while (end < body.length && body[end] == ' ') {
+    end += 1;
+  }
+  return (start: at, end: end, costs: costs);
+}
 
 /// Splits a clause into its parts, leaving anything inside quotes alone.
 ///
@@ -306,7 +412,22 @@ final _costForms = <RegExp, AbilityCost Function(Match)>{
       AbilityCost(energy: int.parse(m.group(1)!)),
   RegExp(r'^\[discard a card from (?:your )?hand\]$'): (m) =>
       const AbilityCost(discard: 1),
-  RegExp(r'^\[rest this unit\]$'): (m) => const AbilityCost(restSelf: true),
+  // The same cost written the long way round, which is how most cards print
+  // it: "[choose a card from your hand, and discard it]".
+  RegExp(r'^\[choose a card from (?:your )?hand, and discard it\]$'): (m) =>
+      const AbilityCost(discard: 1),
+  RegExp(r'^\[choose (\w+) cards from (?:your )?hand, and discard them\]$'): (
+    m,
+  ) => AbilityCost(discard: _numberWords[m.group(1)] ?? 0),
+  RegExp(r'^\[discard the top (\w+) cards? of (?:the|your) deck\]$'): (m) =>
+      AbilityCost(mill: _numberWords[m.group(1)] ?? 0),
+  RegExp(r'^\[turn a card from (?:your )?g zone face up\]$'): (m) =>
+      const AbilityCost(flipG: 1),
+  RegExp(r'^\[\[?rest\]? this unit\]$'): (m) =>
+      const AbilityCost(restSelf: true),
+  RegExp(r'^\[put this unit into (?:your )?soul\]$'): (m) =>
+      const AbilityCost(selfToSoul: true),
+  RegExp(r'^\[retire this unit\]$'): (m) => const AbilityCost(retireSelf: true),
 };
 
 final _effectForms = <RegExp, AbilityEffect Function(Match)>{
@@ -316,6 +437,14 @@ final _effectForms = <RegExp, AbilityEffect Function(Match)>{
   ): (m) => AbilityEffect(
     selfPower: int.parse(m.group(1)!),
     untilEndOfBattle: m.group(2) == 'that battle',
+  ),
+  RegExp(
+    r'^(?:during your turn, )?this unit gets \[power\]\+(\d+)/'
+    r'\[critical\]\+(\d+)(?: until end of (turn|that battle))?$',
+  ): (m) => AbilityEffect(
+    selfPower: int.parse(m.group(1)!),
+    critical: int.parse(m.group(2)!),
+    untilEndOfBattle: m.group(3) == 'that battle',
   ),
   RegExp(r'^this unit gets \[critical\]\+(\d+)(?: until end of turn)?$'): (m) =>
       AbilityEffect(critical: int.parse(m.group(1)!)),
@@ -335,7 +464,10 @@ final _effectForms = <RegExp, AbilityEffect Function(Match)>{
   ): (m) =>
       AbilityEffect(frontRowPower: int.parse(m.group(1)!), perFaceUpG: true),
   RegExp(r'^draw a card$'): (m) => const AbilityEffect(draw: 1),
-  RegExp(r'^draw two cards$'): (m) => const AbilityEffect(draw: 2),
+  RegExp(r'^draw (\w+) cards$'): (m) =>
+      AbilityEffect(draw: _numberWords[m.group(1)] ?? 0),
+  RegExp(r'^you get an? "([^"]+)" crest$'): (m) =>
+      AbilityEffect(crestNamed: m.group(1)),
   RegExp(r'^\[soul-charge (\d+)\]$'): (m) =>
       AbilityEffect(soulCharge: int.parse(m.group(1)!)),
   RegExp(r'^\[counter-charge (\d+)\]$'): (m) =>
@@ -355,6 +487,10 @@ final _conditionForms = <RegExp, AbilityCondition Function(Match)>{
     vanguardGrade: int.parse(m.group(1)!),
     vanguardNamed: m.group(2),
   ),
+  RegExp(r'^if your vanguard is grade (\d+) or greater$'): (m) =>
+      AbilityCondition(vanguardGrade: int.parse(m.group(1)!)),
+  RegExp(r'^if you have a vanguard with "([^"]+)" in its card name$'): (m) =>
+      AbilityCondition(vanguardNamed: m.group(1)),
   RegExp(r'^if this unit is hollowed$'): (m) =>
       const AbilityCondition(hollowed: true),
   RegExp(r'^if you went second$'): (m) =>
@@ -365,6 +501,26 @@ final _conditionForms = <RegExp, AbilityCondition Function(Match)>{
         ? const AbilityCondition()
         : AbilityCondition(dropAtLeast: many);
   },
+  RegExp(r'^if your damage zone has (\w+) or more cards$'): (m) {
+    final many = _numberWords[m.group(1)];
+    return many == null
+        ? const AbilityCondition()
+        : AbilityCondition(damageAtLeast: many);
+  },
+  RegExp(r'^if your hand has (\w+) or more cards$'): (m) {
+    final many = _numberWords[m.group(1)];
+    return many == null
+        ? const AbilityCondition()
+        : AbilityCondition(handAtLeast: many);
+  },
+  RegExp(r'^if you have (\w+) or more rear-?guards$'): (m) {
+    final many = _numberWords[m.group(1)];
+    return many == null
+        ? const AbilityCondition()
+        : AbilityCondition(rearGuardsAtLeast: many);
+  },
+  RegExp(r"^if your opponent's vanguard is grade (\d+) or greater$"): (m) =>
+      AbilityCondition(foeVanguardGrade: int.parse(m.group(1)!)),
 };
 
 /// The number words the card text uses where it does not print a digit.
@@ -385,18 +541,39 @@ const _numberWords = <String, int>{
 
 final _timingForms = <RegExp, AbilityTiming>{
   RegExp(r'^when this unit is placed on \(rc\)$'): AbilityTiming.onCall,
+  // Where the card says which zone it came from, it is still a call: the
+  // board only ever calls out of the hand by hand anyway.
+  RegExp(r'^when this unit is placed on \(rc\) from hand$'):
+      AbilityTiming.onCall,
   RegExp(r'^when this unit is placed on \(vc\)$'): AbilityTiming.onRide,
   RegExp(r'^when placed$'): AbilityTiming.onPlaced,
+  RegExp(r'^when placed from hand$'): AbilityTiming.onPlaced,
   RegExp(r'^when this unit is placed$'): AbilityTiming.onPlaced,
+  RegExp(r'^when this unit is placed from hand$'): AbilityTiming.onPlaced,
+  RegExp(r'^when this unit is placed on \(vc\) or \(rc\)(?: from hand)?$'):
+      AbilityTiming.onPlaced,
+  RegExp(r'^when this unit is placed on \(vc\) from hand$'):
+      AbilityTiming.onRide,
   RegExp(r'^when this unit is rode upon$'): AbilityTiming.onRodeUpon,
   RegExp(r'^when rode upon$'): AbilityTiming.onRodeUpon,
   RegExp(r'^when this unit attacks(?: a vanguard)?$'): AbilityTiming.onAttack,
+  // The older printings say "it" where the newer ones say "this unit".
+  RegExp(r'^when it attacks(?: a vanguard)?$'): AbilityTiming.onAttack,
+  RegExp(r'^at the end of the battle this unit attacked$'):
+      AbilityTiming.endOfBattleAttacked,
+  RegExp(r'^at the end of the battle this unit boosted$'):
+      AbilityTiming.endOfBattleBoosted,
   RegExp(r'^when this unit boosts$'): AbilityTiming.onBoost,
+  RegExp(r"^when this unit's attack hits(?: a vanguard)?$"):
+      AbilityTiming.onHit,
+  RegExp(r'^at the end of your turn$'): AbilityTiming.endOfTurn,
   RegExp(r'^when this unit becomes hollowed$'): AbilityTiming.onHollowed,
   RegExp(
     r'^when this card is discarded from hand while paying the cost for '
     r'\[stride\]$',
   ): AbilityTiming.onDiscardedForStride,
+  RegExp(r'^when your g unit \[stride\](?: during your turn)?$'):
+      AbilityTiming.onStride,
   RegExp(r'^at the beginning of your main phase$'): AbilityTiming.mainPhase,
   RegExp(r'^during your turn$'): AbilityTiming.continuous,
 };
@@ -412,6 +589,7 @@ CardAbilities readAbilities(String effect) {
   for (final printed in text.split('\n')) {
     final clause = printed.trim();
     if (clause.isEmpty || clause == '-') continue;
+    if (_playedElsewhere.any((known) => known.hasMatch(clause))) continue;
     final ability = _readClause(clause);
     if (ability == null) {
       unread.add(clause);
@@ -422,13 +600,38 @@ CardAbilities readAbilities(String effect) {
   return CardAbilities(playable: playable, unread: unread);
 }
 
+/// Lines that are not an ability the reader has failed to follow.
+///
+/// Three kinds: a reminder in brackets that is the whole line, the perfect
+/// guard -- which the board plays off the card type, not off this text -- and
+/// the stride cost, which the board's own stride pays. Counting these as
+/// abilities the reader could not follow told the player a card does less
+/// than it does, on several hundred cards.
+final _playedElsewhere = [
+  RegExp(r'^\(.*\)$', caseSensitive: false),
+  RegExp(r'^\[cont\]\s*:\s*sentinel\b', caseSensitive: false),
+  RegExp(r'^\[stride\].*-stride step-', caseSensitive: false),
+];
+
 /// The Hollow keyword, which is a clause with nothing in it but its own name
 /// and a reminder: "[AUTO]:Hollow (When placed on (RC), you may have it become
 /// hollowed. If you do, retire it at the end of turn)".
 final _hollowKeyword = RegExp(r'^\[auto\]:hollow\b', caseSensitive: false);
 
+/// Why the reader refused one clause: the first part of it that was not a
+/// known form, or a word for the shape of the refusal.
+///
+/// This is what says which phrase to teach the reader next -- the coverage
+/// tool ranks these -- so it is a real return value rather than a guess made
+/// from keywords after the fact.
+String? refusedPart(String clause) {
+  String? refusal;
+  _readClause(clause, onRefusal: (part) => refusal ??= part);
+  return refusal;
+}
+
 /// One clause, or null where any part of it was not one of the known forms.
-Ability? _readClause(String printed) {
+Ability? _readClause(String printed, {void Function(String)? onRefusal}) {
   if (_hollowKeyword.hasMatch(printed.trim())) {
     return Ability(
       timing: AbilityTiming.onCall,
@@ -445,10 +648,21 @@ Ability? _readClause(String printed) {
       .replaceAll('[Power] +', '[Power]+')
       .replaceAll('[Critical] +', '[Critical]+')
       .toLowerCase()
+      // The mirror's text puts the bracket in the wrong place on a few
+      // hundred cards -- "[Counter-Blast]1]" for "[Counter-Blast 1]" -- and
+      // that is a typo in the printing, not an ability the reader cannot
+      // follow, so it is straightened out rather than refused.
+      .replaceAllMapped(
+        RegExp(r'\[(counter-blast|soul-blast|energy-blast)\](\d+)\]'),
+        (m) => '[${m.group(1)} ${m.group(2)}]',
+      )
       .trim();
 
   final header = _header.firstMatch(line);
-  if (header == null) return null;
+  if (header == null) {
+    onRefusal?.call('(no [AUTO]/[ACT]/[CONT] header)');
+    return null;
+  }
   final kind = header.group(1)!;
   final zones = _zonesOf(header.group(3));
   final markers = header.group(4) ?? '';
@@ -457,27 +671,38 @@ Ability? _readClause(String printed) {
   // once that many cards in the G zone are face up.
   final generationBreak = RegExp(r'\[generation break (\d+)\]')
       .firstMatch(markers);
+  // "[Limit-Break 4]" is a condition written into the header too, and it
+  // says nothing more than four damage.
+  final limitBreak = RegExp(r'\[limit[- ]break (\d+)\]').firstMatch(markers);
   var condition = AbilityCondition(
     generationBreak: generationBreak == null
         ? null
         : int.parse(generationBreak.group(1)!),
+    damageAtLeast: limitBreak == null ? null : int.parse(limitBreak.group(1)!),
   );
   var body = header.group(5)!;
 
   // The cost comes out first: it is bracketed, so it does not survive being
   // split on commas along with everything else.
   var cost = const AbilityCost();
-  final costs = _costBlock.firstMatch(body);
+  final costs = _costSpan(body);
   if (costs != null) {
-    for (final part in RegExp(r'\[[^\]]+\]').allMatches(costs.group(1)!)) {
-      final paid = _readCost(part.group(0)!);
-      if (paid == null) return null;
+    for (final part in _costParts(costs.costs)) {
+      final paid = _readCost(part);
+      if (paid == null) {
+        onRefusal?.call(part);
+        return null;
+      }
       cost = AbilityCost(
         counterBlast: cost.counterBlast + paid.counterBlast,
         soulBlast: cost.soulBlast + paid.soulBlast,
         energy: cost.energy + paid.energy,
         discard: cost.discard + paid.discard,
+        mill: cost.mill + paid.mill,
+        flipG: cost.flipG + paid.flipG,
         restSelf: cost.restSelf || paid.restSelf,
+        retireSelf: cost.retireSelf || paid.retireSelf,
+        selfToSoul: cost.selfToSoul || paid.selfToSoul,
       );
     }
     body = body.replaceRange(costs.start, costs.end, '');
@@ -505,23 +730,47 @@ Ability? _readClause(String printed) {
     if (fires != null) {
       // A [CONT] whose "during your turn" is the whole condition stays
       // continuous; anything else naming two timings is beyond this reader.
-      if (timing != null && timing != AbilityTiming.continuous) return null;
+      if (timing != null && timing != AbilityTiming.continuous) {
+        onRefusal?.call('(two timings: $part)');
+        return null;
+      }
       timing = fires == AbilityTiming.continuous && kind == 'cont'
           ? AbilityTiming.continuous
           : fires;
       continue;
     }
-    return null; // A part of the clause the reader cannot follow.
+    onRefusal?.call(part); // A part of the clause the reader cannot follow.
+    return null;
   }
 
-  if (timing == null || effect.isNothing) return null;
+  if (timing == null) {
+    onRefusal?.call('(nothing says when it fires)');
+    return null;
+  }
+  if (effect.isNothing) {
+    onRefusal?.call('(nothing it does can be carried out)');
+    return null;
+  }
+  // Retiring the unit is a real cost, but it takes the unit away: a clause
+  // that pays it and then gives that same unit power or a critical is one
+  // the reader has misread, so it is refused rather than half-played.
+  if ((cost.retireSelf || cost.selfToSoul) &&
+      (effect.selfPower != 0 ||
+          effect.critical != 0 ||
+          effect.becomeHollowed)) {
+    onRefusal?.call('(retires the unit it then gives something to)');
+    return null;
+  }
   // "When placed" on a card that only works from one circle can only have
   // meant that circle.
   if (timing == AbilityTiming.onPlaced && zones.length == 1) {
     timing = zones.first == 'VC' ? AbilityTiming.onRide : AbilityTiming.onCall;
   }
   // An [AUTO] with no timing of its own has nothing to fire on.
-  if (kind == 'auto' && timing == AbilityTiming.continuous) return null;
+  if (kind == 'auto' && timing == AbilityTiming.continuous) {
+    onRefusal?.call('(nothing says when it fires)');
+    return null;
+  }
   return Ability(
     timing: timing,
     zones: zones,
@@ -553,10 +802,49 @@ Set<String> _zonesOf(String? printed) {
   return zones;
 }
 
+/// The individual costs inside a [COST] block.
+///
+/// Brackets nest -- "[[Rest] this unit]" -- so this counts them rather than
+/// stopping at the first close, and a cost paid twice over in one bracket
+/// ("[Counter-Blast 1 & Soul-Blast 1]") is split on the ampersand into the
+/// two costs it is.
+List<String> _costParts(String block) {
+  final parts = <String>[];
+  final buffer = StringBuffer();
+  var depth = 0;
+  for (var i = 0; i < block.length; i += 1) {
+    final char = block[i];
+    if (char == '[') depth += 1;
+    if (char == ']') depth -= 1;
+    buffer.write(char);
+    if (depth == 0 && buffer.isNotEmpty) {
+      parts.add(buffer.toString().trim());
+      buffer.clear();
+    }
+  }
+  return [
+    for (final part in parts)
+      if (part.isNotEmpty)
+        // Split "[a & b]" into "[a]" and "[b]", leaving a single cost alone.
+        ...part.startsWith('[') && part.endsWith(']')
+            ? part
+                  .substring(1, part.length - 1)
+                  .split(' & ')
+                  .map((one) => '[${one.trim()}]')
+            : [part],
+  ];
+}
+
 AbilityCost? _readCost(String part) {
   for (final entry in _costForms.entries) {
     final match = entry.key.firstMatch(part);
-    if (match != null) return entry.value(match);
+    if (match != null) {
+      final read = entry.value(match);
+      // A form that matched but could not read its own number -- "[choose
+      // several cards from hand, and discard them]" -- would come back as
+      // nothing to pay, which would make the ability free. Refuse it.
+      return read.isFree ? null : read;
+    }
   }
   return null;
 }
@@ -564,7 +852,12 @@ AbilityCost? _readCost(String part) {
 AbilityEffect? _readEffect(String part) {
   for (final entry in _effectForms.entries) {
     final match = entry.key.firstMatch(part);
-    if (match != null) return entry.value(match);
+    if (match != null) {
+      final read = entry.value(match);
+      // As with a cost: a form that matched but could not read its number
+      // gives nothing, and silently giving nothing is worse than refusing.
+      return read.isNothing ? null : read;
+    }
   }
   return null;
 }

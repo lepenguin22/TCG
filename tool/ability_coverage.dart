@@ -86,55 +86,18 @@ void main(List<String> args) {
   stdout.writeln('--- $played clauses played, $unread not read');
   if (unreadClauses.isEmpty) return;
 
-  // What the unread ones have in common, so the next pattern to write is the
-  // one that buys the most.
-  final shapes = <String, int>{};
+  // Which phrase stopped each one, so the next pattern to write is the one
+  // that buys the most. This is the reader's own answer rather than a guess
+  // made from keywords: it is the part it actually refused.
+  final refusals = <String, int>{};
   for (final entry in unreadClauses.entries) {
-    for (final shape in _shapesOf(entry.key)) {
-      shapes[shape] = (shapes[shape] ?? 0) + entry.value;
-    }
+    final part = refusedPart(entry.key) ?? '(unknown)';
+    refusals[part] = (refusals[part] ?? 0) + entry.value;
   }
-  final ranked = shapes.entries.toList()
+  final ranked = refusals.entries.toList()
     ..sort((a, b) => b.value.compareTo(a.value));
-  stdout.writeln('\n--- what the unread clauses ask for');
-  for (final shape in ranked) {
-    stdout.writeln('  ${shape.value.toString().padLeft(3)}  ${shape.key}');
+  stdout.writeln('\n--- what stopped the unread clauses');
+  for (final refusal in ranked.take(25)) {
+    stdout.writeln('  ${refusal.value.toString().padLeft(3)}  ${refusal.key}');
   }
-}
-
-/// The mechanics one clause asks for, as the phrases that would have to be
-/// understood to play it.
-List<String> _shapesOf(String clause) {
-  final text = clause.toLowerCase();
-  const probes = <String, String>{
-    'choose one of your': 'choose a unit of yours',
-    "choose one of your opponent's": "choose an opponent's unit",
-    'search your deck': 'search the deck',
-    'look at': 'look at the top of the deck',
-    'call it to': 'call from somewhere',
-    'retire it': 'retire a unit',
-    'and [stand] it': 'stand a unit',
-    'counter-charge': 'counter-charge',
-    'soul-charge': 'soul-charge',
-    'energy-charge': 'energy-charge',
-    'you may pay the cost': 'an optional cost',
-    'if you have': 'a condition about your board',
-    "if your opponent's": "a condition about the opponent's board",
-    'generation break': 'generation break',
-    '[stride]': 'stride',
-    'discard': 'a discard',
-    'draw': 'a draw',
-    'until end of turn': 'a lasting bonus',
-    'shuffle': 'a shuffle',
-    'put it into your hand': 'to hand',
-    'bind': 'bind',
-    'lock': 'lock',
-    'crest': 'a crest',
-    'order zone': 'the order zone',
-  };
-  final found = [
-    for (final probe in probes.entries)
-      if (text.contains(probe.key)) probe.value,
-  ];
-  return found.isEmpty ? const ['something else'] : found;
 }

@@ -20,11 +20,33 @@ import 'playtest_state.dart';
 /// nothing here can execute that. So the engine runs the game around them and
 /// the player reads the text and applies it by hand, which is also how a
 /// paper playtest against a patient opponent goes.
+/// The card types that are crests: the one that comes with a ride deck, and
+/// the token a stride deck's ability puts into play.
+const _crestTypes = {'ride-deck-crest', 'crest'};
+
 class PlaytestEngine {
   PlaytestEngine(this.state, {Random? random}) : _random = random ?? Random();
 
   final PlaytestState state;
   final Random _random;
+
+  /// The crests the library knows about, for the abilities that say
+  /// `you get a "..." crest`.
+  ///
+  /// A crest is not in anybody's deck -- an ability puts it into play out of
+  /// nowhere -- so it has to come from the card library rather than from the
+  /// board, and a game built without one simply cannot play those abilities.
+  final List<CardDefinition> crestPool = [];
+
+  /// The crest card whose name carries [named], or null where the library has
+  /// no such crest.
+  CardDefinition? _crestNamed(String named) {
+    final wanted = named.toLowerCase();
+    for (final crest in crestPool) {
+      if (crest.name.toLowerCase().contains(wanted)) return crest;
+    }
+    return null;
+  }
 
   /// Every card ever dealt gets a number, so two copies of one card are
   /// separate pieces on the board.
@@ -60,6 +82,12 @@ class PlaytestEngine {
       opponent: PlaytestSide(name: 'CPU', isCpu: true),
     );
     final engine = PlaytestEngine(state, random: rng);
+
+    engine.crestPool.addAll(
+      store.cards.where(
+        (card) => _crestTypes.contains(card.attributes['cardType']),
+      ),
+    );
 
     engine._deal(state.you, store.viewOf(yourDeck).items);
     engine._deal(state.opponent, store.viewOf(opponentDeck).items);
@@ -986,9 +1014,11 @@ class PlaytestEngine {
 
   /// Resolves the attack: a hit on a vanguard is damage, a hit on a rear-guard
   /// retires it.
-  void resolveAttack() {
+  /// Settles the attack on the table, and says whether it connected -- which
+  /// is what a "when this unit's attack hits" ability is waiting to hear.
+  bool resolveAttack() {
     final pending = state.attack;
-    if (pending == null) return;
+    if (pending == null) return false;
     final side = state.active;
     final foe = state.inactive;
 
@@ -1004,7 +1034,7 @@ class PlaytestEngine {
       );
       state.attack = null;
       _endOfBattle();
-      return;
+      return false;
     }
 
     if (pending.hitsVanguard) {
@@ -1026,6 +1056,7 @@ class PlaytestEngine {
     state.attack = null;
     _endOfBattle();
     _checkForEnd();
+    return true;
   }
 
   /// Clears what an ability gave "until end of that battle", which is a
@@ -1174,6 +1205,28 @@ class PlaytestEngine {
     final faceUp = condition.generationBreak;
     if (faceUp != null && side.generationBreak < faceUp) return false;
 
+    // A Limit Break is this and nothing else: damage taken, counted face up
+    // or face down alike.
+    final damage = condition.damageAtLeast;
+    if (damage != null && side.damageCount < damage) return false;
+
+    final hand = condition.handAtLeast;
+    if (hand != null && side.hand.length < hand) return false;
+
+    final rearGuards = condition.rearGuardsAtLeast;
+    if (rearGuards != null) {
+      final standing = side.field.entries
+          .where((e) => e.key != Circle.vanguard && e.value.isActive)
+          .length;
+      if (standing < rearGuards) return false;
+    }
+
+    final foeGrade = condition.foeVanguardGrade;
+    if (foeGrade != null) {
+      final foe = side == state.you ? state.opponent : state.you;
+      if ((foe.vanguard?.card.grade ?? -1) < foeGrade) return false;
+    }
+
     return true;
   }
 
@@ -1193,13 +1246,27 @@ class PlaytestEngine {
   }
 
   /// Whether [side] can pay for [ability] right now.
-  bool canPayFor(PlaytestSide side, FieldUnit unit, Ability ability) {
+  ///
+  /// [circle] matters for the costs that spend the unit itself: a vanguard
+  /// cannot be retired or put into the soul to pay for its own ability, so an
+  /// ability asking for that is unplayable from the vanguard circle.
+  bool canPayFor(
+    PlaytestSide side,
+    FieldUnit unit,
+    Ability ability, {
+    Circle? circle,
+  }) {
     final cost = ability.cost;
     if (cost.counterBlast > side.openDamage) return false;
     if (cost.soulBlast > side.soul.length) return false;
     if (cost.energy > side.energy) return false;
     if (cost.discard > side.hand.length) return false;
+    if (cost.mill > side.deck.length) return false;
+    if (cost.flipG > side.gZone.length - side.generationBreak) return false;
     if (cost.restSelf && unit.rested) return false;
+    if ((cost.retireSelf || cost.selfToSoul) && circle == Circle.vanguard) {
+      return false;
+    }
     return true;
   }
 
@@ -1218,9 +1285,15 @@ class PlaytestEngine {
     List<GameCard> discardable = const [],
   }) {
     final unit = side.field[circle];
-    if (unit == null || !canPayFor(side, unit, ability)) return false;
+    if (unit == null || !canPayFor(side, unit, ability, circle: circle)) {
+      return false;
+    }
     // What the card asks about the board, before anything is paid for it.
     if (!meets(side, unit, ability.condition)) return false;
+    // A crest it cannot find is an ability it cannot finish, so nothing is
+    // paid for it. The pool is whatever crests the library knows about.
+    final wantedCrest = ability.effect.crestNamed;
+    if (wantedCrest != null && _crestNamed(wantedCrest) == null) return false;
 
     final cost = ability.cost;
     if (cost.discard > 0) {
@@ -1244,6 +1317,24 @@ class PlaytestEngine {
         0,
         PlaytestSide.energyCap,
       );
+    }
+    if (cost.mill > 0) {
+      for (var i = 0; i < cost.mill && side.deck.isNotEmpty; i += 1) {
+        side.drop.add(side.deck.removeLast());
+      }
+      state.note(
+        '${side.name} puts the top ${cost.mill} of the deck into the drop.',
+        by: side,
+      );
+    }
+    if (cost.flipG > 0) {
+      final faceDown = side.gZone
+          .where((c) => !side.faceUpG.contains(c.instanceId))
+          .take(cost.flipG)
+          .toList();
+      for (final card in faceDown) {
+        flipG(side, card, faceUp: true);
+      }
     }
     if (cost.restSelf) unit.rested = true;
 
@@ -1279,6 +1370,25 @@ class PlaytestEngine {
     if (effect.soulCharge > 0) soulCharge(side, effect.soulCharge);
     if (effect.counterCharge > 0) counterCharge(side, effect.counterCharge);
     if (effect.energyCharge > 0) _chargeEnergy(side, effect.energyCharge);
+    final gained = effect.crestNamed;
+    if (gained != null) {
+      final crest = _crestNamed(gained);
+      if (crest != null) playCrest(side, crest);
+    }
+
+    // The costs that spend the unit itself come last: everything above still
+    // happened, and what is left is taking the unit off its circle.
+    if (cost.retireSelf) retire(side, circle);
+    if (cost.selfToSoul) {
+      final spent = side.field.remove(circle);
+      if (spent != null) {
+        side.soul.add(spent.card);
+        state.note(
+          '${side.name} puts ${spent.card.name} into the soul.',
+          by: side,
+        );
+      }
+    }
 
     unit.usedAbilities.add(ability.text);
     state.note(
