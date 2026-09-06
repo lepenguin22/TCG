@@ -574,10 +574,15 @@ come into it, so they are on the board and tappable rather than left as numbers:
   Drawing is the common thing and looking is the rare one, so reading the deck
   is never the price of taking the top card off it.
 - **Drop** hands a card back where something returns one, and sends one under
-  the deck for the costs that ask for that.
+  the deck for the costs that ask for that. It also **plays an order out of
+  the drop**: a few orders can be played a second time from there, and every
+  one of them is removed from the game for it rather than going back to the
+  drop, so it can never be played a third time. Which orders those are is on
+  the card, so the button is offered for any order in the drop and you read
+  the text — the same bargain the board makes everywhere else.
 - **Removed** only appears once something is out of the game — an over trigger
-  that resolved, so far. It opens read-only: the cards are there to be read,
-  and nothing comes back from it.
+  that resolved, or an order played out of the drop. It opens read-only: the
+  cards are there to be read, and nothing comes back from it.
 
 Cards go **under the deck** as well as to the drop zone, since a good many
 costs are paid that way and where a card ends up decides what can fetch it

@@ -873,6 +873,22 @@ class PlaytestEngine {
     state.note('${side.name} plays ${card.name}.', by: side);
   }
 
+  /// Plays an order out of the drop zone, which removes it from the game.
+  ///
+  /// A handful of orders can be played a second time from the drop, and every
+  /// one of them says the same thing about what happens next: the card is
+  /// removed from the game rather than going back to the drop it came from,
+  /// so it can never be played a third time.
+  void playOrderFromDrop(PlaytestSide side, GameCard card) {
+    if (!side.drop.remove(card)) return;
+    side.removed.add(card);
+    state.note(
+      '${side.name} plays ${card.name} from the drop zone, '
+      'and it is removed from the game.',
+      by: side,
+    );
+  }
+
   /// Discards from hand, for a cost the card's text asks for.
   void discard(PlaytestSide side, GameCard card) {
     side.hand.remove(card);

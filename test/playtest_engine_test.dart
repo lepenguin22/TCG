@@ -641,6 +641,49 @@ void main() {
       },
     );
 
+    test('an order played from the drop leaves the game', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+
+      final order = GameCard(
+        9001,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Dragon Deity of Destruction, Gyze',
+          attributes: {
+            'grade': '1',
+            'cardType': 'order',
+            'effect':
+                'You may play this card from your drop zone. If you do, '
+                'remove it from the game.',
+          },
+        ),
+      );
+      you.drop.add(order);
+      final drop = you.drop.length;
+
+      engine.playOrderFromDrop(you, order);
+
+      expect(you.drop.length, drop - 1);
+      expect(you.drop.contains(order), isFalse, reason: 'not back in the drop');
+      expect(you.removed, contains(order));
+      expect(
+        engine.state.log.any((e) => e.text.contains('removed from the game')),
+        isTrue,
+      );
+    });
+
+    test('an order not in the drop cannot be played from it', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final held = you.hand.first;
+
+      engine.playOrderFromDrop(you, held);
+
+      expect(you.hand, contains(held), reason: 'nothing was taken from hand');
+      expect(you.removed, isEmpty);
+    });
+
     test('a grade 2 in the back row cannot boost', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);

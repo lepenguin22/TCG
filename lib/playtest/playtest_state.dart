@@ -66,6 +66,9 @@ class GameCard {
   bool get isUnit =>
       cardType == 'normal' || cardType == 'trigger' || cardType == 'g-unit';
 
+  /// Whether this is an order of any kind -- normal, blitz or set.
+  bool get isOrder => cardType.startsWith('order');
+
   /// A sentinel guards perfectly: it cancels the attack outright rather than
   /// adding shield, which is why it is worth a card off the top of the hand.
   bool get isSentinel => cardType == 'sentinel';

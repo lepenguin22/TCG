@@ -459,6 +459,7 @@ class _ZoneRail extends StatelessWidget {
             onAction: (card) => game.returnFromDrop(side, card),
             callable: true,
             bottomable: true,
+            playableOrders: true,
           ),
         ),
         _Pile(
@@ -630,6 +631,7 @@ void _showPileSheet(
   List<Widget> Function(BuildContext sheetContext)? header,
   bool callable = false,
   bool bottomable = false,
+  bool playableOrders = false,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -705,6 +707,21 @@ void _showPileSheet(
                                   Navigator.of(sheetContext).pop();
                                 },
                                 child: Text(actionLabel ?? 'Move'),
+                              ),
+                            // A few orders can be played again out of the
+                            // drop. Which ones is on the card, so the board
+                            // offers it for any order and the player reads
+                            // the text -- and playing one this way removes it
+                            // from the game, which is what those cards say.
+                            if (playableOrders &&
+                                card.isOrder &&
+                                game.controls(side))
+                              TextButton(
+                                onPressed: () {
+                                  game.playOrderFromDrop(side, card);
+                                  Navigator.of(sheetContext).pop();
+                                },
+                                child: const Text('Play from drop'),
                               ),
                             // Costs put cards under the deck out of the drop
                             // and the soul as well as out of hand.

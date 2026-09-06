@@ -1230,6 +1230,74 @@ void main() {
       expect(find.text('Call'), findsWidgets);
     });
 
+    testWidgets('an order in the drop can be played, and then it is gone', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // The board's own controller, so an order can be put in the drop the
+      // way a game would put one there without playing a whole turn for it.
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      final order = GameCard(
+        4242,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Ancient Dragon Rampage',
+          attributes: {
+            'grade': '1',
+            'cardType': 'order',
+            'effect':
+                'You may play this card from your drop zone. If you do, '
+                'remove it from the game.',
+          },
+        ),
+      );
+      game.you.drop.add(order);
+      game.hold(null); // Repaints, without reaching for anything private.
+      await tester.pumpAndSettle();
+
+      expect(find.text('Removed'), findsNothing, reason: 'nothing gone yet');
+
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.text('Ancient Dragon Rampage'), findsOneWidget);
+      expect(find.text('Play from drop'), findsOneWidget);
+
+      await tester.tap(find.text('Play from drop'));
+      await tester.pumpAndSettle();
+
+      expect(game.you.drop.contains(order), isFalse);
+      expect(game.you.removed, contains(order));
+      expect(find.text('Removed'), findsOneWidget);
+    });
+
+    testWidgets('a unit in the drop is not offered as an order', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // Discard a unit, which is what a drop zone is usually full of.
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+
+      await tapOnBoard(tester, find.text('Drop').last);
+      expect(find.textContaining('Drop zone'), findsOneWidget);
+      expect(
+        find.text('Play from drop'),
+        findsNothing,
+        reason: 'only orders are played from the drop',
+      );
+    });
+
     testWidgets('a card in hand goes under the deck', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
