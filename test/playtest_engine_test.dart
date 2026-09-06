@@ -722,6 +722,38 @@ void main() {
       );
     });
 
+    test('a rear-guard can put itself into the soul', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final card = you.hand.firstWhere((c) => c.grade <= 1 && c.isUnit);
+      engine.call(you, card, Circle.backCenter);
+      final soul = you.soul.length;
+
+      engine.unitToSoul(you, Circle.backCenter);
+
+      expect(you.field[Circle.backCenter], isNull, reason: 'off its circle');
+      expect(you.soul.length, soul + 1);
+      expect(you.soul.contains(card), isTrue);
+      expect(
+        you.drop.contains(card),
+        isFalse,
+        reason: 'the soul, not the drop',
+      );
+      // And it is there to be spent: a soul-blast finds it.
+      engine.soulBlast(you, card);
+      expect(you.drop.contains(card), isTrue);
+    });
+
+    test('the vanguard cannot go into the soul', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final vanguard = you.vanguard;
+
+      engine.unitToSoul(you, Circle.vanguard);
+
+      expect(you.vanguard, vanguard, reason: 'the soul sits under it');
+    });
+
     test('a grade 2 in the back row cannot boost', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);

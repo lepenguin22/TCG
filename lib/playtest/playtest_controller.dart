@@ -511,6 +511,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void unitToSoul(PlaytestSide side, Circle circle) {
+    engine.unitToSoul(side, circle);
+    _sync();
+  }
+
   void playCrest(PlaytestSide side, CardDefinition card) {
     engine.playCrest(side, card);
     _sync();

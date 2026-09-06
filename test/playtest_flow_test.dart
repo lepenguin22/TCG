@@ -1460,6 +1460,56 @@ void main() {
       );
       expect(find.text('To bottom of deck'), findsNothing);
       expect(find.text('Retire'), findsNothing, reason: 'nor a retire');
+      expect(find.text('To soul'), findsNothing, reason: 'nor the soul');
+    });
+
+    testWidgets('a rear-guard goes into the soul from its sheet', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+
+      // Calling happens in the main phase, so ride first and move on.
+      await tester.tap(find.text('Ride'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Ride deck · grade 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+      final called = game.you.field[Circle.backLeft]!.card;
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-backLeft')),
+      );
+      await scrollSheetTo(tester, find.text('To soul'));
+      await tester.tap(find.text('To soul'));
+      await tester.pumpAndSettle();
+
+      expect(game.you.field[Circle.backLeft], isNull);
+      expect(game.you.soul.contains(called), isTrue);
+      expect(
+        game.you.drop.contains(called),
+        isFalse,
+        reason: 'the soul is not the drop',
+      );
     });
 
     testWidgets('the drop zone sends a card under the deck', (tester) async {

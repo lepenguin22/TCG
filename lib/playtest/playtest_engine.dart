@@ -716,6 +716,20 @@ class PlaytestEngine {
     state.note('${side.name} puts ${unit.card.name} under the deck.', by: side);
   }
 
+  /// Puts a rear-guard into the soul, which a good many of them pay to do.
+  ///
+  /// The vanguard cannot go: it is the unit the soul sits under, and a game
+  /// with nothing on the vanguard circle is not a game. Everything else about
+  /// this is the same as retiring, except where the card ends up -- and where
+  /// it ends up is the point, since a soul-blast can spend it later.
+  void unitToSoul(PlaytestSide side, Circle circle) {
+    if (circle == Circle.vanguard) return;
+    final unit = side.field.remove(circle);
+    if (unit == null) return;
+    side.soul.add(unit.card);
+    state.note('${side.name} puts ${unit.card.name} into the soul.', by: side);
+  }
+
   // ---------------------------------------------------------------------- call
 
   /// Whether [card] may be called to [circle].
@@ -1459,16 +1473,7 @@ class PlaytestEngine {
     // The costs that spend the unit itself come last: everything above still
     // happened, and what is left is taking the unit off its circle.
     if (cost.retireSelf) retire(side, circle);
-    if (cost.selfToSoul) {
-      final spent = side.field.remove(circle);
-      if (spent != null) {
-        side.soul.add(spent.card);
-        state.note(
-          '${side.name} puts ${spent.card.name} into the soul.',
-          by: side,
-        );
-      }
-    }
+    if (cost.selfToSoul) unitToSoul(side, circle);
 
     unit.usedAbilities.add(ability.text);
     state.note(

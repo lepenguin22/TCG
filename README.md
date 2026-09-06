@@ -604,6 +604,12 @@ back later. A card in hand, in the drop zone or in the soul can be put under
 the deck from its own sheet, and a rear-guard goes there straight off the
 field, next to the retire it is not.
 
+A rear-guard also goes **into the soul** from its own sheet, which is what a
+good many of them pay to do — and it is not a retire: a card in the soul is
+there for a soul-blast to spend later, where a card in the drop is not. The
+vanguard is never offered it, since the soul is the pile sitting under that
+very card.
+
 Calling is not tied to your hand, and not tied to the main phase. Plenty of
 abilities call a unit out of the deck, the drop or the soul, and plenty of them
 fire mid-battle, so each of those piles offers a **Call** beside its own action

@@ -2670,6 +2670,17 @@ void _showUnitSheet(
                       },
                       child: const Text('Retire'),
                     ),
+                    // A rear-guard paying its way into the soul, which is
+                    // where a soul-blast will find it later. Not a retire:
+                    // the drop and the soul are different places, and which
+                    // one a card ends up in decides what can spend it.
+                    OutlinedButton(
+                      onPressed: () {
+                        game.unitToSoul(side, circle);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('To soul'),
+                    ),
                     // A cost that puts a unit back in the deck rather than the
                     // drop zone, which is a different place for it to end up.
                     OutlinedButton(
