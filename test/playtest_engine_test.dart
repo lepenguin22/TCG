@@ -754,6 +754,60 @@ void main() {
       expect(you.vanguard, vanguard, reason: 'the soul sits under it');
     });
 
+    test('looking at the top does not disturb the deck', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final before = [...you.deck];
+
+      final top = engine.topOfDeck(you, 5);
+
+      expect(top.length, 5);
+      expect(top.first, before.last, reason: 'the top card comes first');
+      expect(top.last, before[before.length - 5]);
+      expect(you.deck, before, reason: 'nothing moved');
+    });
+
+    test('looking at more than the deck holds is what is left', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      you.deck.removeRange(0, you.deck.length - 2);
+
+      expect(engine.topOfDeck(you, 7).length, 2);
+    });
+
+    test('a card looked at can be taken anywhere it belongs', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final top = engine.topOfDeck(you, 4);
+      final size = you.deck.length;
+
+      engine.takeFromTop(you, top[0], DeckPick.hand);
+      engine.takeFromTop(you, top[1], DeckPick.drop);
+      engine.takeFromTop(you, top[2], DeckPick.soul);
+      engine.takeFromTop(you, top[3], DeckPick.bottom);
+
+      expect(you.hand.contains(top[0]), isTrue);
+      expect(you.drop.contains(top[1]), isTrue);
+      expect(you.soul.contains(top[2]), isTrue);
+      expect(you.deck.first, top[3], reason: 'on the bottom');
+      expect(you.deck.length, size - 3, reason: 'three left the deck');
+    });
+
+    test('taking from the top does not shuffle the rest', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final top = engine.topOfDeck(you, 3);
+      final rest = you.deck.sublist(0, you.deck.length - 3);
+
+      engine.takeFromTop(you, top.first, DeckPick.hand);
+
+      expect(you.deck.sublist(0, rest.length), rest, reason: 'order kept');
+      expect(engine.topOfDeck(you, 2), [
+        top[1],
+        top[2],
+      ], reason: 'the next two are what was under it');
+    });
+
     test('a grade 2 in the back row cannot boost', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);

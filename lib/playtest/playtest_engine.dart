@@ -20,6 +20,14 @@ import 'playtest_state.dart';
 /// nothing here can execute that. So the engine runs the game around them and
 /// the player reads the text and applies it by hand, which is also how a
 /// paper playtest against a patient opponent goes.
+/// Where a card taken off the top of the deck goes.
+///
+/// The abilities that look at the top few cards all end by sending what they
+/// found somewhere, and which somewhere is the whole point: a card put into
+/// hand is a card drawn, one into the drop feeds a deck that wants a deep
+/// drop, and one on the bottom is out of the way.
+enum DeckPick { hand, drop, soul, bottom }
+
 /// The card types that are crests: the one that comes with a ride deck, and
 /// the token a stride deck's ability puts into play.
 const _crestTypes = {'ride-deck-crest', 'crest'};
@@ -679,6 +687,44 @@ class PlaytestEngine {
   void shuffleDeck(PlaytestSide side) {
     side.deck.shuffle(_random);
     state.note('${side.name} shuffles.', by: side);
+  }
+
+  /// The top [count] cards of the deck, the top one first.
+  ///
+  /// Looking is not taking: the cards stay where they are and in the order
+  /// they are in, which is what "look at the top five cards" means before you
+  /// have chosen anything out of them.
+  List<GameCard> topOfDeck(PlaytestSide side, int count) =>
+      side.deck.reversed.take(count).toList();
+
+  /// Takes one of the cards you are looking at, and puts it where the card
+  /// that let you look says it goes.
+  ///
+  /// Deliberately without a shuffle. Some of these abilities shuffle
+  /// afterwards and some put the rest on the bottom in order, so the shuffle
+  /// is its own decision rather than something that happens to you.
+  void takeFromTop(PlaytestSide side, GameCard card, DeckPick to) {
+    if (!side.deck.remove(card)) return;
+    switch (to) {
+      case DeckPick.hand:
+        side.hand.add(card);
+      case DeckPick.drop:
+        side.drop.add(card);
+      case DeckPick.soul:
+        side.soul.add(card);
+      case DeckPick.bottom:
+        side.deck.insert(0, card);
+    }
+    state.note(
+      '${side.name} takes ${card.name} off the top of the deck '
+      '${switch (to) {
+        DeckPick.hand => 'into hand',
+        DeckPick.drop => 'into the drop zone',
+        DeckPick.soul => 'into the soul',
+        DeckPick.bottom => 'and puts it on the bottom',
+      }}.',
+      by: side,
+    );
   }
 
   /// Returns a card from the drop zone to the hand.

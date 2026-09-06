@@ -10,6 +10,7 @@ import '../games/games.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../playtest/playtest_controller.dart';
+import '../playtest/playtest_engine.dart';
 import '../playtest/playtest_state.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
@@ -862,7 +863,9 @@ void _showDeckSheet(
     backgroundColor: AppColors.surface,
     showDragHandle: true,
     builder: (sheetContext) => SafeArea(
-      child: Padding(
+      // Scrollable: four actions and a heading do not fit a short screen,
+      // and a sheet that overflows shows a stripe instead of a button.
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -893,6 +896,17 @@ void _showDeckSheet(
               },
             ),
             _SheetAction(
+              icon: Icons.vertical_align_top,
+              label: 'Look at the top cards',
+              detail:
+                  'Three, five or seven, in order — and take what the card '
+                  'says out of them.',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _showTopOfDeckSheet(context, game, side);
+              },
+            ),
+            _SheetAction(
               icon: Icons.search,
               label: 'Look through the deck',
               detail:
@@ -904,6 +918,141 @@ void _showDeckSheet(
               },
             ),
           ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The top few cards of the deck, in order, for the abilities that look at
+/// them.
+///
+/// "Look at the top five cards of your deck, choose up to one, put it into
+/// your hand" is one of the commonest shapes in the game, and the whole point
+/// is that it is the *top* cards rather than the whole deck: what you leave
+/// stays where it was, in the order it was in.
+void _showTopOfDeckSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  var count = 5;
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        builder: (_, scrollController) => StatefulBuilder(
+          builder: (builderContext, setSheetState) => ListenableBuilder(
+            listenable: game,
+            builder: (_, _) {
+              final looking = game.engine.topOfDeck(side, count);
+              return ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                children: [
+                  SectionHeader(
+                    title: 'Top $count of the deck',
+                    caption:
+                        'The top card first. What you leave stays in the '
+                        'order it is in — shuffle below if the card says to.',
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final many in [3, 5, 7])
+                        ChoiceChip(
+                          label: Text('$many'),
+                          selected: count == many,
+                          onSelected: (_) => setSheetState(() => count = many),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (looking.isEmpty)
+                    const Text(
+                      'The deck is empty.',
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
+                  for (final card in looking)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CardImage(url: card.imageUrl, width: 32),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  card.name,
+                                  style: const TextStyle(
+                                    color: AppColors.text,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  'Grade ${card.grade}'
+                                  '${card.trigger == null ? '' : ' · ${card.trigger} trigger'}',
+                                  style: const TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    for (final pick in [
+                                      (DeckPick.hand, 'To hand'),
+                                      (DeckPick.drop, 'To drop'),
+                                      (DeckPick.soul, 'To soul'),
+                                      (DeckPick.bottom, 'To bottom'),
+                                    ])
+                                      TextButton(
+                                        onPressed: () => game.takeFromTop(
+                                          side,
+                                          card,
+                                          pick.$1,
+                                        ),
+                                        child: Text(pick.$2),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () {
+                          game.shuffleDeck(side);
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: const Text('Shuffle and close'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: const Text('Leave the order'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     ),

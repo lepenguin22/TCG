@@ -579,10 +579,22 @@ come into it, so they are on the board and tappable rather than left as numbers:
   the six that ends the game.
 - **Soul** takes a soul-blast per card and a soul-charge off the top of the deck.
 - **Deck** opens on what can be done to it without looking at it: **draw a
-  card**, shuffle, or — deliberately, one tap further in — look through the
-  whole thing for an ability that searches, which reshuffles afterwards.
-  Drawing is the common thing and looking is the rare one, so reading the deck
-  is never the price of taking the top card off it.
+  card**, shuffle, **look at the top cards**, or — deliberately, one tap
+  further in — look through the whole thing for an ability that searches,
+  which reshuffles afterwards. Drawing is the common thing and reading the
+  whole deck is the rare one, so laying the deck out is never the price of
+  taking the top card off it.
+
+  **Looking at the top** is its own thing, because *"look at the top five
+  cards of your deck, choose one, put it into your hand"* is one of the
+  commonest abilities in the game and it is emphatically not a search. The
+  sheet shows three, five or seven — switchable without reopening — in order,
+  top card first, and each one can go **to hand, to the drop, to the soul or
+  to the bottom**, which between them are where those abilities send what they
+  find. What you leave stays exactly where it was, in the order it was in;
+  the shuffle at the end is a button rather than something that happens to
+  you, since some of these cards shuffle and others put the rest back in
+  order.
 - **Drop** hands a card back where something returns one, and sends one under
   the deck for the costs that ask for that. It is also where cards **work from
   the drop zone**, which a couple of hundred of them do: a unit carrying

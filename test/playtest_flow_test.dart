@@ -1371,6 +1371,71 @@ void main() {
       expect(find.text('Removed'), findsOneWidget);
     });
 
+    testWidgets('the top cards can be looked at and taken to hand', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      final top = game.engine.topOfDeck(game.you, 5);
+      final hand = game.you.hand.length;
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      await tester.tap(find.text('Look at the top cards'));
+      await tester.pumpAndSettle();
+
+      // Five by default, and the count can be changed without reopening.
+      expect(find.textContaining('Top 5 of the deck'), findsOneWidget);
+      // By the chip, not by the text: the board behind has counters on it
+      // that are also single digits.
+      await tester.tap(find.widgetWithText(ChoiceChip, '3'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Top 3 of the deck'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ChoiceChip, '5'));
+      await tester.pumpAndSettle();
+
+      // The first card listed is the top of the deck, and it goes to hand.
+      expect(find.text('To hand'), findsWidgets);
+      await tester.tap(find.text('To hand').first);
+      await tester.pumpAndSettle();
+
+      expect(game.you.hand.length, hand + 1);
+      expect(game.you.hand.contains(top.first), isTrue);
+      expect(game.you.deck.contains(top.first), isFalse);
+      // What was under it is still in the same order.
+      expect(game.engine.topOfDeck(game.you, 1), [top[1]]);
+    });
+
+    testWidgets('the look at the top can shuffle afterwards, or not', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      await tester.tap(find.text('Look at the top cards'));
+      await tester.pumpAndSettle();
+
+      final before = [...game.you.deck];
+      await scrollSheetTo(tester, find.text('Leave the order'));
+      await tester.tap(find.text('Leave the order'));
+      await tester.pumpAndSettle();
+      expect(game.you.deck, before, reason: 'left exactly as it was');
+    });
+
     testWidgets('a card in hand goes under the deck', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

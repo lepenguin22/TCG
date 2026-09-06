@@ -496,6 +496,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void takeFromTop(PlaytestSide side, GameCard card, DeckPick to) {
+    engine.takeFromTop(side, card, to);
+    _sync();
+  }
+
   void returnFromDrop(PlaytestSide side, GameCard card) {
     engine.returnFromDrop(side, card);
     _sync();
