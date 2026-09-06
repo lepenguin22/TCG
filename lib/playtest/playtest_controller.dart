@@ -47,6 +47,7 @@ class PlaytestController extends ChangeNotifier {
     required Deck yourDeck,
     required Deck opponentDeck,
     TurnOrder turnOrder = TurnOrder.youFirst,
+    this.mode = PlaytestMode.vsCpu,
     Random? random,
   }) {
     engine = PlaytestEngine.start(
@@ -54,11 +55,19 @@ class PlaytestController extends ChangeNotifier {
       yourDeck: yourDeck,
       opponentDeck: opponentDeck,
       turnOrder: turnOrder,
+      mode: mode,
       random: random,
     );
     ai = PlaytestAi(engine);
     gameId = yourDeck.gameId;
+    mulliganSide = state.you;
   }
+
+  /// Who plays the other side: the CPU, or you.
+  final PlaytestMode mode;
+
+  /// Whether both hands are yours.
+  bool get bothSides => mode == PlaytestMode.bothSides;
 
   /// The game being played, for the screens that need to ask its rules or its
   /// card database something -- choosing a crest to play, among them.
@@ -69,14 +78,40 @@ class PlaytestController extends ChangeNotifier {
 
   PlaytestState get state => engine.state;
 
+  /// The near side of the board: the deck you set up as yours. It stays at
+  /// the bottom of the screen whoever is playing it.
   PlaytestSide get you => state.you;
 
+  /// The far side.
   PlaytestSide get cpu => state.opponent;
+
+  /// The side you are acting as right now.
+  ///
+  /// Against the CPU that is always your own. With both hands yours it is
+  /// whoever's turn it is, which is the whole of what the mode changes: every
+  /// control on the board goes on working, and it works for the player whose
+  /// turn it is.
+  PlaytestSide get me => bothSides ? state.active : state.you;
+
+  /// Whether you are the one playing [side].
+  bool controls(PlaytestSide side) => bothSides || side == state.you;
+
+  /// Whether it is [side]'s turn.
+  bool isTurnOf(PlaytestSide side) => side == state.active;
+
+  /// The hand the strip along the bottom shows: the defender's while a guard
+  /// is being made, and otherwise the hand of whoever is playing.
+  PlaytestSide get handSide =>
+      stage == PlaytestStage.guarding ? state.inactive : me;
 
   PlaytestStage stage = PlaytestStage.mulligan;
 
-  /// Cards you have picked out of your opening hand to put back.
+  /// Cards you have picked out of the opening hand to put back.
   final Set<GameCard> mulliganPicks = {};
+
+  /// Whose opening hand is being decided. With both hands yours, the second
+  /// player's follows the first's.
+  late PlaytestSide mulliganSide;
 
   /// The cards this battle has turned face up, drive and damage together.
   /// The engine keeps them; the board shows them as the trigger zone.
@@ -108,13 +143,21 @@ class PlaytestController extends ChangeNotifier {
   }
 
   void confirmMulligan() {
-    engine.mulligan(you, mulliganPicks.toList());
+    engine.mulligan(mulliganSide, mulliganPicks.toList());
     mulliganPicks.clear();
+    // With both hands yours, the other player decides their own opening
+    // before the game starts rather than having one decided for them.
+    if (bothSides && mulliganSide == state.you) {
+      mulliganSide = state.opponent;
+      notifyListeners();
+      return;
+    }
     engine.beginPlay();
     stage = PlaytestStage.yours;
     // The CPU may have won the roll, in which case turn one is its own and it
     // plays straight through to its first attack before you get the board.
-    if (!state.yourTurn && !state.isOver) {
+    // With both hands yours there is nobody to hand over to.
+    if (!bothSides && !state.yourTurn && !state.isOver) {
       _runCpuTurn();
     }
     _sync();
@@ -123,7 +166,7 @@ class PlaytestController extends ChangeNotifier {
   // ---------------------------------------------------------------- your turn
 
   void ride(GameCard card, {required bool fromRideDeck, GameCard? discard}) {
-    engine.ride(you, card, fromRideDeck: fromRideDeck, discard: discard);
+    engine.ride(me, card, fromRideDeck: fromRideDeck, discard: discard);
     _sync();
   }
 
@@ -135,20 +178,20 @@ class PlaytestController extends ChangeNotifier {
   void placeHeld(Circle circle) {
     final card = holding;
     if (card == null) return;
-    if (!engine.canCall(you, card, circle)) return;
-    engine.call(you, card, circle);
+    if (!engine.canCall(me, card, circle)) return;
+    engine.call(me, card, circle);
     holding = null;
     _sync();
   }
 
   void playOrder(GameCard card) {
-    engine.playOrder(you, card);
+    engine.playOrder(me, card);
     holding = null;
     _sync();
   }
 
   void discard(GameCard card) {
-    engine.discard(you, card);
+    engine.discard(handSide, card);
     holding = null;
     _sync();
   }
@@ -159,8 +202,9 @@ class PlaytestController extends ChangeNotifier {
     holding = null;
     engine.advancePhase();
     // Ending your turn hands over to the CPU, which plays up to its first
-    // attack and then waits for you.
-    if (!state.yourTurn && !state.isOver) {
+    // attack and then waits for you. With both hands yours the turn simply
+    // passes to the other player, who is also you.
+    if (!bothSides && !state.yourTurn && !state.isOver) {
       _runCpuTurn();
     }
     _sync();
@@ -181,7 +225,7 @@ class PlaytestController extends ChangeNotifier {
     final from = selectedAttacker;
     final circle = from?.boostedBy;
     if (circle == null) return null;
-    final booster = you.field[circle];
+    final booster = me.field[circle];
     if (booster == null || booster.rested || !booster.canBoost) return null;
     return booster;
   }
@@ -191,7 +235,7 @@ class PlaytestController extends ChangeNotifier {
   FieldUnit? get boosterThatCannot {
     final circle = selectedAttacker?.boostedBy;
     if (circle == null) return null;
-    final behind = you.field[circle];
+    final behind = me.field[circle];
     if (behind == null || behind.rested || behind.canBoost) return null;
     return behind;
   }
@@ -213,13 +257,19 @@ class PlaytestController extends ChangeNotifier {
     attack(from: from, to: target, boost: boost);
   }
 
-  /// Declares one of your attacks. The CPU guards it straight away, so what
-  /// you see next is the real fight and not a guess at it.
+  /// Declares an attack. Against the CPU it guards straight away, so what you
+  /// see next is the real fight and not a guess at it; with both hands yours
+  /// the guard is yours to make too, so the board asks for it first.
   void attack({required Circle from, required Circle to, bool boost = false}) {
     // The turn one rule, kept here as well as in what the board offers: a
     // caller that has not asked cannot make an attack that is not allowed.
-    if (!engine.canAttack(you)) return;
+    if (!engine.canAttack(me)) return;
     final pending = engine.declareAttack(from: from, to: to, boost: boost);
+    if (bothSides) {
+      stage = PlaytestStage.guarding;
+      _sync();
+      return;
+    }
     ai.guard(pending);
     stage = PlaytestStage.yourAttack;
     _sync();
@@ -308,7 +358,16 @@ class PlaytestController extends ChangeNotifier {
 
   /// Takes the attack as it stands: drive check first, so you see what the
   /// CPU turned up before the damage lands.
+  ///
+  /// With both hands yours the guard is finished rather than the attack: the
+  /// board goes back to the attacking player, who drives and resolves it the
+  /// way they would any attack of their own.
   void confirmGuard() {
+    if (bothSides) {
+      stage = PlaytestStage.yourAttack;
+      _sync();
+      return;
+    }
     engine.driveCheck();
     stage = PlaytestStage.cpuAttack;
     _sync();

@@ -74,12 +74,16 @@ class PlaytestEngine {
     required Deck yourDeck,
     required Deck opponentDeck,
     TurnOrder turnOrder = TurnOrder.youFirst,
+    PlaytestMode mode = PlaytestMode.vsCpu,
     Random? random,
   }) {
     final rng = random ?? Random();
+    // With both hands yours there is no CPU to name, so the sides are told
+    // apart by number the way two players across a table would be.
+    final solo = mode == PlaytestMode.bothSides;
     final state = PlaytestState(
-      you: PlaytestSide(name: 'You', isCpu: false),
-      opponent: PlaytestSide(name: 'CPU', isCpu: true),
+      you: PlaytestSide(name: solo ? 'Player 1' : 'You', isCpu: false),
+      opponent: PlaytestSide(name: solo ? 'Player 2' : 'CPU', isCpu: !solo),
     );
     final engine = PlaytestEngine(state, random: rng);
 
@@ -112,11 +116,16 @@ class PlaytestEngine {
       engine._draw(state.opponent);
     }
 
-    // The CPU decides its opening at once; yours waits for you.
-    engine._cpuMulligan(state.opponent);
+    // The CPU decides its opening at once; a hand you are playing waits for
+    // you, and with both hands yours that means both of them.
+    if (!solo) engine._cpuMulligan(state.opponent);
 
     state.note(
-      youFirst
+      solo
+          ? '${state.active.name} goes first, so they charge no energy on '
+                'turn one. ${state.inactive.name} is paid three energy for '
+                'going second.'
+          : youFirst
           ? 'You go first, so you charge no energy on turn one.'
           : 'The CPU goes first. You are paid three energy for going second.',
     );

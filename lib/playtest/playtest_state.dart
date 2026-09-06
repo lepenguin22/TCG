@@ -289,6 +289,25 @@ enum TurnOrder {
   const TurnOrder(this.label);
 
   final String label;
+
+  /// The same choice said in the words of a game where both hands are yours.
+  String get soloLabel => switch (this) {
+    TurnOrder.youFirst => 'Player 1 goes first',
+    TurnOrder.cpuFirst => 'Player 2 goes first',
+    TurnOrder.random => 'Decided at random',
+  };
+}
+
+/// Who plays the other side of the board.
+enum PlaytestMode {
+  /// The CPU does, as far as it can: it rides, calls, attacks and guards,
+  /// and plays the abilities the reader can follow.
+  vsCpu,
+
+  /// You do. Both hands are yours, nothing moves unless you move it, and no
+  /// ability goes unplayed because a program could not read it -- which is
+  /// what a real test of a deck against a deck needs.
+  bothSides,
 }
 
 enum PlaytestPhase {

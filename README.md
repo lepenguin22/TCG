@@ -308,12 +308,42 @@ JSON pasted into the same box — it is read the same way.
 
 ## Playtesting
 
-The play button on a deck screen deals the deck out against the CPU. Pick a
-mirror match, or any other deck in the library to test a matchup against, and
-choose who takes the first turn — you, the CPU, or a roll. Turn order is not a
-formality: whoever goes second is paid three energy by the crest to make up for
-being a turn behind on the board, so a deck is worth trying from both sides.
-Choosing the roll re-rolls it on every restart rather than fixing it once.
+The play button on a deck screen deals the deck out. Pick a mirror match, or
+any other deck in the library to test a matchup against, choose **who plays
+the other side** — the CPU, or you — and who takes the first turn. Turn order
+is not a formality: whoever goes second is paid three energy by the crest to
+make up for being a turn behind on the board, so a deck is worth trying from
+both sides. Choosing the roll re-rolls it on every restart rather than fixing
+it once.
+
+### Playing both sides
+
+The CPU only plays the abilities the reader can follow, which for a deck built
+on the ones it cannot is not a test at all — the deck comes out as a set of
+vanilla bodies and the game it really plays never happens. So the other side
+can be yours as well.
+
+Pick **You, both sides** and there is no CPU in the game: it is one board with
+two hands on it, both of them yours. Both openings are mulliganed, one after
+the other. The turn passes from one player to the other and stops there, and
+every control on the board goes on working for whoever's turn it is — the ride
+sheet rides their deck, a card called comes out of their hand, the abilities
+applied by hand are applied to their units. When an attack is declared the
+board asks the *defender* to guard it, with the defender's own cards, before
+handing it back to the attacker to drive and resolve.
+
+The sides are called **Player 1** and **Player 2** rather than You and the
+CPU, and the board says which of them it is talking to at every step: the
+title bar names whose turn it is, the hand strip names whose hand it is
+showing, and the control bar prefixes what it is waiting for with the name of
+the player it wants it from. Player 1's board stays at the bottom throughout,
+the way it would if you were sitting on one side of a table and reaching
+across.
+
+Nothing about the rules changes: the turn one attack ban, the energy for going
+second, boosting, triggers, the sixth damage. What changes is that nothing at
+all happens unless you do it, which is what testing a deck whose abilities no
+program can read actually requires.
 
 The board runs the game the way it sits on a table: your opponent's six circles
 across the top, yours below, your hand along the bottom, and a control bar that
@@ -591,7 +621,9 @@ afterwards, the way looking through it always does.
 ### What it will not do for you
 
 It will not play your cards' abilities, and the CPU plays only the few it can
-actually read.
+actually read — which is the reason **You, both sides** exists: play the other
+side yourself and every ability on both boards gets played, because you are
+the one playing them.
 
 Abilities are English prose in the card database — "[AUTO]:When this unit is
 placed on (VC), [COST][Counter-Blast 1], choose one of your opponent's

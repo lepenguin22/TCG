@@ -25,6 +25,9 @@ class PlaytestSetupScreen extends StatefulWidget {
 
 class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
   TurnOrder _turnOrder = TurnOrder.youFirst;
+  PlaytestMode _mode = PlaytestMode.vsCpu;
+
+  bool get _bothSides => _mode == PlaytestMode.bothSides;
 
   Deck get deck => widget.deck;
 
@@ -65,14 +68,61 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'You play this deck. Pick who to play against.',
-                        style: TextStyle(color: AppColors.textMuted),
+                      Text(
+                        _bothSides
+                            ? 'This is Player 1\u2019s deck. Pick the deck '
+                                  'to play it against; both hands are yours.'
+                            : 'You play this deck. Pick who to play against.',
+                        style: const TextStyle(color: AppColors.textMuted),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 20),
+                const SectionHeader(
+                  title: 'Who plays the other side',
+                  caption:
+                      'The CPU plays what the board can read. Taking both '
+                      'sides yourself plays everything, which is what a card '
+                      'the reader cannot follow needs.',
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<PlaytestMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: PlaytestMode.vsCpu,
+                        label: Text('The CPU'),
+                        icon: Icon(Icons.smart_toy_outlined, size: 18),
+                      ),
+                      ButtonSegment(
+                        value: PlaytestMode.bothSides,
+                        label: Text('You, both sides'),
+                        icon: Icon(Icons.groups_outlined, size: 18),
+                      ),
+                    ],
+                    selected: {_mode},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (chosen) =>
+                        setState(() => _mode = chosen.first),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _bothSides
+                      ? 'Nothing moves unless you move it: both openings, '
+                            'both boards, both guards. Every ability is '
+                            'played by hand, so nothing is skipped because '
+                            'the reader could not follow the text.'
+                      : 'The CPU rides, calls, attacks, guards and plays the '
+                            'abilities the board can read.',
+                  style: const TextStyle(
+                    color: AppColors.textFaint,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 const SectionHeader(
                   title: 'Turn order',
                   caption:
@@ -83,16 +133,16 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: SegmentedButton<TurnOrder>(
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: TurnOrder.youFirst,
-                        label: Text('You'),
+                        label: Text(_bothSides ? 'Player 1' : 'You'),
                       ),
                       ButtonSegment(
                         value: TurnOrder.cpuFirst,
-                        label: Text('CPU'),
+                        label: Text(_bothSides ? 'Player 2' : 'CPU'),
                       ),
-                      ButtonSegment(
+                      const ButtonSegment(
                         value: TurnOrder.random,
                         label: Text('Random'),
                       ),
@@ -107,6 +157,8 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                 Text(
                   _turnOrder == TurnOrder.random
                       ? 'Rolled again every time you restart the board.'
+                      : _bothSides
+                      ? _turnOrder.soloLabel
                       : _turnOrder.label,
                   style: const TextStyle(
                     color: AppColors.textFaint,
@@ -114,11 +166,15 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const SectionHeader(title: 'Opponent'),
+                SectionHeader(
+                  title: _bothSides ? 'The other deck' : 'Opponent',
+                ),
                 const SizedBox(height: 8),
                 _OpponentTile(
                   title: 'Mirror match',
-                  subtitle: 'The CPU plays the same deck.',
+                  subtitle: _bothSides
+                      ? 'The same deck on both sides.'
+                      : 'The CPU plays the same deck.',
                   icon: Icons.flip_camera_android_outlined,
                   onTap: () => _start(context, deck, deck),
                 ),
@@ -146,7 +202,7 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                           ),
                           SizedBox(width: 8),
                           Text(
-                            'What the CPU does and does not do',
+                            'What the board does and does not do',
                             style: TextStyle(
                               color: AppColors.text,
                               fontWeight: FontWeight.w600,
@@ -159,14 +215,18 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                         'The board runs the rules it can: riding, calling, '
                         'boosting, attacking, drive and damage checks, '
                         'triggers, shields and the damage race.\n\n'
-                        'Card abilities are written as text on the card, not '
-                        'as anything a program can follow, so neither side '
-                        'plays them automatically. Tap a unit to read its '
-                        'text and apply it yourself. Every zone an ability '
+                        'Card abilities are printed English, and only the '
+                        'plainest shapes of it can be executed, so most are '
+                        'left to be applied by hand. Tap a unit to read its '
+                        'text and play it yourself. Every zone an ability '
                         'is paid out of is on the board and tappable — '
                         'counter-blast out of damage, soul-blast out of '
                         'soul, search the deck, take a card back from the '
-                        'drop, and stride out of the G zone.',
+                        'drop, and stride out of the G zone.\n\n'
+                        'Taking both sides yourself is the way to test a '
+                        'deck whose abilities the reader cannot follow: '
+                        'nothing is skipped, because nothing happens that '
+                        'you did not do.',
                         style: TextStyle(
                           color: AppColors.textMuted,
                           height: 1.45,
@@ -195,6 +255,7 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
           yourDeck: yours,
           opponentDeck: theirs,
           turnOrder: _turnOrder,
+          mode: _mode,
         ),
       ),
     );

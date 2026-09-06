@@ -28,11 +28,15 @@ class PlaytestScreen extends StatefulWidget {
     required this.yourDeck,
     required this.opponentDeck,
     this.turnOrder = TurnOrder.youFirst,
+    this.mode = PlaytestMode.vsCpu,
     this.random,
   });
 
   final Deck yourDeck;
   final Deck opponentDeck;
+
+  /// Who plays the far side: the CPU, or you with both hands.
+  final PlaytestMode mode;
 
   /// Who takes turn one. Kept as the choice rather than the outcome, so a
   /// random order is rolled again on every restart.
@@ -58,6 +62,7 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
       yourDeck: widget.yourDeck,
       opponentDeck: widget.opponentDeck,
       turnOrder: widget.turnOrder,
+      mode: widget.mode,
       random: widget.random,
     );
   }
@@ -81,9 +86,10 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
             appBar: AppBar(
               title: Text(
                 game.stage == PlaytestStage.mulligan
-                    ? 'Opening hand'
-                    : 'Turn ${game.state.turn} · '
-                          '${game.state.yourTurn ? 'You' : 'CPU'}',
+                    ? game.bothSides
+                          ? '${game.mulliganSide.name}\u2019s opening hand'
+                          : 'Opening hand'
+                    : 'Turn ${game.state.turn} · ${game.state.active.name}',
               ),
               actions: [
                 IconButton(
@@ -117,6 +123,7 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
         yourDeck: widget.yourDeck,
         opponentDeck: widget.opponentDeck,
         turnOrder: widget.turnOrder,
+        mode: widget.mode,
       );
     });
   }
@@ -167,7 +174,8 @@ class _Mulligan extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hand = game.you.hand;
+    final side = game.mulliganSide;
+    final hand = side.hand;
     return Column(
       children: [
         Padding(
@@ -176,7 +184,12 @@ class _Mulligan extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                game.you.goesFirst
+                game.bothSides
+                    ? side.goesFirst
+                          ? '${side.name} goes first.'
+                          : '${side.name} goes second, and is paid three '
+                                'energy for it.'
+                    : side.goesFirst
                     ? 'You go first.'
                     : 'The CPU goes first, so you are paid three energy.',
                 style: const TextStyle(
@@ -672,9 +685,9 @@ void _showPileSheet(
                             // pile offers it for a unit that could legally
                             // be called.
                             if (callable &&
-                                side == game.you &&
+                                game.controls(side) &&
                                 game.engine.canCall(
-                                  game.you,
+                                  side,
                                   card,
                                   Circle.frontLeft,
                                 ))
@@ -695,7 +708,7 @@ void _showPileSheet(
                               ),
                             // Costs put cards under the deck out of the drop
                             // and the soul as well as out of hand.
-                            if (bottomable && side == game.you)
+                            if (bottomable && game.controls(side))
                               TextButton(
                                 onPressed: () {
                                   game.bottomDeck(side, card);
@@ -1135,7 +1148,7 @@ void _showGZoneSheet(
   PlaytestController game,
   PlaytestSide side,
 ) {
-  final yours = side == game.you;
+  final yours = game.controls(side);
   final canStride = yours && game.engine.canStride(side);
 
   showModalBottomSheet<void>(
@@ -1276,7 +1289,7 @@ void _showStrideCostSheet(
                       'Discard cards worth grade 3 or more. '
                       'Picked: $total.',
                 ),
-                for (final card in game.you.hand)
+                for (final card in game.me.hand)
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     value: picks.contains(card),
@@ -1390,29 +1403,29 @@ class _CircleSlot extends StatelessWidget {
     // Calling is offered in the battle phase as well as the main one: the
     // abilities that call out of a deck fire mid-battle, and a board that
     // only allowed it before the fight could not play them.
+    // Whose board this is, and whether you are the one playing it. With both
+    // hands yours that is both boards, one turn at a time.
+    final mine = game.controls(side) && game.isTurnOf(side);
     final canPlace =
-        isYours &&
+        mine &&
         held != null &&
-        game.engine.canCall(game.you, held, circle) &&
+        game.engine.canCall(side, held, circle) &&
         (game.state.phase == PlaytestPhase.main ||
-            game.state.phase == PlaytestPhase.battle) &&
-        game.state.yourTurn;
+            game.state.phase == PlaytestPhase.battle);
 
     // Highlight what this tap would do right now: a place, an attack, or a
     // target for the attack you are making.
     final isAttackTarget =
-        !isYours &&
-        game.state.yourTurn &&
+        !game.isTurnOf(side) &&
         game.state.phase == PlaytestPhase.battle &&
         game.selectedAttacker != null &&
         circle.isFrontRow &&
         unit != null &&
         unit.isActive;
     final isAttacker =
-        isYours &&
-        game.state.yourTurn &&
+        mine &&
         game.state.phase == PlaytestPhase.battle &&
-        game.engine.canAttack(game.you) &&
+        game.engine.canAttack(side) &&
         unit != null &&
         unit.isActive &&
         !unit.rested &&
@@ -1420,7 +1433,7 @@ class _CircleSlot extends StatelessWidget {
 
     final borderColour = canPlace || isAttackTarget
         ? AppColors.accent
-        : (game.selectedAttacker == circle && isYours
+        : (game.selectedAttacker == circle && game.isTurnOf(side)
               ? AppColors.warning
               : AppColors.border);
 
@@ -1847,36 +1860,67 @@ class _Hand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final guarding = game.stage == PlaytestStage.guarding;
-    final hand = game.you.hand;
+    final side = game.handSide;
+    final hand = side.hand;
 
     return Container(
-      height: 108,
+      height: game.bothSides ? 124 : 108,
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      child: hand.isEmpty
-          ? const Center(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // With both hands yours, which one this is matters more than
+          // anything else on the strip.
+          if (game.bothSides)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
               child: Text(
-                'No cards in hand',
-                style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                guarding
+                    ? '${side.name}\u2019s hand — guarding'
+                    : '${side.name}\u2019s hand',
+                style: const TextStyle(
+                  color: AppColors.textFaint,
+                  fontSize: 10,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            )
-          : ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              children: [
-                for (final card in hand)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: _HandSlot(
-                      key: ValueKey('hand-${card.instanceId}'),
-                      game: game,
-                      card: card,
-                      guarding: guarding,
-                    ),
-                  ),
-              ],
             ),
+          Expanded(
+            child: hand.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No cards in hand',
+                      style: TextStyle(
+                        color: AppColors.textFaint,
+                        fontSize: 12,
+                      ),
+                    ),
+                  )
+                : ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    children: [
+                      for (final card in hand)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: _HandSlot(
+                            key: ValueKey('hand-${card.instanceId}'),
+                            game: game,
+                            card: card,
+                            guarding: guarding,
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1898,7 +1942,7 @@ class _HandSlot extends StatelessWidget {
     final held = game.holding == card;
     final usable = guarding
         ? card.canGuard
-        : (game.state.yourTurn && !game.state.isOver);
+        : (game.isTurnOf(game.handSide) && !game.state.isOver);
 
     return GestureDetector(
       onTap: () {
@@ -1992,19 +2036,23 @@ class _Controls extends StatelessWidget {
     switch (game.stage) {
       case PlaytestStage.guarding:
         final attack = state.attack!;
+        // With both hands yours the defender is a player with a name, and
+        // saying which one is the difference between a guard made on purpose
+        // and one made with the wrong hand.
+        final whose = game.bothSides ? '${state.inactive.name}: ' : '';
         return [
           Expanded(
             child: Text(
               attack.connects
-                  ? 'Tap shields to guard — it hits for '
+                  ? '${whose}tap shields to guard — it hits for '
                         '${attack.attacker.critical} otherwise.'
-                  : 'The attack is held off.',
+                  : '${whose}the attack is held off.',
               style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
           ),
           FilledButton(
             onPressed: game.confirmGuard,
-            child: const Text('Take it'),
+            child: Text(game.bothSides ? 'Done guarding' : 'Take it'),
           ),
         ];
 
@@ -2068,7 +2116,9 @@ class _Controls extends StatelessWidget {
 
   List<Widget> _yourTurnButtons(BuildContext context) {
     final state = game.state;
-    if (!state.yourTurn) {
+    // Against the CPU there is nothing to do on its turn. With both hands
+    // yours there is no such turn: you play them both.
+    if (!state.yourTurn && !game.bothSides) {
       return const [
         Expanded(
           child: Text(
@@ -2079,39 +2129,47 @@ class _Controls extends StatelessWidget {
       ];
     }
 
+    // Which player the bar is talking to, said out loud where it could be
+    // either of them.
+    final whose = game.bothSides ? '${game.me.name}: ' : '';
+
     return [
       Expanded(
-        child: Text(switch (state.phase) {
-          PlaytestPhase.ride =>
-            state.ridden
-                ? 'Ridden. Move on to your main phase.'
-                : 'Ride phase — ride up a grade.',
-          PlaytestPhase.main =>
-            game.holding == null
-                ? 'Main phase — tap a card in hand to call it, or a '
-                      'rear-guard to move it up or back.'
-                : 'Tap a circle to call ${game.holding!.name}.',
-          PlaytestPhase.battle =>
-            game.holding != null
-                ? 'Tap a circle to call ${game.holding!.name}.'
-                : !game.engine.canAttack(game.you)
-                // The turn one rule, said rather than left as a board that
-                // does not respond.
-                ? 'Turn one — whoever goes first does not attack.'
-                : game.selectedAttacker == null
-                ? 'Battle — tap one of your front row units to attack with.'
-                : game.availableBooster == null
-                // Say why the boost is not on offer where a unit is standing
-                // behind and simply cannot give one.
-                ? game.boosterThatCannot == null
-                      ? 'Tap the unit to attack.'
-                      : '${game.boosterThatCannot!.card.name} cannot boost '
-                            '(grade ${game.boosterThatCannot!.card.grade}) — '
-                            'tap the unit to attack.'
-                : 'Boost is ${game.boostSelected ? 'on' : 'off'} — '
-                      'tap the unit to attack.',
-          _ => state.phase.label,
-        }, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+        child: Text(
+          whose +
+              switch (state.phase) {
+                PlaytestPhase.ride =>
+                  state.ridden
+                      ? 'Ridden. Move on to the main phase.'
+                      : 'Ride phase — ride up a grade.',
+                PlaytestPhase.main =>
+                  game.holding == null
+                      ? 'Main phase — tap a card in hand to call it, or a '
+                            'rear-guard to move it up or back.'
+                      : 'Tap a circle to call ${game.holding!.name}.',
+                PlaytestPhase.battle =>
+                  game.holding != null
+                      ? 'Tap a circle to call ${game.holding!.name}.'
+                      : !game.engine.canAttack(game.me)
+                      // The turn one rule, said rather than left as a board that
+                      // does not respond.
+                      ? 'Turn one — whoever goes first does not attack.'
+                      : game.selectedAttacker == null
+                      ? 'Battle — tap a front row unit to attack with.'
+                      : game.availableBooster == null
+                      // Say why the boost is not on offer where a unit is standing
+                      // behind and simply cannot give one.
+                      ? game.boosterThatCannot == null
+                            ? 'Tap the unit to attack.'
+                            : '${game.boosterThatCannot!.card.name} cannot boost '
+                                  '(grade ${game.boosterThatCannot!.card.grade}) — '
+                                  'tap the unit to attack.'
+                      : 'Boost is ${game.boostSelected ? 'on' : 'off'} — '
+                            'tap the unit to attack.',
+                _ => state.phase.label,
+              },
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+        ),
       ),
       if (state.phase == PlaytestPhase.ride && !state.ridden)
         TextButton(
@@ -2152,8 +2210,8 @@ class _Controls extends StatelessWidget {
 // ----------------------------------------------------------------- sheets
 
 void _showRideSheet(BuildContext context, PlaytestController game) {
-  final fromDeck = game.engine.rideDeckOption(game.you);
-  final fromHand = game.engine.handRideOptions(game.you);
+  final fromDeck = game.engine.rideDeckOption(game.me);
+  final fromHand = game.engine.handRideOptions(game.me);
 
   showModalBottomSheet<void>(
     context: context,
@@ -2189,12 +2247,12 @@ void _showRideSheet(BuildContext context, PlaytestController game) {
                 ),
                 subtitle: Text(
                   'Ride deck · grade ${fromDeck.grade} · '
-                  '${game.you.hand.isEmpty ? 'needs a card to discard' : 'discard a card to ride it'}',
+                  '${game.me.hand.isEmpty ? 'needs a card to discard' : 'discard a card to ride it'}',
                   style: const TextStyle(color: AppColors.textMuted),
                 ),
                 // The discard is a choice, so it is asked for rather than
                 // taken: which card leaves the hand decides the next turn.
-                enabled: game.engine.canRideFromDeck(game.you),
+                enabled: game.engine.canRideFromDeck(game.me),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _showRideCostSheet(context, game, fromDeck);
@@ -2252,7 +2310,7 @@ void _showRideCostSheet(
               title: 'Ride ${riding.name}',
               caption: 'Discard a card from hand to pay for it.',
             ),
-            for (final card in game.you.hand)
+            for (final card in game.me.hand)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: CardImage(url: card.imageUrl, width: 32),
@@ -2309,7 +2367,7 @@ void _showHandSheet(
           children: [
             _CardHeading(card: card),
             const SizedBox(height: 12),
-            if (game.state.yourTurn &&
+            if (game.isTurnOf(game.handSide) &&
                 (game.state.phase == PlaytestPhase.main ||
                     game.state.phase == PlaytestPhase.battle) &&
                 card.isUnit)
@@ -2322,7 +2380,7 @@ void _showHandSheet(
                   Navigator.of(sheetContext).pop();
                 },
               ),
-            if (game.state.yourTurn && !card.isUnit)
+            if (game.isTurnOf(game.handSide) && !card.isUnit)
               _SheetAction(
                 icon: Icons.bolt_outlined,
                 label: 'Play as an order',
@@ -2346,7 +2404,7 @@ void _showHandSheet(
               label: 'To the bottom of the deck',
               detail: 'The other cost cards ask for, kept out of the drop.',
               onTap: () {
-                game.bottomDeck(game.you, card);
+                game.bottomDeck(game.handSide, card);
                 Navigator.of(sheetContext).pop();
               },
             ),
@@ -2414,7 +2472,7 @@ void _showUnitSheet(
             ] else ...[
               // Moving between the rows of a column is a rule the engine keeps,
               // not something applied by hand, so it sits above that line.
-              if (side == game.you && game.engine.canMove(side, circle)) ...[
+              if (game.controls(side) && game.engine.canMove(side, circle)) ...[
                 const SizedBox(height: 14),
                 _MoveAction(
                   game: game,

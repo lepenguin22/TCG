@@ -64,6 +64,107 @@ void main() {
       expect(game.boosterThatCannot, isNull);
     });
 
+    /// A game where both hands are yours and nothing plays itself.
+    Future<PlaytestController> soloGame(int seed) async {
+      final (store, deck) = await buildDeck();
+      return PlaytestController(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        mode: PlaytestMode.bothSides,
+        random: Random(seed),
+      );
+    }
+
+    test('both openings are decided by you', () async {
+      final game = await soloGame(1);
+      expect(game.stage, PlaytestStage.mulligan);
+      expect(game.mulliganSide, game.you);
+      expect(game.you.name, 'Player 1');
+      expect(game.cpu.name, 'Player 2');
+
+      game.confirmMulligan();
+      expect(
+        game.stage,
+        PlaytestStage.mulligan,
+        reason: 'the second hand is yours as well',
+      );
+      expect(game.mulliganSide, game.cpu);
+
+      game.confirmMulligan();
+      expect(game.stage, PlaytestStage.yours);
+      expect(game.you.hand.length, 6, reason: 'five kept, one drawn');
+      expect(
+        game.cpu.hand.length,
+        5,
+        reason: 'the second player has not drawn',
+      );
+    });
+
+    /// Ends the turn of whoever is playing, however many phases that takes.
+    void passTheTurn(PlaytestController game) {
+      final started = game.state.active;
+      for (var i = 0; i < 8 && game.state.active == started; i += 1) {
+        game.nextPhase();
+      }
+    }
+
+    test('nothing plays the far side but you', () async {
+      final game = await soloGame(2);
+      game.confirmMulligan();
+      game.confirmMulligan();
+
+      final theirBoard = game.cpu.units.length;
+      final theirHand = game.cpu.hand.length;
+      passTheTurn(game);
+
+      // The turn is the other player's, and it is still yours to play: no
+      // CPU step, no board that filled itself in while you were not looking.
+      expect(game.state.yourTurn, isFalse);
+      expect(game.stage, PlaytestStage.yours);
+      expect(game.me, game.cpu, reason: 'you are playing them now');
+      expect(game.handSide, game.cpu);
+      expect(game.cpu.units.length, theirBoard);
+      expect(
+        game.cpu.hand.length,
+        theirHand + 1,
+        reason: 'their own draw step, and nothing else',
+      );
+      expect(game.controls(game.you), isTrue);
+      expect(game.controls(game.cpu), isTrue);
+    });
+
+    test('you guard your own attack, then drive and resolve it', () async {
+      final game = await soloGame(4);
+      game.confirmMulligan();
+      game.confirmMulligan();
+      // Turn one does not attack, so hand the turn over and take it back.
+      passTheTurn(game);
+      passTheTurn(game);
+      expect(game.state.turn, greaterThan(1), reason: 'past the first turn');
+      expect(game.me, game.you);
+
+      game.state.phase = PlaytestPhase.battle;
+      game.selectAttacker(Circle.vanguard);
+      game.attackWithSelected(Circle.vanguard);
+
+      // The defender guards -- by hand, with their own cards.
+      expect(game.stage, PlaytestStage.guarding);
+      expect(game.handSide, game.cpu, reason: 'the defender holds the shields');
+      final shield = game.cpu.hand.firstWhere((c) => c.shield > 0);
+      final before = game.state.attack!.defence;
+      game.guardWith(shield);
+      expect(game.state.attack!.defence, before + shield.shield);
+
+      // Then it goes back to the attacker to drive and resolve.
+      game.confirmGuard();
+      expect(game.stage, PlaytestStage.yourAttack);
+      game.driveCheck();
+      game.resolveYourAttack();
+      expect(game.stage, PlaytestStage.yours);
+      expect(game.state.attack, isNull);
+    });
+
     test('a game begins waiting on your mulligan', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(
@@ -414,12 +515,44 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('The CPU goes first'), findsOneWidget);
 
+      // The opponent list sits below the mode and turn order choices.
+      await tester.ensureVisible(find.text('Mirror match'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Mirror match'));
       await tester.pumpAndSettle();
 
       // The board opens on the mulligan and says who has turn one.
       expect(find.text('Opening hand'), findsOneWidget);
       expect(find.textContaining('The CPU goes first'), findsOneWidget);
+    });
+
+    testWidgets('the setup screen offers taking both sides', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pumpSetup(tester, store, deck);
+
+      await tester.tap(find.text('You, both sides'));
+      await tester.pumpAndSettle();
+      // The turn order is said in the words of a game with two players.
+      expect(find.text('Player 1'), findsOneWidget);
+      expect(find.text('Player 1 goes first'), findsOneWidget);
+
+      // The opponent list sits below both choices, and a list only builds
+      // what is on screen, so it is scrolled to rather than found.
+      for (
+        var i = 0;
+        i < 8 && find.text('Mirror match').evaluate().isEmpty;
+        i += 1
+      ) {
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Mirror match'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Player 1\u2019s opening hand'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('random says it is rolled again each restart', (tester) async {
@@ -450,6 +583,7 @@ void main() {
       DeckStore store,
       deck, {
       TurnOrder turnOrder = TurnOrder.youFirst,
+      PlaytestMode mode = PlaytestMode.vsCpu,
     }) async {
       await tester.pumpWidget(
         ChangeNotifierProvider<DeckStore>.value(
@@ -460,6 +594,7 @@ void main() {
               yourDeck: deck,
               opponentDeck: deck,
               turnOrder: turnOrder,
+              mode: mode,
               // A fixed shuffle: these tests reach for particular
               // cards, and a board that is a different board every
               // run fails one time in a hundred for no reason.
@@ -1472,6 +1607,47 @@ void main() {
       await tapOnBoard(tester, find.text('Removed'));
       expect(find.textContaining('Removed from the game'), findsOneWidget);
       expect(find.textContaining('Nothing comes back'), findsOneWidget);
+    });
+
+    testWidgets('both sides are played from one board', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
+
+      // Both openings are yours, one after the other.
+      expect(find.textContaining('Player 1'), findsWidgets);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Player 2\u2019s opening hand'),
+        findsOneWidget,
+        reason: 'the second hand is yours too',
+      );
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+
+      // The board names whose turn it is and whose hand is on the strip.
+      expect(find.text('Turn 1 · Player 1'), findsOneWidget);
+      expect(find.text('Player 1\u2019s hand'), findsOneWidget);
+      expect(
+        find.textContaining('The CPU'),
+        findsNothing,
+        reason: 'there is no CPU in this mode',
+      );
+
+      // Ending the turn hands the board to the other player rather than to a
+      // CPU that plays itself.
+      for (var i = 0; i < 6; i += 1) {
+        if (find.text('Turn 2 · Player 2').evaluate().isNotEmpty) break;
+        final button = find.text('End turn').evaluate().isNotEmpty
+            ? find.text('End turn')
+            : find.text('Next');
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.text('Turn 2 · Player 2'), findsOneWidget);
+      expect(find.text('Player 2\u2019s hand'), findsOneWidget);
+      expect(find.text('Continue'), findsNothing, reason: 'no CPU to step');
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {
