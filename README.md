@@ -542,6 +542,16 @@ one is followed rather than overruled; three is the default where the database
 never carried the text. Spending energy stays yours, since every ability that
 costs it is prose — the crest tile on the board has blast buttons for it.
 
+**Ten is not always ten.** Cards raise the ceiling — DZ-BT15/001 Wirbel Kenig
+reads *"The maximum energy you may have in the [CONT] ability of the 'Energy
+Generator' in your crest zone gets +5"*, which is a deck played to fifteen —
+so the cap is a number each player carries rather than a constant. The crest
+sheet sets it: **Cap 15**, **Cap 10**, and ±1 for a card that says something
+else. A raised cap is a lasting thing and stays until you change it back;
+lowering it below the energy already held spills the difference, since a cap
+is a maximum and not a promise. The reader follows that printed wording too,
+so the CPU plays to fifteen without being told.
+
 ### The battle, as its zones
 
 Between the two boards sit the two zones a fight is actually read from.

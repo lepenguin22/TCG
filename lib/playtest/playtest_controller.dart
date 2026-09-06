@@ -436,6 +436,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void setEnergyCap(PlaytestSide side, int cap) {
+    engine.setEnergyCap(side, cap);
+    _sync();
+  }
+
   void drawCard(PlaytestSide side) {
     engine.drawCard(side);
     _sync();

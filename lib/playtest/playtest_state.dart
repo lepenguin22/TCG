@@ -210,9 +210,16 @@ class PlaytestSide {
   /// player applies by hand.
   int energy = 0;
 
-  /// The most energy anyone may hold. The Energy Generator crest says it:
-  /// "[CONT]:You may have up to ten energy."
-  static const energyCap = 10;
+  /// The most energy the Energy Generator allows: "[CONT]:You may have up to
+  /// ten energy."
+  static const baseEnergyCap = 10;
+
+  /// The most energy this player may hold, which is not always ten.
+  ///
+  /// Cards raise it -- "the maximum energy you may have ... gets +5" puts it
+  /// at fifteen -- and a raised cap is a lasting thing, not a turn's worth of
+  /// it, so it stays where it is put until something changes it back.
+  int energyCap = baseEnergyCap;
 
   /// The ride deck crest this deck brought, while it is still in the ride
   /// deck. It moves into the crest zone on the first ride.

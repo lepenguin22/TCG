@@ -290,17 +290,36 @@ class PlaytestEngine {
     return crest.effect.trim().isEmpty ? 3 : 0;
   }
 
-  /// Adds energy, up to the ten the crest allows.
+  /// Adds energy, up to the cap this player is playing under.
   void _chargeEnergy(PlaytestSide side, int amount) {
     if (amount <= 0) return;
     final before = side.energy;
-    side.energy = (side.energy + amount).clamp(0, PlaytestSide.energyCap);
+    side.energy = (side.energy + amount).clamp(0, side.energyCap);
     final gained = side.energy - before;
     state.note(
       gained == amount
           ? '${side.name} energy-charges $amount (${side.energy}).'
           : '${side.name} energy-charges $gained to the cap of '
-                '${PlaytestSide.energyCap}.',
+                '${side.energyCap}.',
+      by: side,
+    );
+  }
+
+  /// Sets how much energy this player may hold.
+  ///
+  /// Ten is what the Energy Generator says, and cards raise it -- a vanguard
+  /// whose text puts the maximum up by five is playing to fifteen. Lowering
+  /// the cap below the energy already held spills the difference, since the
+  /// cap is a maximum rather than a promise.
+  void setEnergyCap(PlaytestSide side, int cap) {
+    final wanted = cap.clamp(1, 99);
+    if (wanted == side.energyCap) return;
+    side.energyCap = wanted;
+    final spilled = side.energy > wanted;
+    if (spilled) side.energy = wanted;
+    state.note(
+      '${side.name} may now hold $wanted energy'
+      '${spilled ? ', so it is down to $wanted' : ''}.',
       by: side,
     );
   }
@@ -1358,10 +1377,7 @@ class PlaytestEngine {
       }
     }
     if (cost.energy > 0) {
-      side.energy = (side.energy - cost.energy).clamp(
-        0,
-        PlaytestSide.energyCap,
-      );
+      side.energy = (side.energy - cost.energy).clamp(0, side.energyCap);
     }
     if (cost.mill > 0) {
       for (var i = 0; i < cost.mill && side.deck.isNotEmpty; i += 1) {
@@ -1409,6 +1425,12 @@ class PlaytestEngine {
     }
     if (effect.becomeHollowed) hollow(side, circle);
     if (effect.grantsBoost) grantBoost(side, circle, granted: true);
+    // Set rather than added, so a continuous ability played again on a later
+    // turn puts the cap at the same fifteen rather than at twenty.
+    if (effect.energyCapBonus > 0) {
+      final raised = PlaytestSide.baseEnergyCap + effect.energyCapBonus;
+      if (side.energyCap < raised) setEnergyCap(side, raised);
+    }
     if (effect.critical != 0) unit.criticalBonus += effect.critical;
     for (var i = 0; i < effect.draw; i += 1) {
       _draw(side);
@@ -1534,7 +1556,7 @@ class PlaytestEngine {
   /// Energy spent or gained by an ability the player is applying by hand. The
   /// crest's own charge is automatic; everything else lands here.
   void setEnergy(PlaytestSide side, int value) {
-    side.energy = value.clamp(0, PlaytestSide.energyCap);
+    side.energy = value.clamp(0, side.energyCap);
   }
 
   /// Deals damage directly, for an ability that says to.

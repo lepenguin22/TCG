@@ -1575,8 +1575,48 @@ void main() {
       for (var i = 0; i < 20; i += 1) {
         engine.endTurn();
       }
-      expect(you.energy, PlaytestSide.energyCap);
+      expect(you.energy, you.energyCap);
       expect(you.energy, 10);
+    });
+
+    test('a raised cap holds more, and holds it across turns', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      expect(you.energyCap, 10, reason: 'what the Energy Generator says');
+
+      engine.setEnergyCap(you, 15);
+      for (var i = 0; i < 20; i += 1) {
+        engine.endTurn();
+      }
+      expect(you.energy, 15);
+      expect(you.energyCap, 15, reason: 'a cap is not a turn effect');
+      // And by hand, the cap is what the clamp is against.
+      engine.setEnergy(you, 99);
+      expect(you.energy, 15);
+    });
+
+    test('lowering the cap spills the energy above it', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      final you = engine.state.you;
+      engine.setEnergyCap(you, 15);
+      engine.setEnergy(you, 14);
+
+      engine.setEnergyCap(you, 10);
+      expect(you.energyCap, 10);
+      expect(you.energy, 10, reason: 'a cap is a maximum, not a promise');
+    });
+
+    test('each player has their own cap', () async {
+      final (store, deck) = await buildEnergyDeck();
+      final engine = engineFor(store, deck);
+      engine.setEnergyCap(engine.state.you, 15);
+
+      expect(engine.state.you.energyCap, 15);
+      expect(engine.state.opponent.energyCap, 10);
     });
 
     test('a deck with no crest never charges', () async {

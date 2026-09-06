@@ -630,6 +630,33 @@ void main() {
       },
     );
 
+    test('a card that raises the maximum energy plays to fifteen', () async {
+      // The wording is DZ-BT15/001 Hellfire Dragon Emperor, Wirbel Kenig's.
+      const text =
+          '[CONT](VC):The maximum energy you may have in the [CONT] ability '
+          'of the "Energy Generator" in your crest zone gets +5.';
+      final (store, deck) = await deckWith(
+        boosterEffect: '',
+        vanguardEffect: text,
+      );
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+      expect(you.energyCap, 10);
+
+      final ability = readAbilities(text).playable.single;
+      expect(ability.effect.energyCapBonus, 5);
+      expect(engine.playAbility(you, Circle.vanguard, ability), isTrue);
+      expect(you.energyCap, 15);
+
+      // Played again next turn -- which is what a continuous ability does --
+      // it is still fifteen rather than twenty.
+      you.vanguard!.usedAbilities.clear();
+      expect(engine.playAbility(you, Circle.vanguard, ability), isTrue);
+      expect(you.energyCap, 15);
+    });
+
     test('a card discarded for a stride does what it says', () async {
       final (store, deck) = await deckWith(
         boosterEffect:

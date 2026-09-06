@@ -229,6 +229,7 @@ class AbilityEffect {
     this.becomeHollowed = false,
     this.perFaceUpG = false,
     this.grantsBoost = false,
+    this.energyCapBonus = 0,
     this.crestNamed,
   });
 
@@ -265,6 +266,11 @@ class AbilityEffect {
   /// ever boosts.
   final bool grantsBoost;
 
+  /// How much more energy this player may hold. Ten is what the Energy
+  /// Generator allows; a card raising the maximum by five is playing to
+  /// fifteen, and the raise lasts as long as the card is standing there.
+  final int energyCapBonus;
+
   /// A crest this puts into the crest zone, by name. A deck whose every other
   /// ability asks `if you have a "..." crest` does nothing at all until the
   /// one card that says `you get a "..." crest` is played.
@@ -281,6 +287,7 @@ class AbilityEffect {
       energyCharge == 0 &&
       !becomeHollowed &&
       !grantsBoost &&
+      energyCapBonus == 0 &&
       crestNamed == null;
 
   AbilityEffect merge(AbilityEffect other) => AbilityEffect(
@@ -296,6 +303,7 @@ class AbilityEffect {
     becomeHollowed: becomeHollowed || other.becomeHollowed,
     perFaceUpG: perFaceUpG || other.perFaceUpG,
     grantsBoost: grantsBoost || other.grantsBoost,
+    energyCapBonus: energyCapBonus + other.energyCapBonus,
     crestNamed: other.crestNamed ?? crestNamed,
   );
 }
@@ -477,6 +485,11 @@ final _effectForms = <RegExp, AbilityEffect Function(Match)>{
     r'^this unit gets "boost(?: \(\[boost\]\))?"(?: until end of turn)?$',
   ): (m) =>
       const AbilityEffect(grantsBoost: true),
+  // "The maximum energy you may have in the [CONT] ability of the "Energy
+  // Generator" in your crest zone gets +5" -- a mouthful for "you play to
+  // fifteen", and the only shape the game states it in.
+  RegExp(r'^the maximum energy you may have[^+]*gets \+(\d+)$'): (m) =>
+      AbilityEffect(energyCapBonus: int.parse(m.group(1)!)),
   RegExp(r'^draw a card$'): (m) => const AbilityEffect(draw: 1),
   RegExp(r'^draw (\w+) cards$'): (m) =>
       AbilityEffect(draw: _numberWords[m.group(1)] ?? 0),

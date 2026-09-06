@@ -632,6 +632,18 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// Scrolls the open sheet until [finder] has something, then brings it
+    /// on screen. A sheet only builds what is near its viewport, so anything
+    /// below the fold is not in the tree until it is scrolled to.
+    Future<void> scrollSheetTo(WidgetTester tester, Finder finder) async {
+      for (var i = 0; i < 10 && finder.evaluate().isEmpty; i += 1) {
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -200));
+        await tester.pumpAndSettle();
+      }
+      await tester.ensureVisible(finder.first);
+      await tester.pumpAndSettle();
+    }
+
     Future<void> pump(
       WidgetTester tester,
       DeckStore store,
@@ -803,6 +815,39 @@ void main() {
         find.textContaining('Energy Generator is still in the ride deck'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('the energy cap can be raised from the crest zone', (
+      tester,
+    ) async {
+      final (store, deck) = await buildEnergyDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(tester, find.text('Crest').last);
+      expect(find.textContaining('of 10 energy'), findsOneWidget);
+
+      // The controls sit below what is in the zone, so scroll to them.
+      for (var i = 0; i < 8 && find.text('Cap 15').evaluate().isEmpty; i += 1) {
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -200));
+        await tester.pumpAndSettle();
+      }
+      await tester.ensureVisible(find.text('Cap 15'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cap 15'));
+      await tester.pumpAndSettle();
+
+      // Back up to the heading, which the scroll took off screen.
+      for (
+        var i = 0;
+        i < 8 && find.textContaining('energy').evaluate().isEmpty;
+        i += 1
+      ) {
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, 200));
+        await tester.pumpAndSettle();
+      }
+      expect(find.textContaining('of 15 energy'), findsOneWidget);
     });
 
     testWidgets('riding charges the crest into play', (tester) async {
@@ -1519,6 +1564,8 @@ void main() {
       // The crest zone is on the board even with nothing in it.
       expect(find.text('Crest'), findsNWidgets(2));
       await tapOnBoard(tester, find.text('Crest').last);
+      // The crests on offer are below the energy controls.
+      await scrollSheetTo(tester, find.text('Energy Generator'));
       expect(find.textContaining('crest zone'), findsWidgets);
       expect(find.text('Energy Generator'), findsOneWidget);
 
@@ -1534,6 +1581,7 @@ void main() {
       await tester.tap(find.text('Take it out'));
       await tester.pumpAndSettle();
       await tapOnBoard(tester, find.text('Crest').last);
+      await scrollSheetTo(tester, find.text('Energy Generator'));
       expect(
         find.text('Energy Generator'),
         findsOneWidget,
@@ -1560,6 +1608,7 @@ void main() {
       await tester.pump();
 
       await tapOnBoard(tester, find.text('Crest').last);
+      await scrollSheetTo(tester, find.text('Play'));
       await tester.tap(find.text('Play'));
       await tester.pumpAndSettle();
 
@@ -1600,10 +1649,9 @@ void main() {
 
       // The crest zone offers another without asking for the first back. The
       // list of them sits below what is already in the zone, so scroll to it.
-      for (var i = 0; i < 8 && find.text('Play').evaluate().isEmpty; i += 1) {
-        await tester.drag(find.byType(Scrollable).last, const Offset(0, -200));
-        await tester.pumpAndSettle();
-      }
+      // Passed unfiltered: `.first` on a finder with nothing in it throws
+      // rather than reporting empty, which is no use for a scroll loop.
+      await scrollSheetTo(tester, find.text('Play'));
       await tester.tap(find.text('Play').first);
       await tester.pumpAndSettle();
 
