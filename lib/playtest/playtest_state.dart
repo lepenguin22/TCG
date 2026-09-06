@@ -105,6 +105,18 @@ class FieldUnit {
   /// question almost every rule about it is really asking.
   bool get isActive => !locked;
 
+  /// Whether an ability has given this unit [Boost] for the turn. Cleared
+  /// with everything else a turn hands out.
+  bool grantedBoost = false;
+
+  /// Whether this unit can boost the one in front of it.
+  ///
+  /// Only grades 0 and 1 have [Boost] printed on them -- a grade 2 standing
+  /// in the back row is a body and nothing more -- and the rest of the game's
+  /// boosting comes from abilities that grant it, which is what
+  /// [grantedBoost] is for.
+  bool get canBoost => isActive && (card.grade <= 1 || grantedBoost);
+
   /// Power added by triggers and by abilities the player applied by hand.
   /// Cleared at end of turn, as temporary power always is.
   int powerBonus = 0;
@@ -140,6 +152,7 @@ class FieldUnit {
     criticalBonus = 0;
     driveBonus = 0;
     battleBonus = 0;
+    grantedBoost = false;
     usedAbilities.clear();
   }
 }

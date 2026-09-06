@@ -603,7 +603,7 @@ void main() {
       final (store, deck) = await buildDeck();
       final (engine, you, foe) = readyGame(store, deck);
 
-      final booster = you.hand.firstWhere((c) => c.grade <= 2 && c.isUnit);
+      final booster = you.hand.firstWhere((c) => c.grade <= 1 && c.isUnit);
       engine.call(you, booster, Circle.backCenter);
       engine.declareAttack(
         from: Circle.vanguard,
@@ -617,11 +617,66 @@ void main() {
       expect(engine.attackers(you), isNot(contains(Circle.vanguard)));
     });
 
+    test('a grade 2 in the back row cannot boost', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+
+      // A Beater is a grade 2: a body in the back row, and nothing more.
+      final beater = you.hand.firstWhere((c) => c.grade == 2);
+      engine.call(you, beater, Circle.backCenter);
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+        boost: true,
+      );
+
+      expect(attack.booster, isNull);
+      expect(attack.attackPower, you.vanguard!.power, reason: 'no boost');
+      expect(
+        you.field[Circle.backCenter]!.rested,
+        isFalse,
+        reason: 'not tapped for a boost it cannot give',
+      );
+    });
+
+    test('a unit given [Boost] boosts, until the turn ends', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+
+      final beater = you.hand.firstWhere((c) => c.grade == 2);
+      engine.call(you, beater, Circle.backCenter);
+      expect(you.field[Circle.backCenter]!.canBoost, isFalse);
+
+      engine.grantBoost(you, Circle.backCenter, granted: true);
+      expect(you.field[Circle.backCenter]!.canBoost, isTrue);
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+        boost: true,
+      );
+      expect(attack.attackPower, you.vanguard!.power + beater.power);
+
+      // The keyword is a turn's worth of it, like every other bonus.
+      engine.endTurn();
+      expect(you.field[Circle.backCenter]!.canBoost, isFalse);
+    });
+
+    test('[Boost] can be taken back off a unit', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final beater = you.hand.firstWhere((c) => c.grade == 2);
+      engine.call(you, beater, Circle.backCenter);
+
+      engine.grantBoost(you, Circle.backCenter, granted: true);
+      engine.grantBoost(you, Circle.backCenter, granted: false);
+      expect(you.field[Circle.backCenter]!.canBoost, isFalse);
+    });
+
     test('a boost adds the booster power to the attack', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, foe) = readyGame(store, deck);
 
-      final booster = you.hand.firstWhere((c) => c.grade <= 2 && c.isUnit);
+      final booster = you.hand.firstWhere((c) => c.grade <= 1 && c.isUnit);
       engine.call(you, booster, Circle.backCenter);
       final attack = engine.declareAttack(
         from: Circle.vanguard,

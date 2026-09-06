@@ -597,6 +597,39 @@ void main() {
       expect(you.openDamage, 1, reason: 'the booster paid it back');
     });
 
+    test(
+      'a card that hands out [Boost] makes a booster of a grade 2',
+      () async {
+        const text =
+            '[ACT](RC)[Generation Break 1]:[COST][Counter-Blast 1], this unit '
+            'gets "Boost ([Boost])" until end of turn.';
+        final (store, deck) = await deckWith(
+          boosterEffect: '',
+          beaterEffect: text,
+        );
+        final engine = engineFor(store, deck);
+        engine.beginPlay();
+        final you = engine.state.you;
+        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
+        final beater = you.deck.lastWhere((c) => c.name == 'Beater');
+        you.deck.remove(beater);
+        you.hand.add(beater);
+        engine.call(you, beater, Circle.backCenter);
+        you.damage.add(you.deck.removeLast());
+        you.gZone.add(you.deck.removeLast());
+        you.faceUpG.add(you.gZone.last.instanceId);
+
+        expect(
+          you.field[Circle.backCenter]!.canBoost,
+          isFalse,
+          reason: 'grade 2',
+        );
+        final ability = readAbilities(text).playable.single;
+        expect(engine.playAbility(you, Circle.backCenter, ability), isTrue);
+        expect(you.field[Circle.backCenter]!.canBoost, isTrue);
+      },
+    );
+
     test('a card discarded for a stride does what it says', () async {
       final (store, deck) = await deckWith(
         boosterEffect:

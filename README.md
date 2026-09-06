@@ -366,6 +366,21 @@ up as a checkbox in the control bar, off until you tick it, because it is not
 always wanted — a unit that restands wants its booster kept back for the second
 swing, and one spent on the first is not there for it.
 
+**Only grades 0 and 1 boost.** [Boost] is printed on those and on nothing
+else, so a grade 2 or 3 standing in the back row is a body and not a booster:
+the checkbox does not appear, and the control bar says which unit it is and
+why rather than leaving a tap unanswered. The CPU plays by the same rule, and
+now fills its back row with units that can actually push — being able to boost
+comes before power there.
+
+Plenty of cards hand the keyword out all the same — *"this unit gets 'Boost'
+until end of turn"* — so any grade 2 or greater rear-guard's sheet offers
+**Give [Boost]**, on your board and the CPU's. A unit carrying it is marked
+**⇧** beside its power and boosts like any grade 1 until the end of the turn,
+when it wears off with everything else a turn hands out. **Take [Boost] back**
+undoes it. Where the card's text is one the reader follows, the CPU gives
+itself the keyword without being asked.
+
 ### What the CPU can read
 
 A CPU that ignored every ability played a deck of vanilla bodies, which is not

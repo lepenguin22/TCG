@@ -361,8 +361,15 @@ class PlaytestAi {
       if (callable.isEmpty) continue;
 
       // Call the units that guard worst and hit hardest, keeping the big
-      // shields in hand where they are worth more.
+      // shields in hand where they are worth more. In the back row a unit
+      // that cannot boost is a body doing nothing at all, so being able to
+      // boost comes before power there.
+      final boosts = !circle.isFrontRow;
       callable.sort((a, b) {
+        if (boosts) {
+          final byBoost = (b.grade <= 1 ? 1 : 0) - (a.grade <= 1 ? 1 : 0);
+          if (byBoost != 0) return byBoost;
+        }
         final byPower = b.power.compareTo(a.power);
         return byPower != 0 ? byPower : a.shield.compareTo(b.shield);
       });
@@ -450,7 +457,9 @@ class PlaytestAi {
     // whenever it is there.
     final boosterCircle = from.boostedBy;
     final booster = boosterCircle == null ? null : me.field[boosterCircle];
-    final boost = booster != null && !booster.rested;
+    // A grade 2 standing behind an attacker is not a booster: only grades 0
+    // and 1 have [Boost], unless something granted it.
+    final boost = booster != null && !booster.rested && booster.canBoost;
     final power = attacker.power + (boost ? booster.card.power : 0);
 
     final enemyVanguard = foe.vanguard;
@@ -471,7 +480,8 @@ class PlaytestAi {
         // have given the unit in front of it.
         final boostBehind = circle.boosts;
         final boosted = boostBehind == null ? null : foe.field[boostBehind];
-        final value = unit.card.power + (boosted == null ? 0 : 3000);
+        final boosting = boosted != null && unit.canBoost;
+        final value = unit.card.power + (boosting ? 3000 : 0);
         if (value > bestValue) {
           bestValue = value;
           bestTarget = circle;

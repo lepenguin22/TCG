@@ -1571,6 +1571,17 @@ class _UnitTile extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                // A unit given [Boost] by an ability is a booster for the
+                // turn, which is not something its grade would tell you.
+                if (unit.grantedBoost)
+                  const Text(
+                    ' ⇧',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 // One critical is the default and not worth the space; a
                 // unit carrying more, or reduced to none, is.
                 if (unit.criticalBonus != 0)
@@ -2090,7 +2101,13 @@ class _Controls extends StatelessWidget {
                 : game.selectedAttacker == null
                 ? 'Battle — tap one of your front row units to attack with.'
                 : game.availableBooster == null
-                ? 'Tap the unit to attack.'
+                // Say why the boost is not on offer where a unit is standing
+                // behind and simply cannot give one.
+                ? game.boosterThatCannot == null
+                      ? 'Tap the unit to attack.'
+                      : '${game.boosterThatCannot!.card.name} cannot boost '
+                            '(grade ${game.boosterThatCannot!.card.grade}) — '
+                            'tap the unit to attack.'
                 : 'Boost is ${game.boostSelected ? 'on' : 'off'} — '
                       'tap the unit to attack.',
           _ => state.phase.label,
@@ -2454,6 +2471,25 @@ void _showUnitSheet(
                     child: Text(unit.rested ? 'Stand' : 'Rest'),
                   ),
                   if (circle != Circle.vanguard) ...[
+                    // [Boost] is printed on grades 0 and 1 only. Everything
+                    // else that boosts does so because a card gave it the
+                    // keyword, so that is offered here rather than assumed.
+                    if (unit.card.grade >= 2)
+                      OutlinedButton(
+                        onPressed: () {
+                          game.grantBoost(
+                            side,
+                            circle,
+                            granted: !unit.grantedBoost,
+                          );
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: Text(
+                          unit.grantedBoost
+                              ? 'Take [Boost] back'
+                              : 'Give [Boost]',
+                        ),
+                      ),
                     // Locking is done to a rear-guard, most often the
                     // opponent's, so it is offered on both sides of the board.
                     OutlinedButton(

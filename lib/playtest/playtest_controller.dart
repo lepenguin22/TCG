@@ -173,13 +173,27 @@ class PlaytestController extends ChangeNotifier {
   }
 
   /// The unit that could boost the attacker you have chosen, if there is one
-  /// standing behind it.
+  /// standing behind it that is allowed to.
+  ///
+  /// A grade 2 or greater in the back row is not a booster: it can only boost
+  /// if an ability has given it [Boost], which is a button on its own sheet.
   FieldUnit? get availableBooster {
     final from = selectedAttacker;
     final circle = from?.boostedBy;
     if (circle == null) return null;
     final booster = you.field[circle];
-    return booster == null || booster.rested ? null : booster;
+    if (booster == null || booster.rested || !booster.canBoost) return null;
+    return booster;
+  }
+
+  /// The unit behind the attacker that would boost if it could, so the board
+  /// can say why it is not being offered.
+  FieldUnit? get boosterThatCannot {
+    final circle = selectedAttacker?.boostedBy;
+    if (circle == null) return null;
+    final behind = you.field[circle];
+    if (behind == null || behind.rested || behind.canBoost) return null;
+    return behind;
   }
 
   void toggleBoost() {
@@ -324,6 +338,11 @@ class PlaytestController extends ChangeNotifier {
 
   void addCritical(PlaytestSide side, Circle circle, int amount) {
     engine.addCritical(side, circle, amount);
+    _sync();
+  }
+
+  void grantBoost(PlaytestSide side, Circle circle, {required bool granted}) {
+    engine.grantBoost(side, circle, granted: granted);
     _sync();
   }
 

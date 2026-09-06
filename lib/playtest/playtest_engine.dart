@@ -911,7 +911,9 @@ class PlaytestEngine {
     final boosterCircle = from.boostedBy;
     if (boost && boosterCircle != null) {
       final candidate = side.field[boosterCircle];
-      if (candidate != null && !candidate.rested && candidate.isActive) {
+      // Grade decides this: only a grade 0 or 1 has [Boost] printed on it,
+      // unless an ability has handed this one the keyword for the turn.
+      if (candidate != null && !candidate.rested && candidate.canBoost) {
         booster = candidate;
         candidate.rested = true;
       }
@@ -1230,6 +1232,24 @@ class PlaytestEngine {
     return true;
   }
 
+  /// Gives a unit [Boost] for the turn, or takes it back.
+  ///
+  /// Grades 0 and 1 have it printed and never need this. Everything else that
+  /// boosts in this game does so because a card said it could -- "this unit
+  /// gets 'Boost' until end of turn" -- and that is a decision the player
+  /// makes off the card's text, so it is offered rather than assumed.
+  void grantBoost(PlaytestSide side, Circle circle, {required bool granted}) {
+    final unit = side.field[circle];
+    if (unit == null || unit.grantedBoost == granted) return;
+    unit.grantedBoost = granted;
+    state.note(
+      granted
+          ? '${unit.card.name} gets [Boost] until end of turn.'
+          : '${unit.card.name} loses [Boost].',
+      by: side,
+    );
+  }
+
   /// Hollows a unit: it stays and fights, and is retired at the end of turn.
   ///
   /// A choice, not an automatic consequence -- the card says "you may" -- so
@@ -1363,6 +1383,7 @@ class PlaytestEngine {
       }
     }
     if (effect.becomeHollowed) hollow(side, circle);
+    if (effect.grantsBoost) grantBoost(side, circle, granted: true);
     if (effect.critical != 0) unit.criticalBonus += effect.critical;
     for (var i = 0; i < effect.draw; i += 1) {
       _draw(side);

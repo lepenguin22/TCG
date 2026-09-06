@@ -26,6 +26,44 @@ void main() {
       }
     }
 
+    test('the board does not offer a boost a grade 2 cannot give', () async {
+      final (store, deck) = await buildDeck();
+      final game = PlaytestController(
+        store: store,
+        yourDeck: deck,
+        opponentDeck: deck,
+        random: Random(1),
+      );
+      game.confirmMulligan();
+      final you = game.you;
+      game.engine.ride(
+        you,
+        game.engine.rideDeckOption(you)!,
+        fromRideDeck: true,
+      );
+
+      // A grade 2 standing behind the vanguard, which in this deck is a body
+      // and not a booster.
+      final beater = you.deck.lastWhere((c) => c.grade == 2);
+      you.deck.remove(beater);
+      you.hand.add(beater);
+      game.engine.call(you, beater, Circle.backCenter);
+      game.state.phase = PlaytestPhase.battle;
+      game.selectAttacker(Circle.vanguard);
+
+      expect(game.availableBooster, isNull, reason: 'grade 2 has no [Boost]');
+      expect(
+        game.boosterThatCannot?.card.name,
+        'Beater',
+        reason: 'so the board can say why',
+      );
+
+      // Given the keyword by an ability, it is a booster like any other.
+      game.grantBoost(you, Circle.backCenter, granted: true);
+      expect(game.availableBooster?.card.name, 'Beater');
+      expect(game.boosterThatCannot, isNull);
+    });
+
     test('a game begins waiting on your mulligan', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(

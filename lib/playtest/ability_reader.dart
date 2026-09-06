@@ -228,6 +228,7 @@ class AbilityEffect {
     this.untilEndOfBattle = false,
     this.becomeHollowed = false,
     this.perFaceUpG = false,
+    this.grantsBoost = false,
     this.crestNamed,
   });
 
@@ -259,6 +260,11 @@ class AbilityEffect {
   /// multiplies it rather than adding it once.
   final bool perFaceUpG;
 
+  /// Whether the unit is given [Boost] for the turn. Only grades 0 and 1
+  /// have it printed, so a card saying a grade 2 gets it is the only way one
+  /// ever boosts.
+  final bool grantsBoost;
+
   /// A crest this puts into the crest zone, by name. A deck whose every other
   /// ability asks `if you have a "..." crest` does nothing at all until the
   /// one card that says `you get a "..." crest` is played.
@@ -274,6 +280,7 @@ class AbilityEffect {
       counterCharge == 0 &&
       energyCharge == 0 &&
       !becomeHollowed &&
+      !grantsBoost &&
       crestNamed == null;
 
   AbilityEffect merge(AbilityEffect other) => AbilityEffect(
@@ -288,6 +295,7 @@ class AbilityEffect {
     untilEndOfBattle: untilEndOfBattle || other.untilEndOfBattle,
     becomeHollowed: becomeHollowed || other.becomeHollowed,
     perFaceUpG: perFaceUpG || other.perFaceUpG,
+    grantsBoost: grantsBoost || other.grantsBoost,
     crestNamed: other.crestNamed ?? crestNamed,
   );
 }
@@ -463,6 +471,12 @@ final _effectForms = <RegExp, AbilityEffect Function(Match)>{
     r'\+(\d+) for each face up card in your g zone$',
   ): (m) =>
       AbilityEffect(frontRowPower: int.parse(m.group(1)!), perFaceUpG: true),
+  // Only grades 0 and 1 boost, so a card handing the keyword out is doing
+  // something the board has to be told about.
+  RegExp(
+    r'^this unit gets "boost(?: \(\[boost\]\))?"(?: until end of turn)?$',
+  ): (m) =>
+      const AbilityEffect(grantsBoost: true),
   RegExp(r'^draw a card$'): (m) => const AbilityEffect(draw: 1),
   RegExp(r'^draw (\w+) cards$'): (m) =>
       AbilityEffect(draw: _numberWords[m.group(1)] ?? 0),

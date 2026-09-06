@@ -31,6 +31,9 @@ void main() {
       int lateFaced,
       int lateGuarded,
       int gradeZerosCalled,
+      int boostsByNonBoosters,
+      int boostsAskedFor,
+      int boostsPlanned,
     })
   >
   selfPlay({int count = 40}) async {
@@ -46,7 +49,10 @@ void main() {
         earlyGuarded = 0,
         lateFaced = 0,
         lateGuarded = 0,
-        gradeZerosCalled = 0;
+        gradeZerosCalled = 0,
+        boostsByNonBoosters = 0,
+        boostsAskedFor = 0,
+        boostsPlanned = 0;
 
     for (var seed = 0; seed < count; seed += 1) {
       final (store, deck) = await buildDeck();
@@ -79,6 +85,15 @@ void main() {
           final next = actor.nextAttack();
           if (next == null) break;
           attacks += 1;
+          // What the CPU asked for, before the engine has its say: a plan to
+          // boost with a grade 2 is a decision the CPU should not be making,
+          // whether or not the rules would have stopped it anyway.
+          if (next.boost) {
+            boostsPlanned += 1;
+            final behind = next.from.boostedBy;
+            final unit = behind == null ? null : actor.me.field[behind];
+            if ((unit?.card.grade ?? 0) >= 2) boostsAskedFor += 1;
+          }
           final pending = engine.declareAttack(
             from: next.from,
             to: next.to,
@@ -87,6 +102,12 @@ void main() {
           // An attack short of its target's power is waved through, so making
           // one achieves nothing at all.
           if (pending.attackPower < pending.target.power) hopeless += 1;
+          // Only grades 0 and 1 have [Boost] printed on them, and nothing in
+          // this deck hands the keyword out.
+          final booster = pending.booster;
+          if (booster != null && booster.card.grade >= 2) {
+            boostsByNonBoosters += 1;
+          }
 
           final answerable =
               pending.hitsVanguard &&
@@ -141,6 +162,9 @@ void main() {
       lateFaced: lateFaced,
       lateGuarded: lateGuarded,
       gradeZerosCalled: gradeZerosCalled,
+      boostsByNonBoosters: boostsByNonBoosters,
+      boostsAskedFor: boostsAskedFor,
+      boostsPlanned: boostsPlanned,
     );
   }
 
@@ -178,6 +202,15 @@ void main() {
       // for a 15000 shield, so the CPU does not make that trade: its rear
       // guards are units, and its triggers stay back to guard with.
       expect(result.gradeZerosCalled, 0);
+    });
+
+    test('it never boosts with a unit that cannot boost', () async {
+      final result = await selfPlay();
+      // It does boost -- the measure below would pass on a CPU that never
+      // boosted at all, which is not what is being checked.
+      expect(result.boostsPlanned, greaterThan(50), reason: 'it does boost');
+      expect(result.boostsAskedFor, 0, reason: 'never asks for one it cannot');
+      expect(result.boostsByNonBoosters, 0, reason: 'and never gets one');
     });
 
     test('it takes early damage and defends late ones', () async {
