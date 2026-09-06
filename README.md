@@ -366,6 +366,11 @@ up as a checkbox in the control bar, off until you tick it, because it is not
 always wanted — a unit that restands wants its booster kept back for the second
 swing, and one spent on the first is not there for it.
 
+A boost is worth the booster's power **as it stands**, not as printed: an
+8000 booster given +5000 pushes for 13000. That matters for a deck that pumps
+its back row, and the number in the checkbox is the one being added, so what
+the attack comes to can be read off the board before it is made.
+
 **Only grades 0 and 1 boost.** [Boost] is printed on those and on nothing
 else, so a grade 2 or 3 standing in the back row is a body and not a booster:
 the checkbox does not appear, and the control bar says which unit it is and

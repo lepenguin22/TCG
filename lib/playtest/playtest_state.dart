@@ -363,7 +363,13 @@ class PendingAttack {
 
   bool get hitsVanguard => targetCircle == Circle.vanguard;
 
-  int get attackPower => attacker.power + (booster?.card.power ?? 0);
+  /// The attacker's power plus the booster's, both as they stand.
+  ///
+  /// The booster's *current* power, not its printed one: a booster given
+  /// +5000 pushes with that too -- an 8000 booster on a 5000 pump boosts for
+  /// 13000 -- which is how the game works and what a deck built on pumping
+  /// the back row is counting on.
+  int get attackPower => attacker.power + (booster?.power ?? 0);
 
   int get shield => guardians.fold(0, (sum, card) => sum + card.shield);
 

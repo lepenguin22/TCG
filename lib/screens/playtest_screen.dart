@@ -2129,7 +2129,7 @@ class _Controls extends StatelessWidget {
                 : Icons.check_box_outline_blank,
             size: 18,
           ),
-          label: Text('+${game.availableBooster!.card.power}'),
+          label: Text('+${game.availableBooster!.power}'),
           style: TextButton.styleFrom(
             foregroundColor: game.boostSelected
                 ? AppColors.accent

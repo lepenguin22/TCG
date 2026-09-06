@@ -460,7 +460,10 @@ class PlaytestAi {
     // A grade 2 standing behind an attacker is not a booster: only grades 0
     // and 1 have [Boost], unless something granted it.
     final boost = booster != null && !booster.rested && booster.canBoost;
-    final power = attacker.power + (boost ? booster.card.power : 0);
+    // As it stands, not as printed: a booster carrying a bonus pushes with
+    // the bonus, and an attack planned off the printed number would be sold
+    // short by exactly that much.
+    final power = attacker.power + (boost ? booster.power : 0);
 
     final enemyVanguard = foe.vanguard;
     if (enemyVanguard == null) return null;

@@ -617,6 +617,30 @@ void main() {
       expect(engine.attackers(you), isNot(contains(Circle.vanguard)));
     });
 
+    test(
+      'a booster pushes with the power it has, not the power it had',
+      () async {
+        final (store, deck) = await buildDeck();
+        final (engine, you, _) = readyGame(store, deck);
+
+        final booster = you.hand.firstWhere((c) => c.grade <= 1 && c.isUnit);
+        engine.call(you, booster, Circle.backCenter);
+        // A pump on the booster itself, the way a card or a trigger gives one.
+        engine.addPower(you, Circle.backCenter, 5000);
+
+        final attack = engine.declareAttack(
+          from: Circle.vanguard,
+          to: Circle.vanguard,
+          boost: true,
+        );
+        expect(
+          attack.attackPower,
+          you.vanguard!.power + booster.power + 5000,
+          reason: 'the bonus on the booster is part of the boost',
+        );
+      },
+    );
+
     test('a grade 2 in the back row cannot boost', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);
