@@ -1226,7 +1226,12 @@ void _showGZoneSheet(
                               TextButton(
                                 onPressed: () {
                                   Navigator.of(sheetContext).pop();
-                                  _showStrideCostSheet(context, game, card);
+                                  _showStrideCostSheet(
+                                    context,
+                                    game,
+                                    side,
+                                    card,
+                                  );
                                 },
                                 child: const Text('Stride'),
                               ),
@@ -1264,6 +1269,7 @@ void _showGZoneSheet(
 void _showStrideCostSheet(
   BuildContext context,
   PlaytestController game,
+  PlaytestSide side,
   GameCard strider,
 ) {
   final picks = <GameCard>{};
@@ -1289,7 +1295,7 @@ void _showStrideCostSheet(
                       'Discard cards worth grade 3 or more. '
                       'Picked: $total.',
                 ),
-                for (final card in game.me.hand)
+                for (final card in side.hand)
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     value: picks.contains(card),
@@ -1322,7 +1328,7 @@ void _showStrideCostSheet(
                     onPressed: total < 3
                         ? null
                         : () {
-                            game.stride(strider, picks.toList());
+                            game.stride(side, strider, picks.toList());
                             Navigator.of(sheetContext).pop();
                           },
                     child: Text(total < 3 ? 'Grade $total of 3' : 'Stride'),

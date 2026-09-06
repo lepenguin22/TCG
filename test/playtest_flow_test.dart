@@ -134,6 +134,60 @@ void main() {
       expect(game.controls(game.cpu), isTrue);
     });
 
+    test(
+      'player two strides their own G unit, not player one\u2019s',
+      () async {
+        final (store, deck) = await buildStrideDeck();
+        final game = PlaytestController(
+          store: store,
+          yourDeck: deck,
+          opponentDeck: deck,
+          mode: PlaytestMode.bothSides,
+          random: Random(6),
+        );
+        game.confirmMulligan();
+        game.confirmMulligan();
+        passTheTurn(game);
+        expect(game.me, game.cpu, reason: 'player two is playing');
+
+        // A grade 3 vanguard to stride over, and a hand that can pay for it.
+        final them = game.cpu;
+        // The grade 3 lives in the ride deck, which is where a real one is
+        // ridden from.
+        final grade3 = them.rideDeck.firstWhere((c) => c.grade == 3);
+        them.rideDeck.remove(grade3);
+        them.field[Circle.vanguard] = FieldUnit(grade3);
+        final cost = <GameCard>[];
+        var total = 0;
+        while (total < 3) {
+          final card = them.deck.removeLast();
+          them.hand.add(card);
+          cost.add(card);
+          total += card.grade;
+        }
+
+        final gUnit = them.gZone.first;
+        final theirHand = them.hand.length;
+        final myVanguard = game.you.vanguard;
+
+        game.stride(them, gUnit, cost);
+
+        expect(
+          them.vanguard!.card.name,
+          gUnit.name,
+          reason: 'the G unit is on their vanguard circle',
+        );
+        expect(them.isStriding, isTrue);
+        expect(them.hand.length, theirHand - cost.length, reason: 'they paid');
+        expect(them.gZone.contains(gUnit), isFalse);
+        expect(
+          game.you.vanguard,
+          myVanguard,
+          reason: 'player one was not touched',
+        );
+      },
+    );
+
     test('you guard your own attack, then drive and resolve it', () async {
       final game = await soloGame(4);
       game.confirmMulligan();

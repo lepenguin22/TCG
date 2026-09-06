@@ -441,8 +441,13 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
-  void stride(GameCard card, List<GameCard> cost) {
-    engine.stride(you, card, cost);
+  /// Strides [side]'s G unit, paid for out of that side's hand.
+  ///
+  /// The side is passed in rather than assumed: with both hands yours the
+  /// player striding is whichever G zone was opened, and a stride run against
+  /// the wrong side finds the G unit missing and quietly does nothing.
+  void stride(PlaytestSide side, GameCard card, List<GameCard> cost) {
+    engine.stride(side, card, cost);
     _sync();
   }
 
