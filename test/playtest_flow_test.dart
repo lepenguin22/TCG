@@ -1321,7 +1321,7 @@ void main() {
       expect(find.text('Removed'), findsOneWidget);
     });
 
-    testWidgets('a unit in the drop is not offered as an order', (
+    testWidgets('a unit in the drop activates rather than being played', (
       tester,
     ) async {
       final (store, deck) = await buildDeck();
@@ -1339,8 +1339,36 @@ void main() {
       expect(
         find.text('Play from drop'),
         findsNothing,
-        reason: 'only orders are played from the drop',
+        reason: 'a unit is not played, it activates',
       );
+      expect(find.text('Activate from drop'), findsOneWidget);
+      expect(find.text('Remove'), findsOneWidget, reason: 'for the costs');
+    });
+
+    testWidgets('a card removed from the drop by hand leaves the game', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+      final discarded = game.you.drop.single;
+
+      await tapOnBoard(tester, find.text('Drop').last);
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+
+      expect(game.you.drop, isEmpty);
+      expect(game.you.removed, contains(discarded));
+      expect(find.text('Removed'), findsOneWidget);
     });
 
     testWidgets('a card in hand goes under the deck', (tester) async {

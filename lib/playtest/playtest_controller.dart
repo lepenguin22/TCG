@@ -190,8 +190,13 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
-  void playOrderFromDrop(PlaytestSide side, GameCard card) {
-    engine.playOrderFromDrop(side, card);
+  void activateFromDrop(PlaytestSide side, GameCard card) {
+    engine.activateFromDrop(side, card);
+    _sync();
+  }
+
+  void removeFromDrop(PlaytestSide side, GameCard card) {
+    engine.removeFromDrop(side, card);
     _sync();
   }
 

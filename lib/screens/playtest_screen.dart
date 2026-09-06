@@ -459,7 +459,7 @@ class _ZoneRail extends StatelessWidget {
             onAction: (card) => game.returnFromDrop(side, card),
             callable: true,
             bottomable: true,
-            playableOrders: true,
+            fromDrop: true,
           ),
         ),
         _Pile(
@@ -631,7 +631,7 @@ void _showPileSheet(
   List<Widget> Function(BuildContext sheetContext)? header,
   bool callable = false,
   bool bottomable = false,
-  bool playableOrders = false,
+  bool fromDrop = false,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -708,20 +708,35 @@ void _showPileSheet(
                                 },
                                 child: Text(actionLabel ?? 'Move'),
                               ),
-                            // A few orders can be played again out of the
-                            // drop. Which ones is on the card, so the board
-                            // offers it for any order and the player reads
-                            // the text -- and playing one this way removes it
-                            // from the game, which is what those cards say.
-                            if (playableOrders &&
-                                card.isOrder &&
-                                game.controls(side))
+                            // Cards work from the drop zone: an order played
+                            // a second time, a unit with an "[ACT](Drop)"
+                            // ability whose cost is removing itself. Which
+                            // cards can is on the card, so the board offers
+                            // it and the player reads the text -- and either
+                            // way it leaves the game rather than going back
+                            // to the drop.
+                            if (fromDrop && game.controls(side))
                               TextButton(
                                 onPressed: () {
-                                  game.playOrderFromDrop(side, card);
+                                  game.activateFromDrop(side, card);
                                   Navigator.of(sheetContext).pop();
                                 },
-                                child: const Text('Play from drop'),
+                                child: Text(
+                                  card.isOrder
+                                      ? 'Play from drop'
+                                      : 'Activate from drop',
+                                ),
+                              ),
+                            // The other half of those abilities: a cost that
+                            // removes cards from the drop which are not the
+                            // one being played.
+                            if (fromDrop && game.controls(side))
+                              TextButton(
+                                onPressed: () {
+                                  game.removeFromDrop(side, card);
+                                  Navigator.of(sheetContext).pop();
+                                },
+                                child: const Text('Remove'),
                               ),
                             // Costs put cards under the deck out of the drop
                             // and the soul as well as out of hand.

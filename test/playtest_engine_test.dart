@@ -641,7 +641,7 @@ void main() {
       },
     );
 
-    test('an order played from the drop leaves the game', () async {
+    test('a card activated from the drop leaves the game', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);
 
@@ -662,7 +662,7 @@ void main() {
       you.drop.add(order);
       final drop = you.drop.length;
 
-      engine.playOrderFromDrop(you, order);
+      engine.activateFromDrop(you, order);
 
       expect(you.drop.length, drop - 1);
       expect(you.drop.contains(order), isFalse, reason: 'not back in the drop');
@@ -673,15 +673,53 @@ void main() {
       );
     });
 
-    test('an order not in the drop cannot be played from it', () async {
+    test('a card not in the drop cannot be activated from it', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);
       final held = you.hand.first;
 
-      engine.playOrderFromDrop(you, held);
+      engine.activateFromDrop(you, held);
 
       expect(you.hand, contains(held), reason: 'nothing was taken from hand');
       expect(you.removed, isEmpty);
+    });
+
+    test('a unit with a drop ability activates and is removed', () async {
+      // "[ACT](Drop):[COST][Remove this card], ..." is a shape a couple of
+      // hundred cards carry, and it is not an order.
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final unit = you.deck.lastWhere((c) => c.name == 'Beater');
+      you.deck.remove(unit);
+      you.drop.add(unit);
+
+      engine.activateFromDrop(you, unit);
+
+      expect(you.drop.contains(unit), isFalse);
+      expect(you.removed, contains(unit));
+      expect(
+        engine.state.log.any((e) => e.text.contains('activates Beater')),
+        isTrue,
+        reason: 'a unit activates rather than being played',
+      );
+    });
+
+    test('a card can be removed from the drop to pay a cost', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final spent = you.deck.lastWhere((c) => c.name == 'Booster');
+      you.deck.remove(spent);
+      you.drop.add(spent);
+
+      engine.removeFromDrop(you, spent);
+
+      expect(you.drop.contains(spent), isFalse);
+      expect(you.removed, contains(spent));
+      expect(
+        engine.state.log.any((e) => e.text.contains('removes Booster')),
+        isTrue,
+        reason: 'said as a removal, not as an ability being used',
+      );
     });
 
     test('a grade 2 in the back row cannot boost', () async {

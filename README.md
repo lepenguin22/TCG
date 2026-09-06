@@ -584,14 +584,18 @@ come into it, so they are on the board and tappable rather than left as numbers:
   Drawing is the common thing and looking is the rare one, so reading the deck
   is never the price of taking the top card off it.
 - **Drop** hands a card back where something returns one, and sends one under
-  the deck for the costs that ask for that. It also **plays an order out of
-  the drop**: a few orders can be played a second time from there, and every
-  one of them is removed from the game for it rather than going back to the
-  drop, so it can never be played a third time. Which orders those are is on
-  the card, so the button is offered for any order in the drop and you read
-  the text — the same bargain the board makes everywhere else.
+  the deck for the costs that ask for that. It is also where cards **work from
+  the drop zone**, which a couple of hundred of them do: a unit carrying
+  *"[ACT](Drop):[COST][Remove this card], …"*, or an order played a second
+  time from there. **Activate from drop** (**Play from drop**, on an order)
+  uses the card and removes it from the game rather than returning it to the
+  drop, so it can never be used again — which is what those cards say. Beside
+  it, **Remove** takes a card out of the game without using it, for the costs
+  that name other cards: *"remove two cards with the same card name as this
+  card from drop"* is two Removes and one Activate. Which cards can do any of
+  this is on the card, so the board offers it and you read the text.
 - **Removed** only appears once something is out of the game — an over trigger
-  that resolved, or an order played out of the drop. It opens read-only: the
+  that resolved, a card used or spent from the drop. It opens read-only: the
   cards are there to be read, and nothing comes back from it.
 
 Cards go **under the deck** as well as to the drop zone, since a good many
