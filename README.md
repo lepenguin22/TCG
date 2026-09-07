@@ -345,6 +345,12 @@ second, boosting, triggers, the sixth damage. What changes is that nothing at
 all happens unless you do it, which is what testing a deck whose abilities no
 program can read actually requires.
 
+Leaving a game asks first. The board is not saved anywhere — the hands, the
+fields and everything applied by hand go with it — and a back press is easy to
+make by accident on a phone, so both the back button and the arrow in the
+corner ask before throwing one away. A game that has already ended leaves at
+once, having nothing left to lose.
+
 The board runs the game the way it sits on a table: your opponent's six circles
 across the top, yours below, your hand along the bottom, and a control bar that
 only ever offers the move the rules are waiting for. It plays out an opening

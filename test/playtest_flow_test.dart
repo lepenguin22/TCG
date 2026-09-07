@@ -2078,6 +2078,53 @@ void main() {
       expect(find.text('Continue'), findsNothing, reason: 'no CPU to step');
     });
 
+    testWidgets('the back button asks before throwing the game away', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // The system back press, as a phone sends it.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Leave the game?'), findsOneWidget);
+      expect(find.textContaining('The board goes with it'), findsOneWidget);
+
+      // Keeping playing leaves the board exactly where it was.
+      await tester.tap(find.text('Keep playing'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave the game?'), findsNothing);
+      expect(
+        find.textContaining('Turn 1'),
+        findsOneWidget,
+        reason: 'still on the board',
+      );
+    });
+
+    testWidgets('a game that is over does not ask', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      // Six damage ends it, and a finished board has nothing left to lose.
+      while (game.cpu.damageCount < 6) {
+        game.dealDamage(game.cpu);
+      }
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Leave the game?'), findsNothing);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

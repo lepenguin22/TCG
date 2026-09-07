@@ -83,37 +83,76 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
       value: controller,
       child: Consumer<PlaytestController>(
         builder: (context, game, _) {
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(
-                game.stage == PlaytestStage.mulligan
-                    ? game.bothSides
-                          ? '${game.mulliganSide.name}\u2019s opening hand'
-                          : 'Opening hand'
-                    : 'Turn ${game.state.turn} · ${game.state.active.name}',
+          return PopScope(
+            // A game is a board you cannot get back: leaving it throws away
+            // the hands, the field and everything applied by hand, and a
+            // back press is easy to make by accident on a phone. A finished
+            // game has nothing left to lose, so that one leaves at once.
+            canPop: game.stage == PlaytestStage.over,
+            onPopInvokedWithResult: (didPop, _) async {
+              if (didPop) return;
+              final leave = await _confirmLeaving(context);
+              if (leave && context.mounted) Navigator.of(context).pop();
+            },
+            child: Scaffold(
+              appBar: AppBar(
+                title: Text(
+                  game.stage == PlaytestStage.mulligan
+                      ? game.bothSides
+                            ? '${game.mulliganSide.name}\u2019s opening hand'
+                            : 'Opening hand'
+                      : 'Turn ${game.state.turn} · ${game.state.active.name}',
+                ),
+                actions: [
+                  IconButton(
+                    tooltip: 'Game log',
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    onPressed: () => _showLog(context, game),
+                  ),
+                  IconButton(
+                    tooltip: 'Restart',
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () => _restart(context),
+                  ),
+                ],
               ),
-              actions: [
-                IconButton(
-                  tooltip: 'Game log',
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  onPressed: () => _showLog(context, game),
-                ),
-                IconButton(
-                  tooltip: 'Restart',
-                  icon: const Icon(Icons.refresh),
-                  onPressed: () => _restart(context),
-                ),
-              ],
-            ),
-            body: SafeArea(
-              child: game.stage == PlaytestStage.mulligan
-                  ? _Mulligan(game: game)
-                  : _Board(game: game),
+              body: SafeArea(
+                child: game.stage == PlaytestStage.mulligan
+                    ? _Mulligan(game: game)
+                    : _Board(game: game),
+              ),
             ),
           );
         },
       ),
     );
+  }
+
+  /// Asks before a game is thrown away.
+  static Future<bool> _confirmLeaving(BuildContext context) async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Leave the game?'),
+        content: const Text(
+          'The board goes with it — both hands, both fields and everything '
+          'applied by hand. The decks in your library are not touched.',
+          style: TextStyle(color: AppColors.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep playing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+    return leave ?? false;
   }
 
   void _restart(BuildContext context) {
