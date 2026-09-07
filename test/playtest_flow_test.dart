@@ -1527,6 +1527,46 @@ void main() {
       expect(game.engine.topOfDeck(game.you, 1), [top[1]]);
     });
 
+    testWidgets('taking one of the top cards does not turn over another', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      final top = game.engine.topOfDeck(game.you, 5);
+      final sixth = game.engine.topOfDeck(game.you, 6).last;
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      await tester.tap(find.text('Look at the top cards'));
+      await tester.pumpAndSettle();
+
+      // Every card in this deck shares a handful of names, so the window is
+      // checked by what the sheet says it is showing rather than by name.
+      await tester.tap(find.text('To hand').first);
+      await tester.pumpAndSettle();
+
+      // Four left to choose from: the list shrank rather than refilling from
+      // underneath, which is what taking one out of a look means.
+      expect(find.textContaining('4 of 5 left'), findsOneWidget);
+      expect(game.you.hand.contains(top.first), isTrue);
+      expect(
+        game.you.deck.contains(sixth),
+        isTrue,
+        reason: 'the card under the five was never turned over',
+      );
+      expect(
+        game.engine.topOfDeck(game.you, 1).single,
+        top[1],
+        reason: 'the deck simply lost the card that was taken',
+      );
+    });
+
     testWidgets('the look at the top can shuffle afterwards, or not', (
       tester,
     ) async {

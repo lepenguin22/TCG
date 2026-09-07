@@ -605,7 +605,10 @@ come into it, so they are on the board and tappable rather than left as numbers:
   sheet shows three, five or seven — switchable without reopening — in order,
   top card first, and each one can go **to hand, to the drop, to the soul or
   to the bottom**, which between them are where those abilities send what they
-  find. What you leave stays exactly where it was, in the order it was in;
+  find. The five you are shown are the five you chose to look at: taking one
+  out leaves four to choose from rather than turning over a replacement, since
+  "look at the top five and choose one" is a look at five cards and not a
+  draw. What you leave stays exactly where it was, in the order it was in;
   the shuffle at the end is a button rather than something that happens to
   you, since some of these cards shuffle and others put the rest back in
   order.

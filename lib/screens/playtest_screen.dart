@@ -976,6 +976,11 @@ void _showTopOfDeckSheet(
   PlaytestSide side,
 ) {
   var count = 5;
+  // The cards being looked at, fixed when the look begins. Taking one out
+  // does not turn the next card over: "look at the top five" shows five, and
+  // choosing one from among them leaves four being looked at, not another
+  // five. Re-read only when the number itself changes.
+  var looking = game.engine.topOfDeck(side, count);
 
   showModalBottomSheet<void>(
     context: context,
@@ -990,16 +995,22 @@ void _showTopOfDeckSheet(
           builder: (builderContext, setSheetState) => ListenableBuilder(
             listenable: game,
             builder: (_, _) {
-              final looking = game.engine.topOfDeck(side, count);
+              // What is still there: a card taken drops out of the list
+              // rather than being replaced from underneath.
+              final showing = looking.where(side.deck.contains).toList();
               return ListView(
                 controller: scrollController,
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                 children: [
                   SectionHeader(
                     title: 'Top $count of the deck',
-                    caption:
-                        'The top card first. What you leave stays in the '
-                        'order it is in — shuffle below if the card says to.',
+                    caption: showing.length == looking.length
+                        ? 'The top card first. What you leave stays in the '
+                              'order it is in — shuffle below if the card '
+                              'says to.'
+                        : '${showing.length} of $count left to choose from. '
+                              'Nothing new is turned over; what you leave '
+                              'stays in the order it is in.',
                   ),
                   Wrap(
                     spacing: 8,
@@ -1013,12 +1024,14 @@ void _showTopOfDeckSheet(
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (looking.isEmpty)
-                    const Text(
-                      'The deck is empty.',
-                      style: TextStyle(color: AppColors.textMuted),
+                  if (showing.isEmpty)
+                    Text(
+                      looking.isEmpty
+                          ? 'The deck is empty.'
+                          : 'All of them have been taken.',
+                      style: const TextStyle(color: AppColors.textMuted),
                     ),
-                  for (final card in looking)
+                  for (final card in showing)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
