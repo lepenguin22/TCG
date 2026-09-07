@@ -808,6 +808,66 @@ void main() {
       ], reason: 'the next two are what was under it');
     });
 
+    test('a twin drive is two checks, one at a time', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      // A grade 3 vanguard twin drives. Stood up rather than ridden to, so
+      // the test is about the checking and not about the climb.
+      final grade3 = you.rideDeck.firstWhere((c) => c.grade == 3);
+      you.rideDeck.remove(grade3);
+      you.field[Circle.vanguard] = FieldUnit(grade3);
+      expect(engine.driveCount(you.vanguard!), 2);
+
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+      );
+      expect(engine.drivesLeft(), 2);
+
+      final first = engine.driveCheckOne();
+      expect(first, isNotNull);
+      expect(engine.drivesLeft(), 1, reason: 'one still owed');
+      expect(attack.driveChecked, isFalse, reason: 'not done yet');
+      expect(engine.state.triggerZone.length, 1, reason: 'one card shown');
+
+      final second = engine.driveCheckOne();
+      expect(second, isNotNull);
+      expect(engine.drivesLeft(), 0);
+      expect(attack.driveChecked, isTrue);
+      expect(engine.state.triggerZone.length, 2);
+
+      expect(engine.driveCheckOne(), isNull, reason: 'and no more than two');
+      expect(engine.state.triggerZone.length, 2);
+    });
+
+    test('the whole drive check still runs in one call', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final grade3 = you.rideDeck.firstWhere((c) => c.grade == 3);
+      you.rideDeck.remove(grade3);
+      you.field[Circle.vanguard] = FieldUnit(grade3);
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+
+      expect(engine.driveCheck().length, 2, reason: 'both at once');
+      expect(engine.drivesLeft(), 0);
+      expect(engine.state.attack!.driveChecked, isTrue);
+    });
+
+    test('a vanguard on no drive owes nothing', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      engine.addDrive(you, Circle.vanguard, -1);
+      expect(engine.driveCount(you.vanguard!), 0);
+
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+      );
+      expect(engine.drivesLeft(), 0);
+      expect(engine.driveCheckOne(), isNull);
+      expect(attack.driveChecked, isTrue, reason: 'ready to resolve');
+    });
+
     test('a grade 2 in the back row cannot boost', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);

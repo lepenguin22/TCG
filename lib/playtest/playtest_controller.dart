@@ -285,11 +285,17 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
-  /// Runs the drive check for the attack you have declared.
+  /// Flips the next drive check for the attack on the table.
+  ///
+  /// One per tap: a twin drive is two moments, and what the first turns up
+  /// changes what the second is worth reading against.
   void driveCheck() {
-    engine.driveCheck();
+    engine.driveCheckOne();
     notifyListeners();
   }
+
+  /// How many checks the attack still owes.
+  int get drivesLeft => engine.drivesLeft();
 
   /// Settles your attack and returns the board to you.
   void resolveYourAttack() {
@@ -378,7 +384,8 @@ class PlaytestController extends ChangeNotifier {
       _sync();
       return;
     }
-    engine.driveCheck();
+    // The CPU's checks are flipped one at a time from the board too, so what
+    // it turned up can be read before the next one lands.
     stage = PlaytestStage.cpuAttack;
     _sync();
   }

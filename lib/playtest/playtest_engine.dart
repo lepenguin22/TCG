@@ -1095,38 +1095,73 @@ class PlaytestEngine {
     return (base + vanguard.driveBonus).clamp(0, 9);
   }
 
-  /// Flips the drive checks into hand, returning what came off the top so the
-  /// screen can show it.
-  List<GameCard> driveCheck() {
+  /// How many drive checks the attack on the table still owes.
+  ///
+  /// Counted rather than stored, so an ability that changes the vanguard's
+  /// drive between one check and the next is followed.
+  int drivesLeft() {
+    final pending = state.attack;
+    if (pending == null || !pending.isVanguardAttack) return 0;
+    final owed = driveCount(pending.attacker) - pending.drivesTaken;
+    return owed < 0 ? 0 : owed;
+  }
+
+  /// Flips one drive check, or null where there is none left to flip.
+  ///
+  /// One at a time, because that is how the check is made at a table: a twin
+  /// drive is two separate moments, and what the first turns up -- a critical
+  /// trigger's power, a heal, a stand -- is read before the second is flipped.
+  GameCard? driveCheckOne() {
     final pending = state.attack;
     final side = state.active;
+    if (pending == null || !pending.isVanguardAttack) return null;
+    if (drivesLeft() <= 0) {
+      pending.driveChecked = true;
+      return null;
+    }
+    if (side.deck.isEmpty) {
+      // Nothing left to check with, so the attack is not left owing one.
+      pending.driveChecked = true;
+      return null;
+    }
+
+    pending.drivesTaken += 1;
+    final card = side.deck.removeLast();
+    // An over trigger is removed from the game as it resolves: it does not
+    // reach the hand the rest of a drive check does.
+    final over = card.trigger == 'over';
+    if (over) {
+      side.removed.add(card);
+    } else {
+      side.hand.add(card);
+    }
+    state.triggerZone.add(CheckedCard(card, CheckKind.drive, side.name));
+    state.note(
+      '${side.name} drive checks ${card.name}'
+      '${over ? ', which is removed from the game' : ''}.',
+      by: side,
+    );
+    _applyTrigger(side, card, pending.attacker);
+    if (drivesLeft() <= 0) pending.driveChecked = true;
+    _checkForEnd();
+    return card;
+  }
+
+  /// Flips every drive check the attack still owes, for the callers that want
+  /// the whole thing settled in one go -- the CPU's own turn, and tests.
+  List<GameCard> driveCheck() {
+    final pending = state.attack;
     if (pending == null || !pending.isVanguardAttack) return const [];
 
     final flipped = <GameCard>[];
-    for (var i = 0; i < driveCount(pending.attacker); i += 1) {
-      if (side.deck.isEmpty) break;
-      final card = side.deck.removeLast();
-      // An over trigger is removed from the game as it resolves: it does not
-      // reach the hand the rest of a drive check does.
-      final over = card.trigger == 'over';
-      if (over) {
-        side.removed.add(card);
-      } else {
-        side.hand.add(card);
-      }
+    while (drivesLeft() > 0) {
+      final card = driveCheckOne();
+      if (card == null) break;
       flipped.add(card);
-      state.triggerZone.add(CheckedCard(card, CheckKind.drive, side.name));
-      state.note(
-        '${side.name} drive checks ${card.name}'
-        '${over ? ', which is removed from the game' : ''}.',
-        by: side,
-      );
-      _applyTrigger(side, card, pending.attacker);
     }
     // Recorded even when nothing was flipped, since a vanguard on no drive
     // has still done its checking and the attack is ready to resolve.
     pending.driveChecked = true;
-    _checkForEnd();
     return flipped;
   }
 

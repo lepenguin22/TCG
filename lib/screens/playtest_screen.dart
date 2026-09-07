@@ -2325,28 +2325,47 @@ class _Controls extends StatelessWidget {
         ];
 
       case PlaytestStage.cpuAttack:
+        // Its checks are flipped one at a time as well, so a twin drive is
+        // two things to read rather than a pair that appears together.
+        final owed = game.drivesLeft;
         return [
-          const Expanded(
+          Expanded(
             child: Text(
-              'The CPU\'s attack resolves.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              owed > 0
+                  ? 'The CPU has $owed drive '
+                        '${owed == 1 ? 'check' : 'checks'} to make.'
+                  : 'The CPU\'s attack resolves.',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
           ),
-          FilledButton(
-            onPressed: game.resolveCpuAttack,
-            child: const Text('Continue'),
-          ),
+          if (owed > 0)
+            FilledButton(
+              onPressed: game.driveCheck,
+              child: const Text('Drive check'),
+            )
+          else
+            FilledButton(
+              onPressed: game.resolveCpuAttack,
+              child: const Text('Continue'),
+            ),
         ];
 
       case PlaytestStage.yourAttack:
         final attack = state.attack!;
         final drove = attack.driveChecked || !attack.isVanguardAttack;
+        // One check per tap. A twin drive is two moments at a table, and what
+        // the first turns up is read before the second is flipped.
+        final owed = game.drivesLeft;
+        final taken = attack.drivesTaken;
         return [
           Expanded(
             child: Text(
               drove
                   ? '${attack.attackPower} against ${attack.defence}.'
-                  : 'Drive check to see what you turn up.',
+                  : taken == 0
+                  ? 'Drive check to see what you turn up.'
+                  : '${attack.attackPower} against ${attack.defence} — '
+                        '$owed to go.',
               style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
           ),
@@ -2354,7 +2373,7 @@ class _Controls extends StatelessWidget {
             FilledButton(
               onPressed: game.driveCheck,
               child: Text(
-                'Drive check ×${game.engine.driveCount(attack.attacker)}',
+                owed > 1 ? 'Drive check ($owed left)' : 'Drive check',
               ),
             )
           else

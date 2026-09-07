@@ -674,7 +674,14 @@ readily as 5000, so the unit sheet has a field — opening on 5000, the commones
 — with buttons to add or take away exactly that much, and a Clear that puts the
 unit back to its printed power. Power, critical and drive all wear off at end
 of turn the way the game says they do — a unit carrying more than its one critical, or reduced below it, says
-so on the board, and the drive check button names how many checks are coming.
+so on the board, and the drive check button names how many checks are left.
+
+**Drive checks are flipped one at a time.** A twin drive is two moments at a
+table, not a pair of cards that appear together: what the first turns up — the
+power a critical trigger hands the attack, a heal, a stand — is read and
+applied before the second is flipped. So the button checks once and then says
+how many are still owed, on your attacks and on the CPU's alike, and the
+trigger zone fills a card at a time.
 
 Drive is offered on the vanguard alone, since nothing else drive checks, and
 it is cleared each turn like the rest. That is the safer way round for a

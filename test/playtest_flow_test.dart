@@ -1080,7 +1080,19 @@ void main() {
         tester,
         find.byKey(const ValueKey('circle-CPU-vanguard')),
       );
-      expect(find.text('Drive check ×2'), findsOneWidget);
+      // Two checks to make, and the button says how many are left rather
+      // than flipping them together.
+      expect(find.text('Drive check (2 left)'), findsOneWidget);
+      await tester.tap(find.text('Drive check (2 left)'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Drive check'),
+        findsOneWidget,
+        reason: 'the second one, on its own',
+      );
+      await tester.tap(find.text('Drive check'));
+      await tester.pumpAndSettle();
+      expect(find.text('Resolve'), findsOneWidget);
     });
 
     testWidgets('a rear-guard is offered no drive', (tester) async {
@@ -1148,7 +1160,14 @@ void main() {
       expect(find.text('GUARDIAN'), findsOneWidget);
       expect(find.text('Nothing guarding'), findsOneWidget);
 
-      await tester.tap(find.textContaining(RegExp(r'Drive check ×')));
+      // The bar says "Drive check to see what you turn up." as well, so the
+      // button is picked out rather than the words.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(FilledButton),
+          matching: find.textContaining('Drive check'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // And the drive check lands in the trigger zone.
@@ -1178,7 +1197,14 @@ void main() {
         tester,
         find.byKey(const ValueKey('circle-CPU-vanguard')),
       );
-      await tester.tap(find.textContaining(RegExp(r'Drive check ×')));
+      // The bar says "Drive check to see what you turn up." as well, so the
+      // button is picked out rather than the words.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(FilledButton),
+          matching: find.textContaining('Drive check'),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Resolve'));
       await tester.pumpAndSettle();

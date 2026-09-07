@@ -388,6 +388,13 @@ class PendingAttack {
   /// ready to resolve rather than still owing a check.
   bool driveChecked = false;
 
+  /// How many of this attack's drive checks have been flipped.
+  ///
+  /// They come one at a time -- a twin drive is two moments, and the first
+  /// can change what the second is worth -- so the attack counts them off
+  /// rather than being handed all of them at once.
+  int drivesTaken = 0;
+
   bool get isVanguardAttack => attackerCircle == Circle.vanguard;
 
   bool get hitsVanguard => targetCircle == Circle.vanguard;
