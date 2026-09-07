@@ -1165,6 +1165,43 @@ class PlaytestEngine {
     return flipped;
   }
 
+  /// Hands a checked trigger's power or critical to a different unit.
+  ///
+  /// The board gives a trigger to the unit that is fighting, which is right
+  /// nearly every time and is a decision made for you. The game does not make
+  /// it: a critical trigger can put its critical on the vanguard and its power
+  /// on a rear-guard about to swing, and the split is often the whole point.
+  /// So what was given is taken back off the unit that got it and handed to
+  /// the one you name.
+  void moveTriggerGift(
+    PlaytestSide side,
+    CheckedCard checked,
+    Circle to, {
+    required bool power,
+  }) {
+    final from = power ? checked.powerTo : checked.criticalTo;
+    final amount = power ? checked.powerGiven : checked.criticalGiven;
+    if (amount <= 0 || from == to) return;
+    final taker = side.field[to];
+    if (taker == null || !taker.isActive) return;
+
+    final giver = from == null ? null : side.field[from];
+    if (power) {
+      giver?.powerBonus -= amount;
+      taker.powerBonus += amount;
+      checked.powerTo = to;
+    } else {
+      giver?.criticalBonus -= amount;
+      taker.criticalBonus += amount;
+      checked.criticalTo = to;
+    }
+    state.note(
+      '${checked.card.name}\'s ${power ? '$amount power' : 'critical'} '
+      'goes to ${taker.card.name} instead.',
+      by: side,
+    );
+  }
+
   /// Resolves the attack: a hit on a vanguard is damage, a hit on a rear-guard
   /// retires it.
   /// Settles the attack on the table, and says whether it connected -- which
@@ -1256,16 +1293,39 @@ class PlaytestEngine {
     if (trigger == null) return;
 
     final target = beneficiary ?? side.vanguard;
+    // Where the gift went, so it can be handed to another unit afterwards
+    // without the board having to guess what a trigger was worth.
+    final checked = state.triggerZone.isEmpty ? null : state.triggerZone.last;
+    final targetCircle = target == null
+        ? null
+        : side.field.entries
+              .where((e) => e.value == target)
+              .map((e) => e.key)
+              .firstOrNull;
+    void gave({int power = 0, int critical = 0}) {
+      if (checked == null || checked.card != card) return;
+      if (power > 0) {
+        checked.powerTo = targetCircle;
+        checked.powerGiven = power;
+      }
+      if (critical > 0) {
+        checked.criticalTo = targetCircle;
+        checked.criticalGiven = critical;
+      }
+    }
+
     switch (trigger) {
       case 'critical':
         target?.powerBonus += triggerPower;
         target?.criticalBonus += 1;
+        gave(power: triggerPower, critical: 1);
         state.note(
           'Critical trigger: +$triggerPower power and +1 critical.',
           by: side,
         );
       case 'draw':
         target?.powerBonus += triggerPower;
+        gave(power: triggerPower);
         _draw(side);
         state.note('Draw trigger: +$triggerPower power and a card.', by: side);
       case 'front':
@@ -1279,6 +1339,7 @@ class PlaytestEngine {
         state.note('Front trigger: +$triggerPower to the front row.', by: side);
       case 'heal':
         target?.powerBonus += triggerPower;
+        gave(power: triggerPower);
         // Heal only works while you are not ahead on damage.
         final foe = side == state.you ? state.opponent : state.you;
         if (side.damageCount >= foe.damageCount && side.damage.isNotEmpty) {
@@ -1292,6 +1353,7 @@ class PlaytestEngine {
         }
       case 'stand':
         target?.powerBonus += triggerPower;
+        gave(power: triggerPower);
         final rested = side.units.where((u) => u.rested).toList();
         if (rested.isNotEmpty) rested.first.rested = false;
         state.note(
@@ -1300,6 +1362,7 @@ class PlaytestEngine {
         );
       case 'over':
         target?.powerBonus += overTriggerPower;
+        gave(power: overTriggerPower);
         state.note(
           'Over trigger: +$overTriggerPower power. Read the card for the rest.',
           by: side,

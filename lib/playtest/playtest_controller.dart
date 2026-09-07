@@ -417,6 +417,17 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  /// Hands a checked trigger's power or critical to a different unit.
+  void moveTriggerGift(
+    PlaytestSide side,
+    CheckedCard checked,
+    Circle to, {
+    required bool power,
+  }) {
+    engine.moveTriggerGift(side, checked, to, power: power);
+    _sync();
+  }
+
   void grantBoost(PlaytestSide side, Circle circle, {required bool granted}) {
     engine.grantBoost(side, circle, granted: granted);
     _sync();

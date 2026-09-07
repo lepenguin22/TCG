@@ -1913,7 +1913,7 @@ class _Middle extends StatelessWidget {
           ],
           if (checks.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _TriggerZone(checks: checks),
+            _TriggerZone(game: game, checks: checks),
           ],
         ],
       ),
@@ -1952,8 +1952,9 @@ class _GuardianZone extends StatelessWidget {
 /// The trigger zone: every card this battle has turned face up, drive checks
 /// and damage checks alike, in the order they were checked.
 class _TriggerZone extends StatelessWidget {
-  const _TriggerZone({required this.checks});
+  const _TriggerZone({required this.game, required this.checks});
 
+  final PlaytestController game;
   final List<CheckedCard> checks;
 
   @override
@@ -1973,11 +1974,153 @@ class _TriggerZone extends StatelessWidget {
             cornerColour: check.kind == CheckKind.drive
                 ? AppColors.accent
                 : AppColors.danger,
-            tooltip: '${check.sideName} · ${check.kind.label}',
+            tooltip: check.isSplittable
+                ? '${check.sideName} · ${check.kind.label} — '
+                      'tap to choose who gets it'
+                : '${check.sideName} · ${check.kind.label}',
+            // A trigger's power and critical are the checking player's to
+            // place, and they do not have to go to the same unit.
+            onTap: !check.isSplittable
+                ? null
+                : () {
+                    final side = _sideNamed(game, check.sideName);
+                    if (side == null || !game.controls(side)) return;
+                    _showTriggerSplitSheet(context, game, side, check);
+                  },
           ),
       ],
     );
   }
+}
+
+PlaytestSide? _sideNamed(PlaytestController game, String name) {
+  if (game.you.name == name) return game.you;
+  if (game.cpu.name == name) return game.cpu;
+  return null;
+}
+
+/// Who a checked trigger's power and critical go to.
+///
+/// The board hands them both to the unit that is fighting, because that is
+/// right nearly every time. It is still a choice the game gives you, and the
+/// split -- the critical on the vanguard, the power on a rear-guard about to
+/// swing -- is the whole point of a good many attacks.
+void _showTriggerSplitSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+  CheckedCard check,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (_, scrollController) => ListenableBuilder(
+          listenable: game,
+          builder: (_, _) {
+            Widget targets({required bool power}) {
+              final held = power ? check.powerTo : check.criticalTo;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final entry in side.field.entries)
+                    if (entry.value.isActive)
+                      ListTile(
+                        key: ValueKey(
+                          'trigger-${power ? 'power' : 'critical'}-'
+                          '${entry.key.name}',
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          held == entry.key
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          size: 18,
+                          color: held == entry.key
+                              ? AppColors.accent
+                              : AppColors.textFaint,
+                        ),
+                        title: Text(
+                          entry.value.card.name,
+                          style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 14,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${entry.key.label} · ${entry.value.power} power'
+                          '${entry.value.critical == 1 ? '' : ' · ${entry.value.critical} critical'}',
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        onTap: () => game.moveTriggerGift(
+                          side,
+                          check,
+                          entry.key,
+                          power: power,
+                        ),
+                      ),
+                ],
+              );
+            }
+
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                SectionHeader(
+                  title: check.card.name,
+                  caption:
+                      '${check.card.trigger} trigger — its power and its '
+                      'critical can go to different units.',
+                ),
+                if (check.powerGiven > 0) ...[
+                  Text(
+                    'Power +${check.powerGiven}',
+                    style: const TextStyle(
+                      color: AppColors.textFaint,
+                      fontSize: 11,
+                      letterSpacing: 0.6,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  targets(power: true),
+                ],
+                if (check.criticalGiven > 0) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Critical +${check.criticalGiven}',
+                    style: const TextStyle(
+                      color: AppColors.textFaint,
+                      fontSize: 11,
+                      letterSpacing: 0.6,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  targets(power: false),
+                ],
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    ),
+  );
 }
 
 /// A labelled row of cards, scrolling sideways when there are many.
@@ -2057,6 +2200,7 @@ class _CheckTile extends StatelessWidget {
     this.corner,
     this.cornerColour,
     this.tooltip,
+    this.onTap,
   });
 
   final GameCard card;
@@ -2065,6 +2209,7 @@ class _CheckTile extends StatelessWidget {
   final String? corner;
   final Color? cornerColour;
   final String? tooltip;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2102,7 +2247,10 @@ class _CheckTile extends StatelessWidget {
       ],
     );
     final label = tooltip;
-    return label == null ? tile : Tooltip(message: label, child: tile);
+    final wrapped = onTap == null
+        ? tile
+        : GestureDetector(onTap: onTap, child: tile);
+    return label == null ? wrapped : Tooltip(message: label, child: wrapped);
   }
 }
 

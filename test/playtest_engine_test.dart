@@ -1439,6 +1439,99 @@ void main() {
       expect(you.vanguard!.critical, 2, reason: 'one more than the base');
     });
 
+    test('a trigger says where its power and critical went', () async {
+      final (store, deck) = await deckOfTriggers('critical');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      engine.state.phase = PlaytestPhase.battle;
+      engine.state.turn = 2;
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheckOne();
+
+      final checked = engine.state.triggerZone.single;
+      expect(checked.powerTo, Circle.vanguard);
+      expect(checked.powerGiven, PlaytestEngine.triggerPower);
+      expect(checked.criticalTo, Circle.vanguard);
+      expect(checked.criticalGiven, 1);
+      expect(checked.isSplittable, isTrue);
+    });
+
+    test('a critical trigger can be split across two units', () async {
+      final (store, deck) = await deckOfTriggers('critical');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      // A rear-guard to hand the power to.
+      final booster = you.hand.firstWhere((c) => c.grade <= 1 && c.isUnit);
+      engine.call(you, booster, Circle.frontLeft);
+      engine.state.phase = PlaytestPhase.battle;
+      engine.state.turn = 2;
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheckOne();
+      final checked = engine.state.triggerZone.single;
+      final vanguard = you.vanguard!;
+      final rear = you.field[Circle.frontLeft]!;
+      expect(vanguard.powerBonus, PlaytestEngine.triggerPower);
+      expect(vanguard.critical, 2);
+
+      // The power goes to the rear-guard; the critical stays where it is.
+      engine.moveTriggerGift(you, checked, Circle.frontLeft, power: true);
+
+      expect(rear.powerBonus, PlaytestEngine.triggerPower);
+      expect(vanguard.powerBonus, 0, reason: 'taken back off it');
+      expect(vanguard.critical, 2, reason: 'the critical did not move');
+      expect(checked.powerTo, Circle.frontLeft);
+
+      // And it can be moved again rather than being a one-way door.
+      engine.moveTriggerGift(you, checked, Circle.vanguard, power: true);
+      expect(vanguard.powerBonus, PlaytestEngine.triggerPower);
+      expect(rear.powerBonus, 0);
+    });
+
+    test('a critical can be moved on its own', () async {
+      final (store, deck) = await deckOfTriggers('critical');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final booster = you.hand.firstWhere((c) => c.grade <= 1 && c.isUnit);
+      engine.call(you, booster, Circle.frontLeft);
+      engine.state.phase = PlaytestPhase.battle;
+      engine.state.turn = 2;
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheckOne();
+      final checked = engine.state.triggerZone.single;
+
+      engine.moveTriggerGift(you, checked, Circle.frontLeft, power: false);
+
+      expect(you.field[Circle.frontLeft]!.critical, 2);
+      expect(you.vanguard!.critical, 1, reason: 'back to its own');
+      expect(
+        you.vanguard!.powerBonus,
+        PlaytestEngine.triggerPower,
+        reason: 'the power stayed',
+      );
+    });
+
+    test('a trigger cannot be handed to an empty circle', () async {
+      final (store, deck) = await deckOfTriggers('critical');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.state.phase = PlaytestPhase.battle;
+      engine.state.turn = 2;
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheckOne();
+      final checked = engine.state.triggerZone.single;
+
+      engine.moveTriggerGift(you, checked, Circle.backRight, power: true);
+
+      expect(checked.powerTo, Circle.vanguard, reason: 'nowhere to move it');
+      expect(you.vanguard!.powerBonus, PlaytestEngine.triggerPower);
+    });
+
     test('a draw trigger draws a card', () async {
       final (store, deck) = await deckOfTriggers('draw');
       final engine = engineFor(store, deck);

@@ -565,7 +565,15 @@ way they do in the game.
 The **trigger zone** holds everything the battle turned face up, drive checks
 and damage checks together, in the order they were checked and marked for
 which was which and whose it was — your drive and their damage come off the
-same attack. It stays up after the attack resolves, deliberately: the damage
+same attack.
+
+**Tap a checked trigger to say who gets what.** The board hands a trigger to
+the unit that is fighting, which is right nearly every time — but the game
+does not make that decision for you, and the split is often the point: the
+critical on the vanguard and the ten thousand power on a rear-guard about to
+swing. The sheet lists your units under *Power* and again under *Critical*,
+and picking one takes what was given off the unit that had it and hands it
+over. It can be moved again, so a first guess costs nothing. It stays up after the attack resolves, deliberately: the damage
 is checked *during* the resolve, and clearing it then would take the card away
 before it could be read. The next attack clears it.
 

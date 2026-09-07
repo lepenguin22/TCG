@@ -352,7 +352,7 @@ enum CheckKind {
 /// before it goes to hand or to damage, which is the moment a trigger is read
 /// off it. The board keeps that moment rather than only its consequences.
 class CheckedCard {
-  const CheckedCard(this.card, this.kind, this.sideName);
+  CheckedCard(this.card, this.kind, this.sideName);
 
   final GameCard card;
   final CheckKind kind;
@@ -360,6 +360,21 @@ class CheckedCard {
   /// Whose check it was: your drive and their damage come off the same
   /// attack, so the two have to be told apart.
   final String sideName;
+
+  /// Where this trigger's gift went, and how much of it there was.
+  ///
+  /// The board hands a trigger to the unit that is fighting, which is the
+  /// common case. The game lets you split it -- the critical on the vanguard
+  /// and the power on a rear-guard about to swing is the classic -- so what
+  /// was given is remembered here, and can be handed to another unit
+  /// afterwards without guessing at the numbers.
+  Circle? powerTo;
+  int powerGiven = 0;
+  Circle? criticalTo;
+  int criticalGiven = 0;
+
+  /// Whether there is anything on this card to hand around.
+  bool get isSplittable => powerGiven > 0 || criticalGiven > 0;
 }
 
 /// An attack that has been declared and is waiting to be guarded and resolved.

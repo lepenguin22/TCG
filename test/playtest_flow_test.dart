@@ -1175,6 +1175,95 @@ void main() {
       expect(find.text('Nothing checked'), findsNothing);
     });
 
+    testWidgets('a checked trigger can be handed to another unit', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      // Nobody attacks on turn one, so the CPU takes it.
+      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+      await pastTheFirstTurn(tester);
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      // A rear-guard to hand a trigger to, then attack.
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      // A critical trigger put on top, so the check is the one being tested
+      // rather than whatever the shuffle happened to leave there.
+      final trigger = game.you.deck.lastWhere((c) => c.trigger == 'critical');
+      game.you.deck.remove(trigger);
+      game.you.deck.add(trigger);
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(FilledButton),
+          matching: find.textContaining('Drive check'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final checked = game.triggerZone.last;
+      expect(checked.card, trigger);
+      expect(checked.isSplittable, isTrue);
+
+      final vanguard = game.you.vanguard!;
+      final rear = game.you.field[Circle.frontLeft]!;
+      expect(vanguard.powerBonus, greaterThan(0));
+
+      // Tapping the checked card offers who gets what.
+      await tapOnBoard(tester, find.text('critical').last);
+      expect(find.textContaining('trigger —'), findsOneWidget);
+      expect(find.textContaining('Power +'), findsOneWidget);
+
+      // The power list and the critical list both name every unit, so the
+      // row is picked by which list it is in.
+      await tester.tap(find.byKey(const ValueKey('trigger-power-frontLeft')));
+      await tester.pumpAndSettle();
+
+      expect(rear.powerBonus, greaterThan(0));
+      expect(vanguard.powerBonus, 0, reason: 'it moved rather than doubled');
+      expect(
+        vanguard.critical,
+        2,
+        reason: 'the critical stayed on the vanguard',
+      );
+
+      // And the critical can go its own way. Its list is below the power's,
+      // so it takes a scroll to reach.
+      await scrollSheetTo(
+        tester,
+        find.byKey(const ValueKey('trigger-critical-frontLeft')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('trigger-critical-frontLeft')),
+      );
+      await tester.pumpAndSettle();
+      expect(rear.critical, 2);
+      expect(vanguard.critical, 1);
+    });
+
     testWidgets('a damage check stays visible after the attack', (
       tester,
     ) async {
