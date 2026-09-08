@@ -110,7 +110,15 @@ def fetch(url: str, attempts: int = 3, missing_ok: bool = False) -> str | None:
                 return raw.decode("utf-8", "replace")
         except urllib.error.HTTPError as error:
             if error.code == 404 and missing_ok:
-                return None
+                # Not necessarily an answer: the site hands out the odd 404
+                # for a page it serves happily on the next try, which is why
+                # a card read by number could come back "no such card" while
+                # the same number read through its set was fine. Only a 404
+                # that survives every attempt is taken as one.
+                if attempt == attempts - 1:
+                    return None
+                time.sleep(2 * (attempt + 1))
+                continue
             if attempt == attempts - 1:
                 raise RuntimeError(f"could not read {url}: {error}") from error
             time.sleep(2 * (attempt + 1))
