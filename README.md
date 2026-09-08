@@ -364,7 +364,16 @@ properly, and for **+10000 power** — the number the V-series rules revision
 moved them to, which every format the app supports is played under, whatever
 an old printing's own text says. Critical adds that power and a critical, draw
 draws, front spreads it across the front row rather than onto one unit, heal
-heals when you are not ahead on damage, stand stands a unit. An over trigger is
+heals when you are not ahead on damage, stand stands a unit.
+
+A heal checked **as damage** is settled before that damage lands. The card
+being checked is still face up in front of you, not in the damage zone, when
+the trigger resolves — so it counts towards neither side of *"equal to or
+greater than your opponent's"*, and it is never the card healed away. Two
+damage against their three stays a heal that does nothing, and the card that
+goes to the drop is one of the damage already taken. A heal on what would be
+the sixth still saves the game: it heals one of the five before the sixth
+arrives. An over trigger is
 its own number, +100000, and the rest of what it does is the card's text. It is
 also **removed from the game** as it resolves: from a drive check it does not
 join the hand, and from a damage check it is not taken as damage, so a deck

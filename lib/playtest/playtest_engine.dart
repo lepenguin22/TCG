@@ -1263,23 +1263,27 @@ class PlaytestEngine {
       return;
     }
     final card = side.deck.removeLast();
-    // The same for a damage check, which is a good deal better than a card in
-    // hand: the card removed is the damage, so the damage is not taken.
     final over = card.trigger == 'over';
+    state.triggerZone.add(CheckedCard(card, CheckKind.damage, side.name));
+
+    // The trigger resolves while the checked card is still face up in front
+    // of the player rather than in the damage zone. Two rules turn on that:
+    // a heal counts the damage already taken and not this one, and the card
+    // it heals is one of those -- never the card being checked.
+    _applyTrigger(side, card, side.vanguard);
+
+    // Then it lands. An over trigger is removed from the game as it
+    // resolves: the card removed is the damage, so the damage is not taken.
     if (over) {
       side.removed.add(card);
     } else {
       side.damage.add(card);
     }
-    state.triggerZone.add(CheckedCard(card, CheckKind.damage, side.name));
     state.note(
       '${side.name} damage checks ${card.name}'
       '${over ? ', which is removed from the game rather than taken as damage' : ' (${side.damageCount} damage)'}.',
       by: side,
     );
-    // A trigger found in damage helps the player who took the hit, and its
-    // power goes to their vanguard since they are not attacking.
-    _applyTrigger(side, card, side.vanguard);
   }
 
   /// Applies a trigger's automatic half: the power, the critical, the heal.
@@ -1340,7 +1344,9 @@ class PlaytestEngine {
       case 'heal':
         target?.powerBonus += triggerPower;
         gave(power: triggerPower);
-        // Heal only works while you are not ahead on damage.
+        // Heal only works while you are not ahead on damage. On a damage
+        // check the card being checked is not in the damage zone yet, so it
+        // counts towards neither the comparison nor what can be healed.
         final foe = side == state.you ? state.opponent : state.you;
         if (side.damageCount >= foe.damageCount && side.damage.isNotEmpty) {
           side.drop.add(side.damage.removeLast());

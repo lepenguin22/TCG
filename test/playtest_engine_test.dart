@@ -1586,6 +1586,86 @@ void main() {
       expect(you.damageCount, 1, reason: 'one healed away');
     });
 
+    test('a heal on a damage check does not count the damage it is', () async {
+      final (store, deck) = await deckOfTriggers('heal');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+
+      // Two damage against their three: you are behind, so a heal has no
+      // claim -- and the card being checked is not in the damage zone yet to
+      // even the count up.
+      you.damage.addAll(you.deck.sublist(0, 2));
+      you.deck.removeRange(0, 2);
+      foe.damage.addAll(foe.deck.sublist(0, 3));
+      foe.deck.removeRange(0, 3);
+
+      engine.dealDamage(you);
+
+      expect(
+        you.damageCount,
+        3,
+        reason: 'the damage was taken: two and the one just checked',
+      );
+      expect(
+        engine.state.log.any((e) => e.text.contains('a damage healed')),
+        isFalse,
+        reason: 'behind on damage when the trigger resolved',
+      );
+    });
+
+    test('a heal on a damage check never heals the card it checked', () async {
+      final (store, deck) = await deckOfTriggers('heal');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+
+      // Level on damage, so the heal does work.
+      you.damage.addAll(you.deck.sublist(0, 2));
+      you.deck.removeRange(0, 2);
+      foe.damage.addAll(foe.deck.sublist(0, 2));
+      foe.deck.removeRange(0, 2);
+      final taken = [...you.damage];
+      final checked = you.deck.last;
+
+      engine.dealDamage(you);
+
+      expect(you.damageCount, 2, reason: 'one healed, this one taken');
+      expect(
+        you.damage.contains(checked),
+        isTrue,
+        reason: 'the checked card is damage, not the card healed away',
+      );
+      expect(
+        taken.where(you.drop.contains).length,
+        1,
+        reason: 'one of the damage already taken went to the drop',
+      );
+      expect(you.drop.contains(checked), isFalse);
+    });
+
+    test('a heal on the last damage still saves the game', () async {
+      final (store, deck) = await deckOfTriggers('heal');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+
+      // Five damage each: the sixth would end it, and the heal resolving
+      // first is what stops that.
+      you.damage.addAll(you.deck.sublist(0, 5));
+      you.deck.removeRange(0, 5);
+      foe.damage.addAll(foe.deck.sublist(0, 5));
+      foe.deck.removeRange(0, 5);
+
+      engine.dealDamage(you);
+
+      expect(you.damageCount, 5);
+      expect(engine.state.isOver, isFalse, reason: 'healed below the six');
+    });
+
     test('a heal trigger does nothing while you are ahead', () async {
       final (store, deck) = await deckOfTriggers('heal');
       final engine = engineFor(store, deck);
