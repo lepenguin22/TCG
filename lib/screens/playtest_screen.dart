@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../games/card_catalog.dart';
 import '../games/game_definition.dart';
 import '../games/games.dart';
+import '../games/vanguard/vanguard_data.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../playtest/playtest_controller.dart';
@@ -516,6 +517,15 @@ class _ZoneRail extends StatelessWidget {
           highlight: side.crestInPlay,
           onTap: () => _showCrestSheet(context, game, side),
         ),
+        // Tokens are not in any deck and not on any pile: an ability makes
+        // one out of nothing. The button is always there, since a deck that
+        // wants one wants it on a turn the board cannot predict.
+        if (game.controls(side))
+          _Pile(
+            label: 'Tokens',
+            count: side.hand.where((c) => c.isToken).length,
+            onTap: () => _showTokenSheet(context, game, side),
+          ),
         // Cards removed from the game, which only an over trigger does. The
         // pile appears once there is something in it, since a game with none
         // does not need the space.
@@ -956,6 +966,66 @@ void _showDeckSheet(
                 _showDeckSearchSheet(context, game, side);
               },
             ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The tokens a game hands out, which are in no deck.
+///
+/// "Put a Persona Shield ticket into your hand" makes a card out of nothing,
+/// so there is nowhere on the board to take one from. This is that nowhere.
+void _showTokenSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              title: 'Tokens',
+              caption:
+                  'Not cards in any deck: an ability makes one and puts it '
+                  'into your hand. Take one when a card says to.',
+            ),
+            for (final token in vanguardTokens)
+              _SheetAction(
+                icon: Icons.confirmation_number_outlined,
+                label: token['name']!,
+                detail:
+                    'Grade ${token['grade']} · '
+                    '${token['shield']} shield — into hand.',
+                onTap: () {
+                  game.addToken(
+                    side,
+                    CardDefinition(
+                      id: 'token:${token['name']}',
+                      gameId: game.gameId,
+                      name: token['name']!,
+                      attributes: {
+                        for (final entry in token.entries)
+                          if (entry.key != 'name') entry.key: entry.value,
+                        'isToken': 'true',
+                      },
+                      createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+                      updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+                    ),
+                  );
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
           ],
         ),
       ),

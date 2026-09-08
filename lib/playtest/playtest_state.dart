@@ -69,6 +69,10 @@ class GameCard {
   /// Whether this is an order of any kind -- normal, blitz or set.
   bool get isOrder => cardType.startsWith('order');
 
+  /// Whether this card is a token: made by an ability rather than deckbuilt,
+  /// and gone from the game when it leaves play.
+  bool get isToken => card.attributes['isToken'] == 'true';
+
   /// A sentinel guards perfectly: it cancels the attack outright rather than
   /// adding shield, which is why it is worth a card off the top of the hand.
   bool get isSentinel => cardType == 'sentinel';

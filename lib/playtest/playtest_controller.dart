@@ -544,6 +544,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void addToken(PlaytestSide side, CardDefinition card) {
+    engine.addToken(side, card);
+    _sync();
+  }
+
   void removeCrest(PlaytestSide side, GameCard crest) {
     engine.removeCrest(side, crest);
     _sync();

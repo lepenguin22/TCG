@@ -868,6 +868,70 @@ void main() {
       expect(attack.driveChecked, isTrue, reason: 'ready to resolve');
     });
 
+    test('a token is made out of nothing and lands in hand', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, _) = readyGame(store, deck);
+      final hand = you.hand.length;
+      final deckSize = you.deck.length;
+
+      engine.addToken(
+        you,
+        CardDefinition(
+          id: 'token:Persona Shield ticket',
+          gameId: 'vanguard',
+          name: 'Persona Shield ticket',
+          attributes: {
+            'grade': '0',
+            'cardType': 'order-blitz',
+            'shield': '15000',
+            'isToken': 'true',
+          },
+          createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        ),
+      );
+
+      expect(you.hand.length, hand + 1);
+      expect(you.deck.length, deckSize, reason: 'not off the top of anything');
+      final token = you.hand.last;
+      expect(token.name, 'Persona Shield ticket');
+      expect(token.isToken, isTrue);
+      expect(token.canGuard, isTrue, reason: 'it is a shield');
+      expect(token.shield, 15000);
+    });
+
+    test('a token guards like any other shield', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = readyGame(store, deck);
+      engine.addToken(
+        foe,
+        CardDefinition(
+          id: 'token:Persona Shield ticket',
+          gameId: 'vanguard',
+          name: 'Persona Shield ticket',
+          attributes: {
+            'grade': '0',
+            'cardType': 'order-blitz',
+            'shield': '15000',
+            'isToken': 'true',
+          },
+          createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        ),
+      );
+      final token = foe.hand.last;
+
+      final attack = engine.declareAttack(
+        from: Circle.vanguard,
+        to: Circle.vanguard,
+      );
+      final before = attack.defence;
+      engine.addGuardian(token);
+
+      expect(attack.defence, before + 15000);
+      expect(foe.hand.contains(token), isFalse, reason: 'it was thrown in');
+    });
+
     test('a grade 2 in the back row cannot boost', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);

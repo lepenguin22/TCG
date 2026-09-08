@@ -2165,6 +2165,35 @@ void main() {
       expect(find.text('Leave the game?'), findsNothing);
     });
 
+    testWidgets('a token can be taken into hand from the board', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      final hand = game.you.hand.length;
+
+      await tapOnBoard(tester, find.text('Tokens'));
+      expect(find.text('Persona Shield ticket'), findsOneWidget);
+      expect(find.textContaining('15000 shield'), findsWidgets);
+
+      await tester.tap(find.text('Persona Shield ticket'));
+      await tester.pumpAndSettle();
+
+      expect(game.you.hand.length, hand + 1);
+      final token = game.you.hand.last;
+      expect(token.name, 'Persona Shield ticket');
+      expect(token.canGuard, isTrue);
+      // And the pile counts what is in hand.
+      expect(find.text('Tokens'), findsOneWidget);
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

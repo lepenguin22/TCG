@@ -632,6 +632,14 @@ come into it, so they are on the board and tappable rather than left as numbers:
   that name other cards: *"remove two cards with the same card name as this
   card from drop"* is two Removes and one Activate. Which cards can do any of
   this is on the card, so the board offers it and you read the text.
+- **Tokens** is where the cards that are in no deck come from: *"put a Persona
+  Shield ticket into your hand"* makes a card out of nothing, so there is
+  nowhere on the board to take one from and this is that nowhere. It offers
+  the **Persona Shield ticket** and the **Quick Shield ticket**, each with its
+  shield shown, and puts one straight into hand where it guards like any other
+  shield. Neither is in the card database — the official list and the
+  community mirror carry no tickets at all, since they are not deck cards —
+  so they are described in the app instead.
 - **Removed** only appears once something is out of the game — an over trigger
   that resolved, a card used or spent from the drop. It opens read-only: the
   cards are there to be read, and nothing comes back from it.
