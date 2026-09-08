@@ -180,6 +180,29 @@ bool _isStrideCrest(Map<String, dynamic> raw) =>
     (raw['effect'] as String? ?? '').contains('You can perform [Stride]');
 
 /// Sets read from the official card list, which the mirror does not have.
+/// Stats the official card list gets wrong, keyed by the number of the
+/// printing they are wrong on.
+///
+/// Bushiroad's own pages carry the odd bad stat -- a whole run of DZ-BT15
+/// printings gives a power the card does not have, while the alternate-art
+/// printing of the same card in the same set gives the right one -- and no
+/// amount of re-reading the site fixes that. Each entry says where the right
+/// value came from; see data/cardlist/errata.json.
+Future<Map<String, Map<String, Object?>>> _readErrata() async {
+  final file = File('data/cardlist/errata.json');
+  if (!file.existsSync()) return const {};
+  final decoded = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+  final cards = decoded['cards'] as Map<String, dynamic>? ?? const {};
+  return {
+    for (final entry in cards.entries)
+      entry.key.toUpperCase(): {
+        for (final field in (entry.value as Map<String, dynamic>).entries)
+          // The note saying where the value came from is for the reader.
+          if (field.key != 'why') field.key: field.value,
+      },
+  };
+}
+
 Future<List<({String name, List<dynamic> cards})>> _readExtraSets() async {
   final file = File('data/cardlist/extra_sets.json');
   if (!file.existsSync()) return const [];
@@ -321,6 +344,8 @@ void main() async {
   // read from the official card list by tool/scrape_cardlist.py and committed
   // here. Both are read; the mirror is a fixed record of everything older.
   final extra = await _readExtraSets();
+  final errata = await _readErrata();
+  final corrected = <String>{};
   final sources = <({String name, List<dynamic> cards})>[
     for (final set in sets)
       if (set['cardsUrl'] != null)
@@ -352,6 +377,13 @@ void main() async {
       }
 
       final number = raw['number'] as String? ?? '';
+      // Before anything is read off the printing: what the card really says
+      // beats what the source says about it.
+      final fix = errata[number.toUpperCase()];
+      if (fix != null) {
+        raw.addAll(fix);
+        corrected.add(number.toUpperCase());
+      }
       final source = (raw['clan'] as String? ?? '').trim();
       final nation = _nations[source];
       final series = _seriesOf(
@@ -674,5 +706,17 @@ void main() async {
     ..writeln('$withTrigger trigger units know which trigger they are')
     ..writeln('$withAlternates carry the numbers of their other printings')
     ..writeln('$withAlternateImages of those also carry a differing image')
+    ..writeln('${corrected.length} printings corrected from the errata')
     ..writeln('${(await file.length() / 1024 / 1024).toStringAsFixed(2)} MB');
+
+  // An errata entry that corrects nothing is a number that has changed or was
+  // mistyped, and it would sit there looking like a fix that is in place.
+  final stale = errata.keys.where((n) => !corrected.contains(n)).toList()
+    ..sort();
+  if (stale.isNotEmpty) {
+    stderr.writeln(
+      'these errata entries match no printing: ${stale.join(', ')}',
+    );
+    exit(1);
+  }
 }

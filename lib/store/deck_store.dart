@@ -31,8 +31,12 @@ const _backfillKey = 'tcgdecks.v1.backfill';
 /// printing, or one carrying its rarity. Version 5 separates the D-format
 /// G units whose power is printed "15000+": the plus made the builder read
 /// them as printings it had misread, so each was folded into an older card of
-/// the same name and carried that card's rules text and artwork.
-const cardBackfillVersion = 5;
+/// the same name and carried that card's rules text and artwork. Version 6
+/// carries the corrected stats: the official card list prints a power the
+/// card has not got on a run of DZ-BT15 printings, and a saved card kept the
+/// wrong one until power and shield were counted as the printing's rather
+/// than the user's.
+const cardBackfillVersion = 6;
 
 /// How many decks and cards an import brought in.
 class ImportResult {
@@ -348,6 +352,11 @@ class DeckStore extends ChangeNotifier {
           'series': match.attributes['series'],
           'possibleSeries': match.attributes['possibleSeries'],
           'effect': match.attributes['effect'],
+          // Printed on the card, like its abilities: a power the database
+          // once had wrong is not something the user chose, so a corrected
+          // one replaces it rather than losing to it.
+          'power': match.attributes['power'],
+          'shield': match.attributes['shield'],
           // Which artwork follows from the printing the card names, not from
           // whichever printing the catalogue happens to show.
           'imageUrl': match.imageFor(card.attributes['cardNo']?.trim()),

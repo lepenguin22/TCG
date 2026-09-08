@@ -443,6 +443,43 @@ void main() {
     expect(card.attributes['notes'], 'my combo note', reason: 'yours is kept');
   });
 
+  test('a power the database had wrong is corrected', () async {
+    // The official card list prints 5000 for DZ-BT15/052EN, and the card
+    // reads 8000 -- so a deck built while the database believed the site was
+    // saved with the wrong power. That came from the database, not from the
+    // user, so the corrected value replaces it.
+    final store = DeckStore();
+    await store.load();
+    store.saveCard(
+      gameId: 'vanguard',
+      name: 'Demon Claw Star-vader, Lanthanum',
+      attributes: {
+        'cardNo': 'DZ-BT15/052EN',
+        'grade': '1',
+        'power': '5000',
+        'shield': '5000',
+        'notes': 'my combo note',
+      },
+    );
+
+    final catalog = CardCatalog()
+      ..seed(_asset, [
+        CatalogCard.fromJson({
+          'n': 'Demon Claw Star-vader, Lanthanum',
+          'no': 'DZ-BT15/052EN',
+          'g': 1,
+          'p': 8000,
+          's': 5000,
+          'sr': 'd',
+        }),
+      ]);
+    await backfillLibraryFromCatalog(store, catalog);
+
+    final card = store.cards.single;
+    expect(card.attributes['power'], '8000');
+    expect(card.attributes['notes'], 'my combo note', reason: 'yours is kept');
+  });
+
   test('a card matched only by name keeps the text it has', () async {
     // Several cards can share a name, so a card with no number of its own
     // could be any of them. Overwriting its abilities with a same-named

@@ -282,6 +282,73 @@ void main() {
       expect(folded, isEmpty, reason: folded.map((c) => c.name).join(', '));
     });
 
+    test('the stats the card list prints wrongly are corrected', () {
+      // Bushiroad's own pages give a power the card has not got on a run of
+      // DZ-BT15 printings -- 5000 on a 8000 power booster, a power at all on
+      // an order. Re-reading the site cannot fix that, so the corrections are
+      // kept in a file and applied when the catalogue is built; this is the
+      // check that they survived the build.
+      final errata = jsonDecode(
+        File('data/cardlist/errata.json').readAsStringSync(),
+      ) as Map<String, dynamic>;
+      final fixes = errata['cards'] as Map<String, dynamic>;
+      expect(fixes, isNotEmpty);
+      for (final fix in fixes.entries) {
+        final number = fix.key.toUpperCase();
+        final card = cards.firstWhere(
+          (c) => c.allNumbers.any((n) => n.toUpperCase() == number),
+          orElse: () => throw StateError('$number is in no card'),
+        );
+        final want = (fix.value as Map<String, dynamic>)['power'] as String;
+        expect(card.attributes['power'] ?? '', want, reason: number);
+      }
+    });
+
+    test('the powers a player read off their own cards are what the app '
+        'shows', () {
+      // Reported from the cards themselves, and the ones with no other
+      // printing in the set to check against.
+      const printed = {
+        'DZ-BT15/029EN': '8000',
+        'DZ-BT15/052EN': '8000',
+        'DZ-BT15/080EN': '10000',
+        'DZ-BT15/081EN': '10000',
+        'DZ-BT15/084EN': '8000',
+      };
+      for (final entry in printed.entries) {
+        final card = cards.firstWhere(
+          (c) => c.allNumbers.contains(entry.key),
+          orElse: () => throw StateError('${entry.key} is in no card'),
+        );
+        expect(card.attributes['power'], entry.value, reason: entry.key);
+      }
+    });
+
+    test('two printings of one DZ-BT15 card agree on its power', () {
+      // The alternate-art printing of a card in the same set is the same
+      // card, so a disagreement is one of the two pages being wrong. This is
+      // how the wrong ones were found in the first place.
+      final inSet = cards.where(
+        (c) => c.allNumbers.any((n) => n.startsWith('DZ-BT15/')),
+      );
+      final byName = <String, List<CatalogCard>>{};
+      for (final card in inSet) {
+        byName.putIfAbsent(card.name, () => []).add(card);
+      }
+      for (final entry in byName.entries) {
+        final powers = entry.value
+            .map((c) => c.attributes['power'] ?? '')
+            .toSet();
+        expect(
+          powers,
+          hasLength(1),
+          reason:
+              '${entry.key}: '
+              '${entry.value.map((c) => '${c.cardNo} ${c.attributes['power']}')}',
+        );
+      }
+    });
+
     test('a trigger icon is only ever on a trigger unit', () {
       final marked = cards.where((c) => c.attributes['trigger'] != null);
       expect(marked, isNotEmpty);

@@ -1,0 +1,161 @@
+{
+  "note": "Stats the official card list gets wrong, and what the card really says. Applied by tool/build_catalog.dart to whichever printing the number names, so a rebuild does not undo them. Each entry says where the right value comes from; nothing is corrected on a hunch.",
+  "cards": {
+    "DZ-BT15/023EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 13000; DZ-BT15/FR04EN, DZ-BT15/SR07EN are the same card in the same set, and print no power, which is what an order has"
+    },
+    "DZ-BT15/024EN": {
+      "power": "13000",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR09EN, DZ-BT15/SR13EN are the same card in the same set, and print 13000"
+    },
+    "DZ-BT15/025EN": {
+      "power": "13000",
+      "why": "the site's page for this printing prints 8000; DZ-BT15/FR10EN, DZ-BT15/SR14EN are the same card in the same set, and print 13000"
+    },
+    "DZ-BT15/026EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 8000; DZ-BT15/FR11EN, DZ-BT15/SR15EN are the same card in the same set, and print 10000"
+    },
+    "DZ-BT15/027EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR12EN, DZ-BT15/SR16EN are the same card in the same set, and print no power, which is what an order has"
+    },
+    "DZ-BT15/029EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR19EN, DZ-BT15/SR21EN are the same card in the same set, and print 8000"
+    },
+    "DZ-BT15/030EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR20EN, DZ-BT15/SR22EN are the same card in the same set, and print 8000"
+    },
+    "DZ-BT15/031EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR21EN, DZ-BT15/SR23EN are the same card in the same set, and print no power, which is what an order has"
+    },
+    "DZ-BT15/033EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 8000; DZ-BT15/FR27EN, DZ-BT15/SR29EN are the same card in the same set, and print 10000"
+    },
+    "DZ-BT15/034EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 0; DZ-BT15/15thSP02EN, DZ-BT15/FR28EN, DZ-BT15/SR30EN are the same card in the same set, and print 10000"
+    },
+    "DZ-BT15/035EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR29EN, DZ-BT15/SR31EN are the same card in the same set, and print 8000"
+    },
+    "DZ-BT15/036EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR30EN, DZ-BT15/SR32EN are the same card in the same set, and print no power, which is what an order has"
+    },
+    "DZ-BT15/037EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 8000; DZ-BT15/FR35EN, DZ-BT15/SR37EN are the same card in the same set, and print 10000"
+    },
+    "DZ-BT15/038EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 0; DZ-BT15/FR36EN, DZ-BT15/SR38EN are the same card in the same set, and print 10000"
+    },
+    "DZ-BT15/039EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR37EN, DZ-BT15/SR39EN are the same card in the same set, and print 8000"
+    },
+    "DZ-BT15/040EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 8000; DZ-BT15/FR38EN, DZ-BT15/SR40EN are the same card in the same set, and print no power, which is what an order has"
+    },
+    "DZ-BT15/041EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 0; DZ-BT15/FR05EN is the same card in the same set and prints 10000"
+    },
+    "DZ-BT15/042EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 10000; DZ-BT15/FR06EN is the same card in the same set and prints 8000"
+    },
+    "DZ-BT15/044EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 0; DZ-BT15/FR08EN is the same card in the same set and prints 8000"
+    },
+    "DZ-BT15/046EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 8000; DZ-BT15/FR14EN is the same card in the same set and prints 10000"
+    },
+    "DZ-BT15/047EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 0; DZ-BT15/FR15EN is the same card in the same set and prints 8000"
+    },
+    "DZ-BT15/048EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 0; DZ-BT15/FR16EN is the same card in the same set and prints 8000"
+    },
+    "DZ-BT15/049EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR17EN is the same card in the same set and prints no power, which is what an order has"
+    },
+    "DZ-BT15/050EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR22EN is the same card in the same set and prints 10000"
+    },
+    "DZ-BT15/051EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR23EN is the same card in the same set and prints 8000"
+    },
+    "DZ-BT15/052EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR24EN is the same card in the same set and prints 8000"
+    },
+    "DZ-BT15/053EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR25EN is the same card in the same set and prints no power, which is what an order has"
+    },
+    "DZ-BT15/054EN": {
+      "power": "13000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR31EN is the same card in the same set and prints 13000"
+    },
+    "DZ-BT15/055EN": {
+      "power": "13000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR32EN is the same card in the same set and prints 13000"
+    },
+    "DZ-BT15/056EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR33EN is the same card in the same set and prints 10000"
+    },
+    "DZ-BT15/057EN": {
+      "power": "6000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR34EN is the same card in the same set and prints 6000"
+    },
+    "DZ-BT15/058EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR39EN is the same card in the same set and prints 10000"
+    },
+    "DZ-BT15/059EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR40EN is the same card in the same set and prints 10000"
+    },
+    "DZ-BT15/060EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR41EN is the same card in the same set and prints 8000"
+    },
+    "DZ-BT15/061EN": {
+      "power": "",
+      "why": "the site's page for this printing prints 5000; DZ-BT15/FR42EN is the same card in the same set and prints no power, which is what an order has"
+    },
+    "DZ-BT15/080EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 6000; the card reads 10000, as does TD11/004EN, another printing of it"
+    },
+    "DZ-BT15/081EN": {
+      "power": "10000",
+      "why": "the site's page for this printing prints 13000; the card reads 10000, as does D-VS04/044EN, another printing of it"
+    },
+    "DZ-BT15/084EN": {
+      "power": "8000",
+      "why": "the site's page for this printing prints 6000; the card reads 8000, as does D-VS04/045EN, another printing of it"
+    },
+    "DZ-BT15/092EN": {
+      "power": "6000",
+      "why": "the site's page for this printing prints 13000; DZ-BT15/15thSP04EN is the same card in the same set and prints 6000"
+    }
+  }
+}
