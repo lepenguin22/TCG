@@ -130,7 +130,13 @@ List<ValidationIssue> _checkGZone({
   // deck could pick one up by accident.
   for (final item in [...ride, ...main, ...gZone]) {
     const notDeckCards = {'crest', 'token'};
-    if (notDeckCards.contains(item.card.attributes['cardType'])) {
+    // A ticket is filed under a real card type -- Persona Shield is a blitz
+    // order -- so the type does not give it away. Its own text does: "(This
+    // card is a ticket card, and cannot be put in a deck)".
+    final isTicket = (item.card.attributes['effect'] ?? '')
+        .toLowerCase()
+        .contains('is a ticket card');
+    if (notDeckCards.contains(item.card.attributes['cardType']) || isTicket) {
       issues.add(
         ValidationIssue.error(
           '"${item.card.name}" is put into play by an ability, not built into '

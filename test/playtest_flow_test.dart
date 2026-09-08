@@ -2165,10 +2165,25 @@ void main() {
       expect(find.text('Leave the game?'), findsNothing);
     });
 
-    testWidgets('a token can be taken into hand from the board', (
+    testWidgets('a ticket can be taken into hand from the board', (
       tester,
     ) async {
       final (store, deck) = await buildDeck();
+      // The ticket comes out of the card database in the app; a test has no
+      // catalog, so the library carries it here the way a saved card would.
+      store.saveCard(
+        gameId: 'vanguard',
+        name: 'Persona Shield',
+        attributes: {
+          'grade': '0',
+          'cardType': 'order-blitz',
+          'cardNo': 'DZ-BT15/T01EN',
+          'effect':
+              '(This card is a ticket card, and cannot be put in a deck)\n'
+              'Choose a unit being attacked, it gets [Power]+10000 until end '
+              'of that battle.',
+        },
+      );
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
@@ -2178,20 +2193,19 @@ void main() {
         listen: false,
       );
       final hand = game.you.hand.length;
+      final deckSize = game.you.deck.length;
 
-      await tapOnBoard(tester, find.text('Tokens'));
-      expect(find.text('Persona Shield ticket'), findsOneWidget);
-      expect(find.textContaining('15000 shield'), findsWidgets);
+      await tapOnBoard(tester, find.text('Tickets'));
+      expect(find.text('Persona Shield'), findsOneWidget);
+      expect(find.textContaining('DZ-BT15/T01EN'), findsOneWidget);
 
-      await tester.tap(find.text('Persona Shield ticket'));
+      await tester.tap(find.text('To hand'));
       await tester.pumpAndSettle();
 
       expect(game.you.hand.length, hand + 1);
-      final token = game.you.hand.last;
-      expect(token.name, 'Persona Shield ticket');
-      expect(token.canGuard, isTrue);
-      // And the pile counts what is in hand.
-      expect(find.text('Tokens'), findsOneWidget);
+      expect(game.you.hand.last.name, 'Persona Shield');
+      expect(game.you.hand.last.isTicket, isTrue);
+      expect(game.you.deck.length, deckSize, reason: 'the deck was untouched');
     });
 
     testWidgets('the ride phase offers a ride', (tester) async {

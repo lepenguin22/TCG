@@ -261,16 +261,15 @@ class PlaytestEngine {
     _enterCrestZone(side, GameCard(_nextInstanceId++, card));
   }
 
-  /// Puts a token into hand.
+  /// Puts a ticket into hand.
   ///
-  /// A token is not in anybody's deck: an ability makes one out of nothing --
+  /// A ticket is in nobody's deck: an ability makes one out of nothing --
   /// "put a Persona Shield ticket into your hand" -- so it comes from outside
   /// the game rather than off the top of something.
   void addToken(PlaytestSide side, CardDefinition card) {
-    final token = GameCard(_nextInstanceId++, card);
-    side.hand.add(token);
-    state.note('${side.name} takes a ${token.name} into hand.', by: side);
-    return;
+    final ticket = GameCard(_nextInstanceId++, card);
+    side.hand.add(ticket);
+    state.note('${side.name} takes a ${ticket.name} into hand.', by: side);
   }
 
   /// Takes the crest back out of the crest zone.

@@ -69,9 +69,10 @@ class GameCard {
   /// Whether this is an order of any kind -- normal, blitz or set.
   bool get isOrder => cardType.startsWith('order');
 
-  /// Whether this card is a token: made by an ability rather than deckbuilt,
-  /// and gone from the game when it leaves play.
-  bool get isToken => card.attributes['isToken'] == 'true';
+  /// Whether this is a ticket: a card an ability makes and hands you, which
+  /// says so itself -- "(This card is a ticket card, and cannot be put in a
+  /// deck)". It is in no deck, so it can only reach the board this way.
+  bool get isTicket => effect.toLowerCase().contains('is a ticket card');
 
   /// A sentinel guards perfectly: it cancels the attack outright rather than
   /// adding shield, which is why it is worth a card off the top of the hand.

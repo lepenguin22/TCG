@@ -29,42 +29,6 @@ const formatSeries = <String, Set<String>>{
   formatPremium: {'v', 'g', 'o', 'p'},
 };
 
-/// The tokens a game hands a player, which are not cards in anybody's deck.
-///
-/// The card list does not carry them -- neither the official one nor the
-/// community mirror has a single ticket in it -- because they are not deck
-/// cards: an ability makes one out of nothing and puts it into your hand. So
-/// they are described here, and the board hands them out.
-///
-/// Their shield is what matters at the table, since it is what a guard adds
-/// up to, so it is shown wherever one is offered rather than buried.
-const vanguardTokens = <Map<String, String>>[
-  {
-    'name': 'Persona Shield ticket',
-    'grade': '0',
-    'cardType': 'order-blitz',
-    'power': '0',
-    'shield': '15000',
-    'effect':
-        '[CONT](Hand):This card can be played from hand during your '
-        'opponent\'s guard step, and goes to the drop zone after it '
-        'guards.\n'
-        '(A token: it is not in the deck, and an ability puts it into hand)',
-  },
-  {
-    'name': 'Quick Shield ticket',
-    'grade': '0',
-    'cardType': 'order-blitz',
-    'power': '0',
-    'shield': '15000',
-    'effect':
-        '[CONT](Hand):This card can be played from hand during your '
-        'opponent\'s guard step, and goes to the drop zone after it '
-        'guards.\n'
-        '(A token: it is not in the deck, and an ability puts it into hand)',
-  },
-];
-
 const vanguardZones = <ZoneDefinition>[
   ZoneDefinition(
     id: zoneRide,

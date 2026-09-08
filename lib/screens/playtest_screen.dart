@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../games/card_catalog.dart';
 import '../games/game_definition.dart';
 import '../games/games.dart';
-import '../games/vanguard/vanguard_data.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../playtest/playtest_controller.dart';
@@ -517,13 +516,13 @@ class _ZoneRail extends StatelessWidget {
           highlight: side.crestInPlay,
           onTap: () => _showCrestSheet(context, game, side),
         ),
-        // Tokens are not in any deck and not on any pile: an ability makes
-        // one out of nothing. The button is always there, since a deck that
-        // wants one wants it on a turn the board cannot predict.
+        // Tickets are in no deck and on no pile: an ability makes one out of
+        // nothing. The button is always there, since a deck that wants one
+        // wants it on a turn the board cannot predict.
         if (game.controls(side))
           _Pile(
-            label: 'Tokens',
-            count: side.hand.where((c) => c.isToken).length,
+            label: 'Tickets',
+            count: side.hand.where((c) => c.isTicket).length,
             onTap: () => _showTokenSheet(context, game, side),
           ),
         // Cards removed from the game, which only an over trigger does. The
@@ -973,64 +972,139 @@ void _showDeckSheet(
   );
 }
 
-/// The tokens a game hands out, which are in no deck.
+/// The tickets a game hands out, which are in no deck.
 ///
 /// "Put a Persona Shield ticket into your hand" makes a card out of nothing,
-/// so there is nowhere on the board to take one from. This is that nowhere.
+/// so there is nowhere on the board to take one from. This is that nowhere,
+/// and the cards come from the database rather than from anything written
+/// here: a ticket says what it is on its own face -- "(This card is a ticket
+/// card, and cannot be put in a deck)" -- so a set that prints another is
+/// picked up without the app being taught about it.
 void _showTokenSheet(
   BuildContext context,
   PlaytestController game,
   PlaytestSide side,
 ) {
+  final definition = gameById(game.gameId);
+  final store = context.read<DeckStore>();
+  final fromLibrary = store.cards
+      .where((card) => card.gameId == definition.id && _isTicket(card))
+      .toList();
+  final options = _ticketOptions(context, definition);
+
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionHeader(
-              title: 'Tokens',
-              caption:
-                  'Not cards in any deck: an ability makes one and puts it '
-                  'into your hand. Take one when a card says to.',
-            ),
-            for (final token in vanguardTokens)
-              _SheetAction(
-                icon: Icons.confirmation_number_outlined,
-                label: token['name']!,
-                detail:
-                    'Grade ${token['grade']} · '
-                    '${token['shield']} shield — into hand.',
-                onTap: () {
-                  game.addToken(
-                    side,
-                    CardDefinition(
-                      id: 'token:${token['name']}',
-                      gameId: game.gameId,
-                      name: token['name']!,
-                      attributes: {
-                        for (final entry in token.entries)
-                          if (entry.key != 'name') entry.key: entry.value,
-                        'isToken': 'true',
-                      },
-                      createdAt: DateTime.fromMillisecondsSinceEpoch(0),
-                      updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (_, scrollController) => FutureBuilder<List<CatalogCard>>(
+          future: options,
+          builder: (builderContext, snapshot) {
+            final tickets = <CardDefinition>[
+              ...fromLibrary,
+              for (final entry in snapshot.data ?? const <CatalogCard>[])
+                if (!fromLibrary.any((c) => c.name == entry.name))
+                  CardDefinition(
+                    id: 'catalog:${entry.attributes['cardNo'] ?? entry.name}',
+                    gameId: definition.id,
+                    name: entry.name,
+                    attributes: entry.attributes,
+                    createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+                    updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+                  ),
+            ];
+
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                const SectionHeader(
+                  title: 'Tickets',
+                  caption:
+                      'Cards in no deck: an ability makes one and puts it '
+                      'into your hand. Take one when a card says to.',
+                ),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Text(
+                    'Reading the card database…',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                if (snapshot.connectionState != ConnectionState.waiting &&
+                    tickets.isEmpty)
+                  const Text(
+                    'The database knows no ticket cards.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                for (final ticket in tickets)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CardImage(
+                      url: ticket.attributes['imageUrl'],
+                      width: 32,
                     ),
-                  );
-                  Navigator.of(sheetContext).pop();
-                },
-              ),
-          ],
+                    title: Text(
+                      ticket.name,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      [
+                        ticket.attributes['cardNo'],
+                        if ((ticket.attributes['shield'] ?? '').isNotEmpty)
+                          '${ticket.attributes['shield']} shield',
+                      ].whereType<String>().join(' · '),
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    trailing: TextButton(
+                      onPressed: () {
+                        game.addToken(side, ticket);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('To hand'),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     ),
   );
+}
+
+/// A ticket says so on its own face, which is how one is told from a card
+/// that merely mentions tickets.
+bool _isTicket(CardDefinition card) => (card.attributes['effect'] ?? '')
+    .toLowerCase()
+    .contains('is a ticket card');
+
+/// The ticket cards the database knows, or none where it is not there to be
+/// read -- a test, or a build with no catalog.
+Future<List<CatalogCard>> _ticketOptions(
+  BuildContext context,
+  GameDefinition game,
+) async {
+  final asset = game.catalogAsset;
+  if (asset == null) return const [];
+  final catalog = context.read<CardCatalog?>();
+  if (catalog == null) return const [];
+  final cards = await catalog.load(asset);
+  return cards
+      .where(
+        (card) => (card.attributes['effect'] ?? '').toLowerCase().contains(
+          'is a ticket card',
+        ),
+      )
+      .toList();
 }
 
 /// The top few cards of the deck, in order, for the abilities that look at

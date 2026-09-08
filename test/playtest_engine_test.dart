@@ -868,23 +868,28 @@ void main() {
       expect(attack.driveChecked, isTrue, reason: 'ready to resolve');
     });
 
-    test('a token is made out of nothing and lands in hand', () async {
+    test('a ticket is made out of nothing and lands in hand', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, _) = readyGame(store, deck);
       final hand = you.hand.length;
       final deckSize = you.deck.length;
 
+      // The real card, as the database carries it: a blitz order with no
+      // shield of its own, which says on its face that it is a ticket.
       engine.addToken(
         you,
         CardDefinition(
-          id: 'token:Persona Shield ticket',
+          id: 'catalog:DZ-BT15/T01EN',
           gameId: 'vanguard',
-          name: 'Persona Shield ticket',
+          name: 'Persona Shield',
           attributes: {
             'grade': '0',
             'cardType': 'order-blitz',
-            'shield': '15000',
-            'isToken': 'true',
+            'cardNo': 'DZ-BT15/T01EN',
+            'effect':
+                '(This card is a ticket card, and cannot be put in a deck)\n'
+                'Choose a unit being attacked, it gets [Power]+10000 until '
+                'end of that battle.',
           },
           createdAt: DateTime.fromMillisecondsSinceEpoch(0),
           updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
@@ -893,43 +898,26 @@ void main() {
 
       expect(you.hand.length, hand + 1);
       expect(you.deck.length, deckSize, reason: 'not off the top of anything');
-      final token = you.hand.last;
-      expect(token.name, 'Persona Shield ticket');
-      expect(token.isToken, isTrue);
-      expect(token.canGuard, isTrue, reason: 'it is a shield');
-      expect(token.shield, 15000);
+      final ticket = you.hand.last;
+      expect(ticket.name, 'Persona Shield');
+      expect(ticket.isTicket, isTrue);
+      expect(ticket.isOrder, isTrue, reason: 'a blitz order, not a shield');
+      expect(
+        ticket.canGuard,
+        isFalse,
+        reason: 'it has no shield: it gives power to a unit being attacked',
+      );
+      expect(
+        engine.state.log.any((e) => e.text.contains('Persona Shield')),
+        isTrue,
+      );
     });
 
-    test('a token guards like any other shield', () async {
+    test('an ordinary card is not a ticket', () async {
       final (store, deck) = await buildDeck();
-      final (engine, you, foe) = readyGame(store, deck);
-      engine.addToken(
-        foe,
-        CardDefinition(
-          id: 'token:Persona Shield ticket',
-          gameId: 'vanguard',
-          name: 'Persona Shield ticket',
-          attributes: {
-            'grade': '0',
-            'cardType': 'order-blitz',
-            'shield': '15000',
-            'isToken': 'true',
-          },
-          createdAt: DateTime.fromMillisecondsSinceEpoch(0),
-          updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
-        ),
-      );
-      final token = foe.hand.last;
-
-      final attack = engine.declareAttack(
-        from: Circle.vanguard,
-        to: Circle.vanguard,
-      );
-      final before = attack.defence;
-      engine.addGuardian(token);
-
-      expect(attack.defence, before + 15000);
-      expect(foe.hand.contains(token), isFalse, reason: 'it was thrown in');
+      final (_, you, _) = readyGame(store, deck);
+      expect(you.hand.every((c) => c.isTicket), isFalse);
+      expect(you.hand.any((c) => c.isTicket), isFalse);
     });
 
     test('a grade 2 in the back row cannot boost', () async {

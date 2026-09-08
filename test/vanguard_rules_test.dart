@@ -241,6 +241,25 @@ void main() {
       );
     });
 
+    test('a ticket card cannot be in a deck either', () {
+      // A ticket is filed under a real card type -- Persona Shield is a blitz
+      // order -- so only its own text gives it away.
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 3 C').card = card('Persona Shield', {
+        'grade': '0',
+        'cardType': 'order-blitz',
+        'cardNo': 'DZ-BT15/T01EN',
+        'effect':
+            '(This card is a ticket card, and cannot be put in a deck)\n'
+            'Choose a unit being attacked, it gets [Power]+10000 until end '
+            'of that battle.',
+      });
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(contains('put into play by an ability')),
+      );
+    });
+
     test('over triggers are capped at one', () {
       final slots = legalStandardDeck();
       final crit = named(slots, 'Crit B')
