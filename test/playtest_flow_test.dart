@@ -856,7 +856,7 @@ void main() {
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
 
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -901,7 +901,7 @@ void main() {
 
       // Ride into grade 1 so there is something to call under, then move on
       // to the main phase.
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1100,7 +1100,7 @@ void main() {
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1313,7 +1313,7 @@ void main() {
 
       // Ride to grade 1 so something in the deck is callable, then go all
       // the way to the battle phase, which is when these abilities fire.
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1370,7 +1370,7 @@ void main() {
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1626,7 +1626,7 @@ void main() {
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1697,7 +1697,7 @@ void main() {
       );
 
       // Calling happens in the main phase, so ride first and move on.
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1785,7 +1785,7 @@ void main() {
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1934,7 +1934,7 @@ void main() {
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
       await tester.pumpAndSettle();
@@ -1977,7 +1977,7 @@ void main() {
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
 
-      await tester.tap(find.text('Ride'));
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('discard a card to ride it'),
@@ -1996,7 +1996,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // The ride happened and the discard is in the drop zone.
-      expect(find.text('Ride'), findsNothing, reason: 'ridden already');
+      expect(
+        find.widgetWithText(TextButton, 'Ride'),
+        findsNothing,
+        reason: 'ridden already',
+      );
       await tapOnBoard(tester, find.text('Drop').last);
       expect(find.textContaining('Drop zone (1)'), findsOneWidget);
     });
@@ -2208,14 +2212,122 @@ void main() {
       expect(game.you.deck.length, deckSize, reason: 'the deck was untouched');
     });
 
+    /// The colour a phase segment or a side frame is painted in.
+    Color colorOf(WidgetTester tester, Key key) {
+      final widget = tester.widget(find.byKey(key));
+      if (widget is Text) return widget.style!.color!;
+      final decoration =
+          (widget as AnimatedContainer).decoration! as BoxDecoration;
+      return (decoration.border! as Border).top.color;
+    }
+
+    testWidgets('the phase bar lights the phase being played', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+
+      // Every phase of the turn is on the bar, so the lit one reads as a
+      // place in the turn rather than a word on its own.
+      for (final phase in PlaytestPhase.values) {
+        final onBar =
+            phase != PlaytestPhase.mulligan && phase != PlaytestPhase.over;
+        expect(
+          find.byKey(ValueKey('phase-${phase.name}')),
+          onBar ? findsOneWidget : findsNothing,
+          reason: phase.label,
+        );
+      }
+
+      // The ride phase is where a turn starts, and it is the lit one: dark
+      // text on the phase's own colour, where the others are muted.
+      expect(
+        colorOf(tester, const ValueKey('phase-ride')),
+        AppColors.bg,
+        reason: 'the phase being played',
+      );
+      expect(
+        colorOf(tester, const ValueKey('phase-main')),
+        AppColors.textMuted,
+        reason: 'a phase still to come',
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Next'));
+      await tester.pumpAndSettle();
+
+      expect(colorOf(tester, const ValueKey('phase-main')), AppColors.bg);
+      expect(
+        colorOf(tester, const ValueKey('phase-ride')),
+        AppColors.textMuted,
+      );
+    });
+
+    testWidgets('the board is framed around whoever is playing', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+
+      // Player 1 has the turn, in the ride phase: their half carries that
+      // phase's colour, and the far half is left as a plain edge.
+      expect(
+        colorOf(tester, const ValueKey('frame-Player 1')),
+        phaseColor(PlaytestPhase.ride),
+      );
+      expect(
+        colorOf(tester, const ValueKey('frame-Player 2')),
+        AppColors.border,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('frame-Player 1')),
+          matching: find.text('Ride'),
+        ),
+        findsOneWidget,
+        reason: 'and says the phase beside the name',
+      );
+
+      // Into the battle phase, and the frame follows the phase.
+      await tester.tap(find.widgetWithText(FilledButton, 'Next'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Next'));
+      await tester.pumpAndSettle();
+      expect(
+        colorOf(tester, const ValueKey('frame-Player 1')),
+        phaseColor(PlaytestPhase.battle),
+      );
+
+      // And when the turn passes, so does the frame.
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      while (game.state.active.name == 'Player 1') {
+        await tester.tap(find.byType(FilledButton).last);
+        await tester.pumpAndSettle();
+      }
+      expect(
+        colorOf(tester, const ValueKey('frame-Player 2')),
+        phaseColor(game.state.phase),
+      );
+      expect(
+        colorOf(tester, const ValueKey('frame-Player 1')),
+        AppColors.border,
+      );
+    });
+
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();
 
-      expect(find.text('Ride'), findsOneWidget);
-      await tester.tap(find.text('Ride'));
+      expect(find.widgetWithText(TextButton, 'Ride'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
 
       // The sheet offers the grade 1 off the ride deck.

@@ -103,6 +103,11 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
                             : 'Opening hand'
                       : 'Turn ${game.state.turn} · ${game.state.active.name}',
                 ),
+                // The turn as a bar of phases, always on screen rather than
+                // scrolling away with the board.
+                bottom: game.stage == PlaytestStage.mulligan
+                    ? null
+                    : _PhaseBar(game: game),
                 actions: [
                   IconButton(
                     tooltip: 'Game log',
@@ -201,6 +206,160 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
           },
         ),
       ),
+    );
+  }
+}
+
+/// The colour a phase is shown in, on the phase bar and around the board of
+/// whoever is playing.
+///
+/// One colour per phase, so a glance at the board says where the turn is
+/// without reading anything. Colour is never the only cue: the phase bar
+/// names the phase as well, for a player who cannot tell two of these apart.
+Color phaseColor(PlaytestPhase phase) => switch (phase) {
+  PlaytestPhase.stand => const Color(0xFF6FA8DC),
+  PlaytestPhase.draw => const Color(0xFF4FC08D),
+  PlaytestPhase.ride => const Color(0xFF8C6BD1),
+  PlaytestPhase.main => const Color(0xFFF0C24B),
+  PlaytestPhase.battle => const Color(0xFFE4573D),
+  PlaytestPhase.end => const Color(0xFF9AA5B1),
+  PlaytestPhase.mulligan || PlaytestPhase.over => AppColors.textFaint,
+};
+
+/// The phases of a turn in order, as the bar shows them. The mulligan is not
+/// one of them -- it happens before the first turn starts -- and neither is
+/// the end of the game.
+const _turnPhases = [
+  PlaytestPhase.stand,
+  PlaytestPhase.draw,
+  PlaytestPhase.ride,
+  PlaytestPhase.main,
+  PlaytestPhase.battle,
+  PlaytestPhase.end,
+];
+
+/// The turn laid out as six segments, with the one being played lit up.
+///
+/// Equal segments rather than a row of chips: the bar has to fit a narrow
+/// phone, and one that scrolls could carry the lit segment off the edge --
+/// which is the one thing it is there to show.
+class _PhaseBar extends StatelessWidget implements PreferredSizeWidget {
+  const _PhaseBar({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(30);
+
+  @override
+  Widget build(BuildContext context) {
+    final phase = game.state.phase;
+    final current = _turnPhases.indexOf(phase);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          for (final (index, each) in _turnPhases.indexed)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: _PhaseSegment(
+                  phase: each,
+                  // Where the turn has got to: the phase being played is lit,
+                  // the ones already gone are dimmed rather than blank, so the
+                  // bar reads as a turn in progress and not as six buttons.
+                  state: each == phase
+                      ? _SegmentState.now
+                      : (current >= 0 && index < current)
+                      ? _SegmentState.done
+                      : _SegmentState.ahead,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _SegmentState { done, now, ahead }
+
+class _PhaseSegment extends StatelessWidget {
+  const _PhaseSegment({required this.phase, required this.state});
+
+  final PlaytestPhase phase;
+  final _SegmentState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = phaseColor(phase);
+    final lit = state == _SegmentState.now;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: lit
+            ? color
+            : state == _SegmentState.done
+            ? color.withValues(alpha: 0.18)
+            : AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            phase.label,
+            key: ValueKey('phase-${phase.name}'),
+            maxLines: 1,
+            style: TextStyle(
+              // Dark text on the lit segment: these colours are bright, and
+              // white on gold is not readable.
+              color: lit ? AppColors.bg : AppColors.textMuted,
+              fontSize: 11,
+              fontWeight: lit ? FontWeight.w700 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One player's half of the board, framed while it is their turn.
+///
+/// The frame is the phase's colour, so whose turn it is and what part of it
+/// they are in are the same glance.
+class _SideFrame extends StatelessWidget {
+  const _SideFrame({
+    required this.game,
+    required this.side,
+    required this.children,
+  });
+
+  final PlaytestController game;
+  final PlaytestSide side;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theirs = game.state.active == side && !game.state.isOver;
+    final color = phaseColor(game.state.phase);
+    return AnimatedContainer(
+      key: ValueKey('frame-${side.name}'),
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      decoration: BoxDecoration(
+        color: theirs ? color.withValues(alpha: 0.05) : null,
+        border: Border.all(
+          color: theirs ? color : AppColors.border,
+          width: theirs ? 2 : 1,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(children: children),
     );
   }
 }
@@ -353,19 +512,31 @@ class _Board extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Column(
               children: [
-                _SideSummary(side: game.cpu, game: game),
-                const SizedBox(height: 6),
-                _ZoneRail(game: game, side: game.cpu),
-                const SizedBox(height: 8),
-                _Field(game: game, side: game.cpu, isYours: false),
+                _SideFrame(
+                  game: game,
+                  side: game.cpu,
+                  children: [
+                    _SideSummary(side: game.cpu, game: game),
+                    const SizedBox(height: 6),
+                    _ZoneRail(game: game, side: game.cpu),
+                    const SizedBox(height: 8),
+                    _Field(game: game, side: game.cpu, isYours: false),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 _Middle(game: game),
                 const SizedBox(height: 10),
-                _Field(game: game, side: game.you, isYours: true),
-                const SizedBox(height: 8),
-                _ZoneRail(game: game, side: game.you),
-                const SizedBox(height: 6),
-                _SideSummary(side: game.you, game: game),
+                _SideFrame(
+                  game: game,
+                  side: game.you,
+                  children: [
+                    _Field(game: game, side: game.you, isYours: true),
+                    const SizedBox(height: 8),
+                    _ZoneRail(game: game, side: game.you),
+                    const SizedBox(height: 6),
+                    _SideSummary(side: game.you, game: game),
+                  ],
+                ),
               ],
             ),
           ),
@@ -402,6 +573,11 @@ class _SideSummary extends StatelessWidget {
             fontSize: 13,
           ),
         ),
+        // Whose turn it is, said again beside the name: the frame around this
+        // half says so too, but the board scrolls and its edge can be off
+        // screen while the summary is not.
+        if (game.state.active == side && !game.state.isOver)
+          _TurnMarker(phase: game.state.phase),
         _Pip(
           label: 'Dmg',
           value: '${side.damageCount}/6',
@@ -417,6 +593,35 @@ class _SideSummary extends StatelessWidget {
           child: _Pip(label: 'Energy', value: '${side.energy}', tappable: true),
         ),
       ],
+    );
+  }
+}
+
+/// A pill beside a player's name saying the turn is theirs, and where in it
+/// they are.
+class _TurnMarker extends StatelessWidget {
+  const _TurnMarker({required this.phase});
+
+  final PlaytestPhase phase;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = phaseColor(phase);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
+      ),
+      child: Text(
+        phase == PlaytestPhase.mulligan ? 'To play' : phase.label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }
