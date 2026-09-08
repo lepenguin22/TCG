@@ -861,6 +861,47 @@ void main() {
       );
     });
 
+    CardDefinition numberedOnly(String name, String cardNo) => CardDefinition(
+      id: 'numbered-$cardNo',
+      gameId: 'vanguard',
+      name: name,
+      attributes: {'grade': '2', 'cardType': 'normal', 'cardNo': cardNo},
+      createdAt: DateTime(2024),
+      updatedAt: DateTime(2024),
+    );
+
+    test('a card with no era is dated by its number instead', () {
+      // How a card reached the library varies -- an older save, an import that
+      // matched a printing the catalogue had not dated -- but the number is
+      // there either way, and a DZ- number says D-series on its own.
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = numberedOnly(
+        'Star Agression Dragon',
+        'DZ-SS08/040EN',
+      );
+      final view = viewOf(formatStandard, slots);
+      expect(errorsOf(view), isEmpty);
+      expect(warningsOf(view), isNot(contains(contains('could not be'))));
+    });
+
+    test('a number from another era is still an error', () {
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = numberedOnly('V Card', 'V-BT01/001EN');
+      expect(
+        errorsOf(viewOf(formatStandard, slots)),
+        contains(allOf(contains('"V Card"'), contains('V-series'))),
+      );
+    });
+
+    test('a card with no era and no number is still unchecked', () {
+      final slots = legalStandardDeck();
+      named(slots, 'Grade 2 A').card = numberedOnly('No Number', '');
+      expect(
+        warningsOf(viewOf(formatStandard, slots)),
+        contains(allOf(contains('"No Number"'), contains('could not be'))),
+      );
+    });
+
     test('a card of unknown era is a warning, never an error', () {
       final slots = legalStandardDeck();
       named(slots, 'Grade 2 A').card = CardDefinition(

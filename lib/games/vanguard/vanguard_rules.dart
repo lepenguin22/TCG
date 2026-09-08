@@ -1,6 +1,7 @@
 import '../../models/card_definition.dart';
 import '../game_definition.dart';
 import 'vanguard_data.dart';
+import 'vanguard_numbers.dart';
 
 /// Whether a card is a trigger unit.
 ///
@@ -208,6 +209,25 @@ List<ValidationIssue> validateVanguard(DeckView view) {
           );
         } else if (!possible.every(allowedSeries.contains)) {
           ambiguous.add(item);
+        }
+        continue;
+      }
+
+      // Nothing on the card says which era it is from, but its number often
+      // does: a card can reach the library without an era attached (an older
+      // save, or an import that matched a printing the catalogue had not
+      // dated), and the number is attached either way.
+      final numbered = seriesFromCardNumber(
+        item.card.attribute('cardNo') ?? '',
+      );
+      if (numbered != null) {
+        if (!allowedSeries.contains(numbered)) {
+          issues.add(
+            ValidationIssue.error(
+              '"${item.card.name}" is not a ${view.format.name} card. '
+              '${_seriesSentence(numbered)}',
+            ),
+          );
         }
         continue;
       }
