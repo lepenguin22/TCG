@@ -90,7 +90,9 @@ bool _isGUnit(DeckItem item) =>
 
 /// The G zone rules, which Standard and Premium share: up to sixteen cards,
 /// G units only, and G units nowhere else. Having no G zone at all is fine --
-/// only a deck built around stride needs one.
+/// only a deck built around stride needs one -- and neither is a short one:
+/// sixteen is a ceiling rather than a requirement, and a deck that strides on
+/// twelve is a legal deck, so nothing is said about it.
 List<ValidationIssue> _checkGZone({
   required List<DeckItem> ride,
   required List<DeckItem> main,
@@ -102,10 +104,6 @@ List<ValidationIssue> _checkGZone({
   if (gCount > 16) {
     issues.add(
       ValidationIssue.error('G zone holds $gCount cards. The limit is 16.'),
-    );
-  } else if (gCount > 0 && gCount < 16) {
-    issues.add(
-      ValidationIssue.warning('G zone holds $gCount of a possible 16 cards.'),
     );
   }
   for (final item in gZone) {

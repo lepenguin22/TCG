@@ -398,6 +398,28 @@ void main() {
       expect(errorsOf(viewOf(formatStandard, slots)), isEmpty);
     });
 
+    test('a short G zone is not complained about', () {
+      // Sixteen is a ceiling, not a requirement: a deck that strides on
+      // twelve is a legal deck and nothing is said about it.
+      final slots = legalStandardDeck();
+      for (var i = 0; i < 3; i += 1) {
+        slots.add(
+          Slot(
+            card('G Unit $i', {'grade': '4', 'cardType': 'g-unit'}),
+            zoneG,
+            4,
+          ),
+        );
+      }
+      final view = viewOf(formatStandard, slots);
+      expect(errorsOf(view), isEmpty);
+      expect(
+        warningsOf(view).where((w) => w.contains('G zone')),
+        isEmpty,
+        reason: '12 of a possible 16 is a deck, not a problem',
+      );
+    });
+
     test('a deck with no G zone is still fine', () {
       expect(errorsOf(viewOf(formatStandard, legalStandardDeck())), isEmpty);
     });
