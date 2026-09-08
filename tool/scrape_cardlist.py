@@ -354,6 +354,10 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--from-expansion", type=int, default=243)
     parser.add_argument("--dump-type", default="")
+    # Print the page a card asked for by number reads as, whether or not it
+    # parsed. A card that parses into the wrong stats says nothing about why
+    # on its own, and the site cannot be read from where the app is written.
+    parser.add_argument("--dump", action="store_true")
     # A handful of odd pages -- promo variants, oddly laid out specials -- are
     # tolerated, because blocking six sets of updates over one card helps
     # nobody. A site redesign breaks hundreds at once, which still fails.
@@ -443,6 +447,22 @@ def main() -> int:
             if page is None:
                 failures.append(f"{number}: no such card on the site")
                 continue
+            if args.dump:
+                lines = strip_tags(page)
+                start = next(
+                    (
+                        index
+                        for index, line in enumerate(lines)
+                        if line.startswith("[VGE-") or line == "PR cards"
+                    ),
+                    0,
+                )
+                print(f"    --- {number} page reads from line {start} ---")
+                for index, line in enumerate(lines[start : start + 90], start):
+                    print(f"      {index:3} {line[:100]}")
+                parsed = parse_card(number, "", "", page)
+                print(f"    --- {number} parsed as ---")
+                print(f"      {json.dumps(parsed, ensure_ascii=False)[:700]}")
             card = parse_card(number, "", card_image(page), page)
             if not card:
                 # The page is the only thing that explains a failure here, so

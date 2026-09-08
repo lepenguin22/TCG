@@ -32,6 +32,12 @@ on:
           For finding the number a card is really filed under.
         required: false
         default: ''
+      dump:
+        description: >-
+          Print the pages the cards above read as, line by line, before the
+          parse. For working out why a card came out with the wrong stats.
+        required: false
+        default: ''
       dry_run:
         description: >-
           Read the cards and stop: no rebuild, no tests, no commit. For
@@ -71,6 +77,7 @@ jobs:
           EXPANSIONS: ${{ inputs.expansions }}
           CARDS: ${{ inputs.cards }}
           SEARCH: ${{ inputs.search }}
+          DUMP: ${{ inputs.dump }}
         run: |
           if [ -n "$SEARCH" ]; then
             python3 tool/scrape_cardlist.py --search "$SEARCH"
@@ -83,6 +90,9 @@ jobs:
           for c in $CARDS; do
             args="$args --card $c"
           done
+          if [ -n "$DUMP" ]; then
+            args="$args --dump"
+          fi
           if [ -n "$args" ]; then
             echo "reading only:$args"
             python3 tool/scrape_cardlist.py $args
