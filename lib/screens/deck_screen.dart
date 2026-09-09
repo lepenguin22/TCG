@@ -8,6 +8,7 @@ import '../games/vanguard/vanguard_rules.dart';
 import '../models/card_definition.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
+import '../utils/deck_cost.dart';
 import '../utils/deck_text.dart';
 import '../widgets/action_sheet.dart';
 import '../widgets/card_detail_sheet.dart';
@@ -56,6 +57,7 @@ class _DeckScreenState extends State<DeckScreen> {
     final game = gameById(deck.gameId);
     final view = store.viewOf(deck);
     final issues = game.validate(view);
+    final cost = deckCostOf(view);
     final visibleIssues = _showAllIssues ? issues : issues.take(3).toList();
 
     return Scaffold(
@@ -129,6 +131,13 @@ class _DeckScreenState extends State<DeckScreen> {
                       ),
                   ],
                 ),
+                // What the deck costs, once anything in it has been priced.
+                // Nothing to say about a deck with no prices on it, so it
+                // says nothing rather than showing a zero.
+                if (!cost.isEmpty) ...[
+                  const SizedBox(height: 12),
+                  _DeckCostLine(cost: cost),
+                ],
               ],
             ),
           ),
@@ -421,13 +430,53 @@ class _BuyingDialogState extends State<_BuyingDialog> {
   }
 }
 
-/// What a card costs and where from, as one line: "4.50 · Card shop".
-///
-/// Either half stands on its own -- a price with no shop, or a shop you have
-/// not priced yet -- and a card with neither says nothing at all.
-String? buyingLine(CardDefinition card) {
-  final parts = [?card.attribute('price'), ?card.attribute('store')];
-  return parts.isEmpty ? null : parts.join(' · ');
+/// The deck's cost, and how much of the deck that number covers.
+class _DeckCostLine extends StatelessWidget {
+  const _DeckCostLine({required this.cost});
+
+  final DeckCost cost;
+
+  @override
+  Widget build(BuildContext context) {
+    // What the total leaves out matters as much as the total: a number that
+    // covers half the deck reads as the price of the deck unless it says so.
+    final caveats = [
+      if (cost.unpriced > 0)
+        '${cost.unpriced} ${cost.unpriced == 1 ? 'card' : 'cards'} not priced',
+      if (cost.mixedCurrency) 'prices in more than one currency',
+    ];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        const Text(
+          'COST ',
+          style: TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+          ),
+        ),
+        Text(
+          cost.label,
+          style: const TextStyle(
+            color: AppColors.text,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        if (caveats.isNotEmpty)
+          Expanded(
+            child: Text(
+              '  ${caveats.join(', ')}',
+              maxLines: 2,
+              style: const TextStyle(color: AppColors.textFaint, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _ZoneCounter extends StatelessWidget {

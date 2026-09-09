@@ -172,6 +172,49 @@ void main() {
     expect(find.text('The card shop'), findsOneWidget);
   });
 
+  testWidgets('the deck adds up what it costs to buy', (tester) async {
+    final store = await pumpApp(tester);
+    final deck = store.createDeck(name: 'Shopping list');
+    final priced = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Priced Card',
+      attributes: {'grade': '2', 'cardType': 'normal', 'price': r'$4.50'},
+    );
+    final free = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Unpriced Card',
+      attributes: {'grade': '1', 'cardType': 'normal'},
+    );
+    store.addToDeck(deck.id, priced.id, 'main', quantity: 4);
+    store.addToDeck(deck.id, free.id, 'main', quantity: 3);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Shopping list'));
+    await tester.pumpAndSettle();
+
+    // Four copies at 4.50, and the three it could not price said out loud.
+    expect(find.text(r'$18.00'), findsOneWidget);
+    expect(find.textContaining('3 cards not priced'), findsOneWidget);
+
+    // Pricing the rest finishes the total off.
+    await tapVisible(tester, find.text('Unpriced Card'));
+    await tapVisible(tester, find.text('Price and store'));
+    await tester.enterText(find.byType(TextField).first, r'$1.00');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    // The list has been scrolled down to reach the card, so the total is
+    // read where it lives rather than where the test happens to be.
+    await tester.dragUntilVisible(
+      find.text(r'$21.00'),
+      find.byType(ListView).first,
+      const Offset(0, 220),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(r'$21.00'), findsOneWidget);
+    expect(find.textContaining('not priced'), findsNothing);
+  });
+
   testWidgets('a deck that breaks the rules says exactly why', (tester) async {
     final store = await pumpApp(tester);
     final deck = store.createDeck(name: 'Illegal deck');
