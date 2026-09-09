@@ -188,6 +188,22 @@ const vanguardFields = <CardField>[
     placeholder: 'https://…',
     helper: 'Filled in from the card database. Needs internet the first time.',
   ),
+  // What a copy costs and where from. Nothing works these out -- no price
+  // list is bundled and none is fetched -- so they are yours to fill in and
+  // yours to keep up to date.
+  CardField(
+    key: 'price',
+    label: 'Price',
+    type: FieldType.text,
+    placeholder: '4.50',
+    helper: 'What one copy costs. Write it in whatever currency you buy in.',
+  ),
+  CardField(
+    key: 'store',
+    label: 'Store',
+    type: FieldType.text,
+    placeholder: 'Where you can buy it',
+  ),
   CardField(
     key: 'notes',
     label: 'Your notes',

@@ -126,6 +126,52 @@ void main() {
     expect(store.decks.single.entries.single.quantity, 1);
   });
 
+  testWidgets('a card carries what it costs and where from', (tester) async {
+    final store = await pumpApp(tester);
+    final deck = store.createDeck(name: 'Shopping list');
+    final card = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Test Body',
+      attributes: {'grade': '2', 'cardType': 'normal'},
+    );
+    store.addToDeck(deck.id, card.id, 'main', quantity: 2);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Shopping list'));
+    await tester.pumpAndSettle();
+
+    await tapVisible(tester, find.text('Test Body'));
+    await tapVisible(tester, find.text('Price and store'));
+
+    // Two boxes, filled in and saved.
+    await tester.enterText(find.byType(TextField).first, '4.50');
+    await tester.enterText(find.byType(TextField).last, 'The card shop');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(store.cards.single.attribute('price'), '4.50');
+    expect(store.cards.single.attribute('store'), 'The card shop');
+    expect(
+      find.text('4.50 · The card shop'),
+      findsOneWidget,
+      reason: 'and the deck list says so under the card',
+    );
+
+    // Emptied, and the card has no price again rather than a blank one.
+    await tapVisible(tester, find.text('Test Body'));
+    await tapVisible(tester, find.text('Price and store'));
+    await tester.enterText(find.byType(TextField).first, '  ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      store.cards.single.attributes.containsKey('price'),
+      isFalse,
+      reason: 'the price is gone, not saved as a blank one',
+    );
+    expect(find.text('The card shop'), findsOneWidget);
+  });
+
   testWidgets('a deck that breaks the rules says exactly why', (tester) async {
     final store = await pumpApp(tester);
     final deck = store.createDeck(name: 'Illegal deck');

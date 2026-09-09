@@ -18,6 +18,7 @@ class CardRow extends StatelessWidget {
     this.onIncrement,
     this.onDecrement,
     this.trailing,
+    this.footnote,
   });
 
   final GameDefinition game;
@@ -27,6 +28,10 @@ class CardRow extends StatelessWidget {
   final VoidCallback? onIncrement;
   final VoidCallback? onDecrement;
   final Widget? trailing;
+
+  /// A line of your own under the card's own description -- what a copy costs
+  /// and where from, on the deck screen.
+  final String? footnote;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +80,20 @@ class CardRow extends StatelessWidget {
                           style: const TextStyle(
                             color: AppColors.textFaint,
                             fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    if (footnote != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          footnote!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),

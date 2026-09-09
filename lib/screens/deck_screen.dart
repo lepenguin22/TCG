@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../games/game_definition.dart';
 import '../games/games.dart';
 import '../games/vanguard/vanguard_rules.dart';
+import '../models/card_definition.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
 import '../utils/deck_text.dart';
@@ -271,6 +272,37 @@ class _DeckScreenState extends State<DeckScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// The two boxes: what a copy costs and where to buy it.
+  ///
+  /// Kept on the card rather than on the deck entry, so a card in two decks
+  /// is priced once. Nothing checks or fetches these -- they are whatever you
+  /// last wrote down.
+  Future<void> _editBuying(CardDefinition card) async {
+    final store = context.read<DeckStore>();
+    final filled = await showDialog<(String, String)>(
+      context: context,
+      builder: (_) => _BuyingDialog(card: card),
+    );
+    if (filled == null) return;
+    final attributes = Map<String, String>.from(card.attributes);
+    for (final entry in {'price': filled.$1, 'store': filled.$2}.entries) {
+      final value = entry.value.trim();
+      // Cleared rather than left as an empty string, so a card you have not
+      // priced has no price rather than a blank one.
+      if (value.isEmpty) {
+        attributes.remove(entry.key);
+      } else {
+        attributes[entry.key] = value;
+      }
+    }
+    store.saveCard(
+      id: card.id,
+      gameId: card.gameId,
+      name: card.name,
+      attributes: attributes,
+    );
+  }
+
   Future<void> _openCardMenu(
     GameDefinition game,
     DeckView view,
@@ -300,6 +332,11 @@ class _DeckScreenState extends State<DeckScreen> {
             ),
           ),
         ),
+        SheetAction(
+          label: 'Price and store',
+          icon: Icons.sell_outlined,
+          onPressed: () => _editBuying(item.card),
+        ),
         for (final target in otherZones)
           SheetAction(
             label: 'Move to ${game.zone(target)?.name ?? target}',
@@ -317,6 +354,80 @@ class _DeckScreenState extends State<DeckScreen> {
       ],
     );
   }
+}
+
+/// The price-and-store box, which owns its two fields.
+class _BuyingDialog extends StatefulWidget {
+  const _BuyingDialog({required this.card});
+
+  final CardDefinition card;
+
+  @override
+  State<_BuyingDialog> createState() => _BuyingDialogState();
+}
+
+class _BuyingDialogState extends State<_BuyingDialog> {
+  late final _price = TextEditingController(
+    text: widget.card.attribute('price') ?? '',
+  );
+  late final _store = TextEditingController(
+    text: widget.card.attribute('store') ?? '',
+  );
+
+  @override
+  void dispose() {
+    _price.dispose();
+    _store.dispose();
+    super.dispose();
+  }
+
+  void _save() => Navigator.of(context).pop((_price.text, _store.text));
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Text(widget.card.name),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _price,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Price',
+              hintText: 'What one copy costs',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _store,
+            decoration: const InputDecoration(
+              labelText: 'Store',
+              hintText: 'Where you can buy it',
+            ),
+            onSubmitted: (_) => _save(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
+}
+
+/// What a card costs and where from, as one line: "4.50 · Card shop".
+///
+/// Either half stands on its own -- a price with no shop, or a shop you have
+/// not priced yet -- and a card with neither says nothing at all.
+String? buyingLine(CardDefinition card) {
+  final parts = [?card.attribute('price'), ?card.attribute('store')];
+  return parts.isEmpty ? null : parts.join(' · ');
 }
 
 class _ZoneCounter extends StatelessWidget {
@@ -465,6 +576,7 @@ class _ZoneSection extends StatelessWidget {
                   game: game,
                   card: item.card,
                   quantity: item.entry.quantity,
+                  footnote: buyingLine(item.card),
                   onTap: () => onCardTap(item),
                   onIncrement: () => onIncrement(item),
                   onDecrement: () => onDecrement(item),
