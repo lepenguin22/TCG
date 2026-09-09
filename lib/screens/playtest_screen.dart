@@ -676,146 +676,195 @@ class _ZoneRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    // The damage zone gets a line of its own, with the piles wrapped below
+    // it. Sharing one line meant every pile took a fixed width and the damage
+    // took whatever was left, so a game that removed a card grew another pile
+    // and squeezed the damage zone -- the one thing on the rail that says how
+    // close someone is to losing -- down to a sliver.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () => _showDamageSheet(context, game, side),
-            child: _DamageRow(side: side),
-          ),
+        GestureDetector(
+          key: ValueKey('damage-${side.name}'),
+          onTap: () => _showDamageSheet(context, game, side),
+          behavior: HitTestBehavior.opaque,
+          child: _DamageRow(side: side),
         ),
-        const SizedBox(width: 8),
-        _Pile(
-          label: 'Deck',
-          count: side.deck.length,
-          onTap: () => _showDeckSheet(context, game, side),
+        const SizedBox(height: 4),
+        Wrap(
+          key: ValueKey('piles-${side.name}'),
+          spacing: 4,
+          runSpacing: 4,
+          children: _piles(context),
         ),
+      ],
+    );
+  }
+
+  /// The piles beside the field, in the order they are reached for.
+  List<Widget> _piles(BuildContext context) {
+    return [
+      _Pile(
+        label: 'Deck',
+        count: side.deck.length,
+        onTap: () => _showDeckSheet(context, game, side),
+      ),
+      _Pile(
+        label: 'Drop',
+        count: side.drop.length,
+        onTap: () => _showPileSheet(
+          context,
+          game,
+          side,
+          title: 'Drop zone',
+          cards: side.drop,
+          actionLabel: 'To hand',
+          onAction: (card) => game.returnFromDrop(side, card),
+          callable: true,
+          bottomable: true,
+          fromDrop: true,
+        ),
+      ),
+      _Pile(
+        label: 'Soul',
+        count: side.soul.length,
+        onTap: () => _showSoulSheet(context, game, side),
+      ),
+      // The crest. Shown even with none in play, since an empty crest zone
+      // is where one gets played from -- a deck that brings no crest of its
+      // own is exactly the deck that wants to choose one.
+      _Pile(
+        label: 'Crest',
+        count: side.crestInPlay ? side.energy : 0,
+        highlight: side.crestInPlay,
+        onTap: () => _showCrestSheet(context, game, side),
+      ),
+      // Tickets are in no deck and on no pile: an ability makes one out of
+      // nothing. The button is always there, since a deck that wants one
+      // wants it on a turn the board cannot predict.
+      if (game.controls(side))
         _Pile(
-          label: 'Drop',
-          count: side.drop.length,
+          label: 'Tickets',
+          count: side.hand.where((c) => c.isTicket).length,
+          onTap: () => _showTokenSheet(context, game, side),
+        ),
+      // Cards removed from the game, which only an over trigger does. The
+      // pile appears once there is something in it, since a game with none
+      // does not need the space.
+      if (side.removed.isNotEmpty)
+        _Pile(
+          label: 'Removed',
+          count: side.removed.length,
           onTap: () => _showPileSheet(
             context,
             game,
             side,
-            title: 'Drop zone',
-            cards: side.drop,
-            actionLabel: 'To hand',
-            onAction: (card) => game.returnFromDrop(side, card),
-            callable: true,
-            bottomable: true,
-            fromDrop: true,
+            title: 'Removed from the game',
+            cards: side.removed,
+            header: (_) => [
+              const Text(
+                'An over trigger is removed as it resolves, rather than '
+                'reaching hand from a drive check or the damage zone from '
+                'a damage one. Nothing comes back from here.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+            ],
           ),
         ),
+      // Only a deck that strides has a G zone, so it only appears for one.
+      if (side.gZone.isNotEmpty)
         _Pile(
-          label: 'Soul',
-          count: side.soul.length,
-          onTap: () => _showSoulSheet(context, game, side),
+          // Face up over total: the face-up half is the number an ability
+          // counting a Generation Break is asking about.
+          label: side.generationBreak > 0 ? 'G ↑${side.generationBreak}' : 'G',
+          count: side.gZone.length,
+          highlight: game.engine.canStride(side),
+          onTap: () => _showGZoneSheet(context, game, side),
         ),
-        // The crest. Shown even with none in play, since an empty crest zone
-        // is where one gets played from -- a deck that brings no crest of its
-        // own is exactly the deck that wants to choose one.
-        _Pile(
-          label: 'Crest',
-          count: side.crestInPlay ? side.energy : 0,
-          highlight: side.crestInPlay,
-          onTap: () => _showCrestSheet(context, game, side),
-        ),
-        // Tickets are in no deck and on no pile: an ability makes one out of
-        // nothing. The button is always there, since a deck that wants one
-        // wants it on a turn the board cannot predict.
-        if (game.controls(side))
-          _Pile(
-            label: 'Tickets',
-            count: side.hand.where((c) => c.isTicket).length,
-            onTap: () => _showTokenSheet(context, game, side),
-          ),
-        // Cards removed from the game, which only an over trigger does. The
-        // pile appears once there is something in it, since a game with none
-        // does not need the space.
-        if (side.removed.isNotEmpty)
-          _Pile(
-            label: 'Removed',
-            count: side.removed.length,
-            onTap: () => _showPileSheet(
-              context,
-              game,
-              side,
-              title: 'Removed from the game',
-              cards: side.removed,
-              header: (_) => [
-                const Text(
-                  'An over trigger is removed as it resolves, rather than '
-                  'reaching hand from a drive check or the damage zone from '
-                  'a damage one. Nothing comes back from here.',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        // Only a deck that strides has a G zone, so it only appears for one.
-        if (side.gZone.isNotEmpty)
-          _Pile(
-            // Face up over total: the face-up half is the number an ability
-            // counting a Generation Break is asking about.
-            label: side.generationBreak > 0
-                ? 'G ↑${side.generationBreak}'
-                : 'G',
-            count: side.gZone.length,
-            highlight: game.engine.canStride(side),
-            onTap: () => _showGZoneSheet(context, game, side),
-          ),
-      ],
-    );
+    ];
   }
 }
 
-/// The damage zone, laid out as the cards it is rather than a number. A card
-/// turned face down has been spent on a counter-blast.
+/// The damage zone, laid out as the cards it is rather than a number.
+///
+/// All six places are drawn, taken or not: how close someone is to losing is
+/// the gap between what is filled and the sixth box, and a row that grew a
+/// box at a time made that something to count rather than something to see.
+/// A card turned face down has been spent on a counter-blast.
 class _DamageRow extends StatelessWidget {
   const _DamageRow({required this.side});
 
   final PlaytestSide side;
 
+  /// The sixth card is the game, so the row says so before it gets there.
+  static const _lethal = 6;
+
   @override
   Widget build(BuildContext context) {
-    if (side.damage.isEmpty) {
-      return const SizedBox(
-        height: 30,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'No damage',
-            style: TextStyle(color: AppColors.textFaint, fontSize: 11),
-          ),
-        ),
-      );
-    }
+    final taken = side.damage.length;
     return SizedBox(
       height: 30,
       child: Row(
         children: [
-          for (final card in side.damage)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(
+              taken == 0 ? 'No damage' : 'Damage $taken/$_lethal',
+              style: TextStyle(
+                color: taken >= 5 ? AppColors.danger : AppColors.textFaint,
+                fontSize: 11,
+                fontWeight: taken >= 5 ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
+          ),
+          for (var index = 0; index < _lethal; index += 1)
             Padding(
               padding: const EdgeInsets.only(right: 3),
-              child: Container(
-                width: 20,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: side.isSpent(card)
-                      ? AppColors.surface
-                      : AppColors.danger.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: side.isSpent(card)
-                        ? AppColors.border
-                        : AppColors.danger,
-                  ),
-                ),
+              child: _DamageBox(
+                // Past the end of the damage taken, this place is empty; up
+                // to it, the card is either standing or spent.
+                state: index >= taken
+                    ? _DamageState.empty
+                    : side.isSpent(side.damage[index])
+                    ? _DamageState.spent
+                    : _DamageState.taken,
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+enum _DamageState { empty, spent, taken }
+
+class _DamageBox extends StatelessWidget {
+  const _DamageBox({required this.state});
+
+  final _DamageState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 20,
+      height: 28,
+      decoration: BoxDecoration(
+        color: switch (state) {
+          // An empty place is a hole in the row rather than a card, so it is
+          // the board's own colour and not the surface the cards sit on.
+          _DamageState.empty => Colors.transparent,
+          _DamageState.spent => AppColors.surface,
+          _DamageState.taken => AppColors.danger.withValues(alpha: 0.75),
+        },
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(
+          color: switch (state) {
+            _DamageState.empty => AppColors.border.withValues(alpha: 0.6),
+            _DamageState.spent => AppColors.border,
+            _DamageState.taken => AppColors.danger,
+          },
+        ),
       ),
     );
   }
@@ -836,37 +885,34 @@ class _Pile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 40,
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceAlt,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: highlight ? AppColors.accent : AppColors.border,
-              width: highlight ? 2 : 1,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: highlight ? AppColors.accent : AppColors.border,
+            width: highlight ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(color: AppColors.textFaint, fontSize: 9),
             ),
-          ),
-          child: Column(
-            children: [
-              Text(
-                label,
-                style: const TextStyle(color: AppColors.textFaint, fontSize: 9),
+            Text(
+              '$count',
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
-              Text(
-                '$count',
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

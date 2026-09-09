@@ -7,6 +7,8 @@ import 'package:tcg_decks/screens/playtest_screen.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
+import 'package:tcg_decks/playtest/playtest_controller.dart';
+
 import 'playtest_engine_test.dart' show buildStrideDeck;
 
 /// The board is the densest screen in the app -- twelve circles, two damage
@@ -64,6 +66,58 @@ void main() {
         await tester.pump();
         expect(tester.takeException(), isNull, reason: 'after step $i');
       }
+    });
+
+    testWidgets('the damage zone is whole on $description, removed pile and '
+        'all', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final (store, deck) = await buildStrideDeck();
+      await tester.pumpWidget(
+        ChangeNotifierProvider<DeckStore>.value(
+          value: store,
+          child: MaterialApp(
+            theme: buildTheme(),
+            home: PlaytestScreen(
+              yourDeck: deck,
+              opponentDeck: deck,
+              random: Random(7),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      // The board at its widest: a G zone, a removed pile and five damage.
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      for (var i = 0; i < 5; i += 1) {
+        game.you.damage.add(game.you.deck.removeLast());
+      }
+      game.you.removed.add(game.you.deck.removeLast());
+      game.setEnergy(game.you, game.you.energy);
+      await tester.pump();
+
+      expect(find.text('Removed'), findsOneWidget, reason: 'the seventh pile');
+      expect(find.textContaining('Damage 5/6'), findsOneWidget);
+
+      // The zone is read, not counted: it is on a line of its own above the
+      // piles, and every one of its six places is on the screen.
+      final damage = tester.getRect(find.byKey(const ValueKey('damage-You')));
+      final piles = tester.getRect(find.byKey(const ValueKey('piles-You')));
+      expect(damage.right, lessThanOrEqualTo(size.width));
+      expect(
+        damage.bottom,
+        lessThanOrEqualTo(piles.top),
+        reason: 'the piles are below the damage, not beside it',
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 }
