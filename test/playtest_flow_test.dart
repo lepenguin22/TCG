@@ -1527,6 +1527,46 @@ void main() {
       expect(game.engine.topOfDeck(game.you, 1), [top[1]]);
     });
 
+    testWidgets('asking for three looks at three, not five', (tester) async {
+      // The count decided what the heading claimed and nothing else, so a
+      // look at the top three was still a look at five cards.
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      final top = game.engine.topOfDeck(game.you, 5);
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      await tester.tap(find.text('Look at the top cards'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ChoiceChip, '3'));
+      await tester.pumpAndSettle();
+
+      // How many are being looked at is what the sheet counts down from
+      // once one is taken out of it.
+      await tester.tap(find.text('To hand').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('2 of 3 left'), findsOneWidget);
+      expect(
+        game.you.deck.contains(top[3]),
+        isTrue,
+        reason: 'the fourth card was never part of the look',
+      );
+
+      // And asking for seven looks at seven.
+      await tester.tap(find.widgetWithText(ChoiceChip, '7'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('To hand').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('6 of 7 left'), findsOneWidget);
+    });
+
     testWidgets('taking one of the top cards does not turn over another', (
       tester,
     ) async {

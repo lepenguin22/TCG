@@ -1368,7 +1368,14 @@ void _showTopOfDeckSheet(
                         ChoiceChip(
                           label: Text('$many'),
                           selected: count == many,
-                          onSelected: (_) => setSheetState(() => count = many),
+                          // A different number is a different look, so the
+                          // window is read again: asking for three after
+                          // opening on five showed five, with the heading
+                          // saying three.
+                          onSelected: (_) => setSheetState(() {
+                            count = many;
+                            looking = game.engine.topOfDeck(side, many);
+                          }),
                         ),
                     ],
                   ),
