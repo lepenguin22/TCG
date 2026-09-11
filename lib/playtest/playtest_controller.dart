@@ -206,6 +206,12 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void handToSoul(GameCard card) {
+    engine.handToSoul(handSide, card);
+    holding = null;
+    _sync();
+  }
+
   void nextPhase() {
     selectedAttacker = null;
     boostSelected = false;

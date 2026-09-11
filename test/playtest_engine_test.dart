@@ -2745,6 +2745,39 @@ void main() {
       expect(you.drop.contains(pitched), isFalse);
     });
 
+    test('a card in hand goes into the soul', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final card = you.hand.first;
+      final soul = you.soul.length;
+
+      engine.handToSoul(you, card);
+      expect(you.hand.contains(card), isFalse);
+      expect(you.soul, contains(card));
+      expect(you.soul.length, soul + 1);
+      expect(
+        you.drop.contains(card),
+        isFalse,
+        reason: 'into the soul, not through the drop zone',
+      );
+      expect(engine.state.log.last.text, contains('into the soul'));
+    });
+
+    test('a card not in hand cannot be put into the soul', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final card = you.deck.last;
+      final soul = you.soul.length;
+
+      engine.handToSoul(you, card);
+      expect(you.soul.length, soul, reason: 'it was never in the hand');
+      expect(you.deck, contains(card));
+    });
+
     test('a card can be put under the deck', () async {
       final (store, deck) = await buildDeck();
       final engine = engineFor(store, deck);

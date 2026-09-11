@@ -3276,6 +3276,17 @@ void _showHandSheet(
               },
             ),
             _SheetAction(
+              icon: Icons.auto_awesome_outlined,
+              label: 'To the soul',
+              detail:
+                  'What a card asks for either way round: as its cost, '
+                  'or as the thing it does.',
+              onTap: () {
+                game.handToSoul(card);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+            _SheetAction(
               icon: Icons.vertical_align_bottom,
               label: 'To the bottom of the deck',
               detail: 'The other cost cards ask for, kept out of the drop.',

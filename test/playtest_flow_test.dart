@@ -1631,6 +1631,36 @@ void main() {
       expect(game.you.deck, before, reason: 'left exactly as it was');
     });
 
+    testWidgets('a card in hand goes into the soul', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      final soul = game.you.soul.length;
+      final hand = game.you.hand.length;
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('To the soul'));
+      await tester.pumpAndSettle();
+
+      expect(game.you.soul.length, soul + 1);
+      expect(game.you.hand.length, hand - 1);
+      expect(
+        game.you.drop,
+        isEmpty,
+        reason: 'into the soul, not through the drop zone',
+      );
+
+      // And the soul says so when it is opened.
+      await tapOnBoard(tester, find.text('Soul').last);
+      expect(find.textContaining('Soul (${soul + 1})'), findsOneWidget);
+    });
+
     testWidgets('a card in hand goes under the deck', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);

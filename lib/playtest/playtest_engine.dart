@@ -991,6 +991,17 @@ class PlaytestEngine {
     state.note('${side.name} removes ${card.name} from the game.', by: side);
   }
 
+  /// Puts a card from hand into the soul.
+  ///
+  /// Asked for both ways round: as a cost -- "put a card from your hand into
+  /// your soul" -- and as what an ability does, so it is an action of its own
+  /// rather than a discard that lands somewhere else.
+  void handToSoul(PlaytestSide side, GameCard card) {
+    if (!side.hand.remove(card)) return;
+    side.soul.add(card);
+    state.note('${side.name} puts ${card.name} into the soul.', by: side);
+  }
+
   /// Discards from hand, for a cost the card's text asks for.
   void discard(PlaytestSide side, GameCard card) {
     side.hand.remove(card);
