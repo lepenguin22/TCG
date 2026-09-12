@@ -1370,12 +1370,11 @@ void _showTopOfDeckSheet(
   PlaytestController game,
   PlaytestSide side,
 ) {
-  var count = 5;
-  // The cards being looked at, fixed when the look begins. Taking one out
-  // does not turn the next card over: "look at the top five" shows five, and
-  // choosing one from among them leaves four being looked at, not another
-  // five. Re-read only when the number itself changes.
-  var looking = game.engine.topOfDeck(side, count);
+  // Five to begin with, because most of these abilities say five, and typed
+  // over for the ones that say something else. Cards say every number from
+  // one to a dozen, and a chip each was never going to cover them.
+  var looking = game.engine.topOfDeck(side, 5);
+  final howMany = TextEditingController(text: '5');
 
   showModalBottomSheet<void>(
     context: context,
@@ -1395,34 +1394,68 @@ void _showTopOfDeckSheet(
               final showing = looking.where(side.deck.contains).toList();
               return ListView(
                 controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                // Padded out from under the keyboard the number box brings
+                // up, so the cards being looked at are not behind it.
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  0,
+                  20,
+                  24 + MediaQuery.viewInsetsOf(builderContext).bottom,
+                ),
                 children: [
                   SectionHeader(
-                    title: 'Top $count of the deck',
+                    // However many were asked for, this is how many there
+                    // were: a deck of three answers "look at the top five"
+                    // with three.
+                    title: 'Top ${looking.length} of the deck',
                     caption: showing.length == looking.length
                         ? 'The top card first. What you leave stays in the '
                               'order it is in — shuffle below if the card '
                               'says to.'
-                        : '${showing.length} of $count left to choose from. '
-                              'Nothing new is turned over; what you leave '
-                              'stays in the order it is in.',
+                        : '${showing.length} of ${looking.length} left to '
+                              'choose from. Nothing new is turned over; what '
+                              'you leave stays in the order it is in.',
                   ),
-                  Wrap(
-                    spacing: 8,
+                  Row(
                     children: [
-                      for (final many in [3, 5, 7])
-                        ChoiceChip(
-                          label: Text('$many'),
-                          selected: count == many,
+                      SizedBox(
+                        width: 96,
+                        child: TextField(
+                          controller: howMany,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(2),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'How many',
+                            isDense: true,
+                          ),
                           // A different number is a different look, so the
-                          // window is read again: asking for three after
-                          // opening on five showed five, with the heading
-                          // saying three.
-                          onSelected: (_) => setSheetState(() {
-                            count = many;
-                            looking = game.engine.topOfDeck(side, many);
-                          }),
+                          // window is read again as it is typed. Nothing is
+                          // moved by looking, so reading it again costs
+                          // nothing and a half-typed number puts nothing
+                          // wrong on the screen.
+                          onChanged: (typed) {
+                            final wanted = int.tryParse(typed);
+                            if (wanted == null || wanted < 1) return;
+                            setSheetState(
+                              () =>
+                                  looking = game.engine.topOfDeck(side, wanted),
+                            );
+                          },
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'cards from the top of the deck',
+                          style: TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -1510,7 +1543,7 @@ void _showTopOfDeckSheet(
         ),
       ),
     ),
-  );
+  ).whenComplete(howMany.dispose);
 }
 
 /// The whole deck, listed, for the abilities that search it.

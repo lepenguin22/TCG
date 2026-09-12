@@ -1505,14 +1505,12 @@ void main() {
       await tester.tap(find.text('Look at the top cards'));
       await tester.pumpAndSettle();
 
-      // Five by default, and the count can be changed without reopening.
+      // Five by default, and the count can be typed over without reopening.
       expect(find.textContaining('Top 5 of the deck'), findsOneWidget);
-      // By the chip, not by the text: the board behind has counters on it
-      // that are also single digits.
-      await tester.tap(find.widgetWithText(ChoiceChip, '3'));
+      await tester.enterText(find.widgetWithText(TextField, 'How many'), '3');
       await tester.pumpAndSettle();
       expect(find.textContaining('Top 3 of the deck'), findsOneWidget);
-      await tester.tap(find.widgetWithText(ChoiceChip, '5'));
+      await tester.enterText(find.widgetWithText(TextField, 'How many'), '5');
       await tester.pumpAndSettle();
 
       // The first card listed is the top of the deck, and it goes to hand.
@@ -1527,9 +1525,10 @@ void main() {
       expect(game.engine.topOfDeck(game.you, 1), [top[1]]);
     });
 
-    testWidgets('asking for three looks at three, not five', (tester) async {
-      // The count decided what the heading claimed and nothing else, so a
-      // look at the top three was still a look at five cards.
+    testWidgets('the number typed is the number looked at', (tester) async {
+      // Cards say every number from one to a dozen, so the number is typed
+      // rather than picked, and it is the look itself and not just what the
+      // heading claims.
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
       await tester.tap(find.text('Keep this hand'));
@@ -1545,7 +1544,7 @@ void main() {
       await tester.tap(find.text('Look at the top cards'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(ChoiceChip, '3'));
+      await tester.enterText(find.widgetWithText(TextField, 'How many'), '3');
       await tester.pumpAndSettle();
 
       // How many are being looked at is what the sheet counts down from
@@ -1559,12 +1558,41 @@ void main() {
         reason: 'the fourth card was never part of the look',
       );
 
-      // And asking for seven looks at seven.
-      await tester.tap(find.widgetWithText(ChoiceChip, '7'));
+      // And a number no chip ever offered works the same way.
+      await tester.enterText(find.widgetWithText(TextField, 'How many'), '11');
       await tester.pumpAndSettle();
+      expect(find.textContaining('Top 11 of the deck'), findsOneWidget);
       await tester.tap(find.text('To hand').first);
       await tester.pumpAndSettle();
-      expect(find.textContaining('6 of 7 left'), findsOneWidget);
+      expect(find.textContaining('10 of 11 left'), findsOneWidget);
+    });
+
+    testWidgets('a number the deck cannot answer is not claimed', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      // A deck of two, asked for the top ten.
+      final left = [...game.you.deck.skip(game.you.deck.length - 2)];
+      game.you.deck
+        ..clear()
+        ..addAll(left);
+
+      await tapOnBoard(tester, find.text('Deck').last);
+      await tester.tap(find.text('Look at the top cards'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'How many'), '10');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Top 2 of the deck'), findsOneWidget);
+      expect(find.text('To hand'), findsNWidgets(2));
     });
 
     testWidgets('taking one of the top cards does not turn over another', (
