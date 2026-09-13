@@ -41,7 +41,7 @@ class TcgDecksApp extends StatelessWidget {
         Provider<CardCatalog>.value(value: catalog),
       ],
       child: MaterialApp(
-        title: 'TCG Decks',
+        title: 'Vanguard Simulator',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
         home: const DeckListScreen(),

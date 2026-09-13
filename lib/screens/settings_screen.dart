@@ -113,7 +113,7 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 24),
           const Center(
             child: Text(
-              'TCG Decks · offline decklist tracker',
+              'Vanguard Simulator · offline decklist tracker',
               style: TextStyle(color: AppColors.textFaint, fontSize: 12),
             ),
           ),

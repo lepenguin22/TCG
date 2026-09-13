@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's own background colour, so the icon and what it opens match. -->
+    <color name="ic_launcher_background">#0E1116</color>
+</resources>

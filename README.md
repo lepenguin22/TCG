@@ -1,9 +1,12 @@
-# TCG Decks
+# Vanguard Simulator
 
-An offline Android app for storing trading card game decklists, written in
-Flutter. The first game it supports is **Cardfight!! Vanguard**, and it knows the
-format rules — it checks a list as you build it and tells you exactly what is
-wrong with it.
+An offline Android app for storing trading card game decklists and playing them
+out, written in Flutter. The game it supports is **Cardfight!! Vanguard**, and it
+knows the format rules — it checks a list as you build it and tells you exactly
+what is wrong with it.
+
+The Dart package is still called `tcg_decks`, and the icon is drawn by
+`tool/make_icon.py` rather than kept as a binary nobody can edit.
 
 ## Getting the APK onto your phone
 
