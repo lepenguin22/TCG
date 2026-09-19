@@ -20,10 +20,16 @@ class RemoteBoardView extends StatefulWidget {
     super.key,
     required this.board,
     required this.onLeave,
+    this.notice,
   });
 
   final RemoteBoard board;
   final VoidCallback onLeave;
+
+  /// Something the game wants said across the top of the board: the other
+  /// phone has dropped off, this one is dialling again. The board stays
+  /// underneath it either way.
+  final String? notice;
 
   @override
   State<RemoteBoardView> createState() => _RemoteBoardViewState();
@@ -60,9 +66,41 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
           return const Center(child: CircularProgressIndicator());
         }
         final refusal = board.refusal;
+        final notice = widget.notice;
         return Column(
           children: [
             _PhaseBar(phase: snapshot.phase),
+            if (notice != null)
+              Container(
+                width: double.infinity,
+                color: AppColors.warning.withValues(alpha: 0.15),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        notice,
+                        style: const TextStyle(
+                          color: AppColors.warning,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (refusal != null)
               Container(
                 width: double.infinity,

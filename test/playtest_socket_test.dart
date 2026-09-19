@@ -73,6 +73,134 @@ void main() {
     await host.close();
   });
 
+  /// A game between two phones, over real sockets on this machine.
+  Future<({HostSession host, GuestSession guest})> table({
+    Duration retryAfter = const Duration(milliseconds: 50),
+  }) async {
+    final (store, myDeck) = await buildDeck();
+    final (guestStore, theirDeck) = await buildDeck(name: 'Their deck');
+    final host = HostSession(
+      gameId: 'vanguard',
+      deck: WireDeck.of(store.viewOf(myDeck)),
+      crests: store.cards,
+      turnOrder: TurnOrder.youFirst,
+      random: Random(7),
+    );
+    await host.open(port: 0);
+    final guest = GuestSession(
+      gameId: 'vanguard',
+      deck: WireDeck.of(guestStore.viewOf(theirDeck)),
+      retryAfter: retryAfter,
+    );
+    await guest.join('127.0.0.1', port: host.port!);
+    while (host.stage != SessionStage.playing) {
+      await pumpEventQueue();
+    }
+    return (host: host, guest: guest);
+  }
+
+  test('a phone that drops off comes back to the same game', () async {
+    final game = await table();
+
+    // Play far enough in that coming back to the start would be obvious.
+    game.host.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.guest.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await pumpEventQueue();
+    final riding = game.host.host!.state.you.rideDeck.firstWhere(
+      (card) => card.grade == 1,
+    );
+    game.host.board!.ask(
+      PlaytestIntent(IntentKind.ride, card: riding.instanceId),
+    );
+    await pumpEventQueue();
+    expect(game.guest.board!.snapshot!.turn, greaterThan(0));
+
+    // The guest's Wi-Fi goes. The game does not.
+    await game.guest.board!.transport.close();
+    await pumpEventQueue();
+    expect(game.guest.stage, SessionStage.reconnecting);
+    expect(game.host.guestConnected, isFalse);
+    expect(
+      game.host.host!.state.opponent.hand,
+      isNotEmpty,
+      reason: 'their hand is still on the table',
+    );
+
+    // It dials again by itself, and the board picks up where it was.
+    while (game.guest.stage != SessionStage.playing) {
+      await pumpEventQueue();
+    }
+    expect(game.host.guestConnected, isTrue);
+    expect(
+      game.guest.board!.snapshot!.them.units[Circle.vanguard]!.cardId,
+      riding.instanceId,
+      reason: 'the ride that happened while it was away is there',
+    );
+    expect(game.guest.board!.live, isTrue);
+
+    // And the seat plays on: the turn is passed to it, and a card is put
+    // down from the phone that dropped.
+    final engine = game.host.host!;
+    while (engine.state.active != engine.state.opponent) {
+      game.host.board!.ask(const PlaytestIntent(IntentKind.nextPhase));
+      await pumpEventQueue();
+    }
+    final before = engine.state.opponent.hand.length;
+    game.guest.board!.ask(
+      PlaytestIntent(
+        IntentKind.discard,
+        card: engine.state.opponent.hand.first.instanceId,
+      ),
+    );
+    await pumpEventQueue();
+    expect(engine.state.opponent.hand.length, before - 1);
+
+    await game.guest.close();
+    await game.host.close();
+  });
+
+  test('somebody else cannot take the seat', () async {
+    final game = await table(retryAfter: const Duration(seconds: 30));
+    game.host.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.guest.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await pumpEventQueue();
+
+    // A third phone dials the host and asks for the seat without the token
+    // the seat was given.
+    final intruder = await SocketTransport.connect(
+      '127.0.0.1',
+      game.host.port!,
+    );
+    final heard = <Map<String, Object?>>[];
+    intruder.messages.listen(heard.add);
+    intruder.send({'type': 'resume', 'token': 'not-the-token'});
+    await pumpEventQueue();
+
+    expect(heard.single['type'], 'refused');
+    expect(
+      game.guest.board!.live,
+      isTrue,
+      reason: 'and the player in the seat was not thrown out of it',
+    );
+
+    // A phone that dials in wanting a game of its own is turned away too:
+    // this device is already running one.
+    final latecomer = await SocketTransport.connect(
+      '127.0.0.1',
+      game.host.port!,
+    );
+    final alsoHeard = <Map<String, Object?>>[];
+    latecomer.messages.listen(alsoHeard.add);
+    latecomer.send({'type': 'deck', 'deck': const <String, Object?>{}});
+    await pumpEventQueue();
+    expect(alsoHeard.single['reason'], contains('already in a game'));
+
+    await intruder.close();
+    await latecomer.close();
+    await game.guest.close();
+    await game.host.close();
+  });
+
   test('two devices meet, swap decks and play', () async {
     final (store, myDeck) = await buildDeck();
     final (guestStore, theirDeck) = await buildDeck(name: 'Their deck');

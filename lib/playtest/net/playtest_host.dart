@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import '../playtest_engine.dart';
 import '../playtest_state.dart';
@@ -25,6 +26,24 @@ class PlaytestHost {
   final Map<String, PlaytestTransport> _seats = {};
   final Map<String, StreamSubscription<Map<String, Object?>>> _listening = {};
 
+  /// What a player shows to be let back into their seat.
+  ///
+  /// A phone that drops off the Wi-Fi mid-turn has to be able to knock again,
+  /// and the door cannot tell one knock from another. The token is handed out
+  /// when a seat is first taken and asked for on every later attempt, so the
+  /// seat goes back to the player who left it rather than to whoever dials
+  /// next.
+  final Map<String, String> _tokens = {};
+  static final Random _tokenSource = Random.secure();
+
+  /// Told when a seat is taken or lost, for a screen that says so.
+  void Function(PlaytestSide side, bool connected)? onSeatChanged;
+
+  String tokenFor(PlaytestSide side) => _tokens[side.name] ?? '';
+
+  /// Whether somebody is sitting in [side]'s seat right now.
+  bool seated(PlaytestSide side) => _seats[side.name]?.isOpen ?? false;
+
   /// Which opening hands are settled, and what each player put back.
   final Map<String, List<int>> _mulliganPicks = {};
   final Set<String> _mulliganDone = {};
@@ -34,13 +53,50 @@ class PlaytestHost {
   final List<String> refusals = [];
 
   /// Seats a player at [side], talking over [transport].
-  void seat(PlaytestSide side, PlaytestTransport transport) {
+  ///
+  /// Seating somebody again replaces whoever was there, which is what a
+  /// player coming back after a dropped connection is: the same seat, a new
+  /// pipe. The board they get is the board as it stands, so a game carries on
+  /// from where it was rather than from where they left.
+  String seat(PlaytestSide side, PlaytestTransport transport) {
+    unawaited(_listening.remove(side.name)?.cancel());
+    final previous = _seats[side.name];
+    if (previous != null && previous != transport) {
+      unawaited(previous.close());
+    }
+
     _seats[side.name] = transport;
     _listening[side.name] = transport.messages.listen(
       (message) => _receive(side, message),
+      // The pipe closing is how a player leaving announces itself: nothing
+      // is sent to say so.
+      onDone: () => _left(side, transport),
+      onError: (Object _) => _left(side, transport),
     );
     _mulliganPicks.putIfAbsent(side.name, () => []);
+    final token = _tokens.putIfAbsent(
+      side.name,
+      () => List.generate(
+        6,
+        (_) => _tokenSource.nextInt(36).toRadixString(36),
+      ).join(),
+    );
+    transport.send({'type': 'welcome', 'seat': side.name, 'token': token});
     sendTo(side);
+    onSeatChanged?.call(side, true);
+    return token;
+  }
+
+  /// Whether [token] is the one this seat was given.
+  bool holdsSeat(PlaytestSide side, String? token) =>
+      token != null && token.isNotEmpty && _tokens[side.name] == token;
+
+  void _left(PlaytestSide side, PlaytestTransport transport) {
+    // Only if they are still the one sitting there: a player who reconnected
+    // already has a new pipe, and the old one closing is the tail end of the
+    // old connection rather than news.
+    if (_seats[side.name] != transport) return;
+    onSeatChanged?.call(side, false);
   }
 
   Future<void> close() async {
@@ -63,7 +119,7 @@ class PlaytestHost {
 
   void sendTo(PlaytestSide side) {
     final transport = _seats[side.name];
-    if (transport == null) return;
+    if (transport == null || !transport.isOpen) return;
     transport.send({
       'type': 'snapshot',
       'snapshot': snapshotFor(state, side).toJson(),

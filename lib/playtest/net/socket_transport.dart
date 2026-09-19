@@ -96,10 +96,18 @@ class SocketTransport implements PlaytestTransport {
 
 /// The device that waits to be dialled.
 ///
-/// One game at a time: the first player through the door gets the seat, and
-/// the listener closes behind them so a third phone cannot wander in.
+/// The door stays open for the length of the game rather than closing behind
+/// the first player through it: a phone that loses its Wi-Fi in the middle of
+/// a turn has to be able to knock again. Who is allowed back in is the game's
+/// business, not the door's -- see the token in [PlaytestHost].
 class PlaytestServer {
-  PlaytestServer._(this._socket);
+  PlaytestServer._(this._socket) {
+    _socket.listen(
+      (connection) => _connections.add(SocketTransport(connection)),
+      onError: (Object _) {},
+      onDone: () => unawaited(_connections.close()),
+    );
+  }
 
   /// Starts listening on [port], on every address this device has.
   static Future<PlaytestServer> bind({int port = defaultPort}) async =>
@@ -111,17 +119,21 @@ class PlaytestServer {
   static const defaultPort = 47707;
 
   final ServerSocket _socket;
+  final StreamController<SocketTransport> _connections =
+      StreamController<SocketTransport>.broadcast();
 
   int get port => _socket.port;
 
-  /// The first player to arrive.
-  Future<SocketTransport> waitForPlayer() async {
-    final connection = await _socket.first;
-    await _socket.close();
-    return SocketTransport(connection);
-  }
+  /// Everybody who dials, in the order they arrive.
+  Stream<SocketTransport> get connections => _connections.stream;
 
-  Future<void> close() => _socket.close();
+  /// The next player to arrive, with the door left open behind them.
+  Future<SocketTransport> waitForPlayer() => _connections.stream.first;
+
+  Future<void> close() async {
+    await _socket.close();
+    if (!_connections.isClosed) await _connections.close();
+  }
 
   /// The addresses a player on the same Wi-Fi could dial, best guess first.
   ///

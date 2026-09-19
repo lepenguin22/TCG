@@ -15,16 +15,28 @@ import 'playtest_wire.dart';
 /// hand, because it holds neither. Asking and being told is the whole of it.
 class RemoteBoard extends ChangeNotifier {
   RemoteBoard({required this.transport, required this.gameId}) {
-    _listening = transport.messages.listen(_receive);
+    _listen(transport);
   }
 
-  final PlaytestTransport transport;
+  PlaytestTransport transport;
 
   /// Which game's cards these are, for turning a face back into a card the
   /// rest of the app understands.
   final String gameId;
 
-  late final StreamSubscription<Map<String, Object?>> _listening;
+  StreamSubscription<Map<String, Object?>>? _listening;
+
+  /// What this device shows to be let back into its seat after the Wi-Fi
+  /// drops. Handed over when the seat is first taken.
+  String? token;
+
+  /// Whether the pipe to the game is open. The board stays on the screen
+  /// while it is not: a game nobody can reach for a moment is still a game,
+  /// and blanking it would lose the player their place.
+  bool live = true;
+
+  /// Told when the pipe closes, so whoever owns it can dial again.
+  VoidCallback? onLost;
 
   /// The last board the host sent, or nothing before the first one arrives.
   PlaytestSnapshot? snapshot;
@@ -36,9 +48,36 @@ class RemoteBoard extends ChangeNotifier {
   /// Whether anything has arrived yet.
   bool get connected => snapshot != null;
 
-  /// Asks the host to do something.
+  /// Asks the host to do something. Dropped on the floor while the pipe is
+  /// down: the board will be told what really happened when it comes back.
   void ask(PlaytestIntent intent) {
+    if (!live) return;
     transport.send({'type': 'intent', 'intent': intent.toJson()});
+  }
+
+  /// Takes up a new pipe to the same game, after the last one dropped.
+  void resumeOn(PlaytestTransport replacement) {
+    transport = replacement;
+    live = true;
+    _listen(replacement);
+    replacement.send({'type': 'resume', 'token': token});
+    notifyListeners();
+  }
+
+  void _listen(PlaytestTransport pipe) {
+    unawaited(_listening?.cancel());
+    _listening = pipe.messages.listen(
+      _receive,
+      onDone: _lost,
+      onError: (Object _) => _lost(),
+    );
+  }
+
+  void _lost() {
+    if (!live) return;
+    live = false;
+    notifyListeners();
+    onLost?.call();
   }
 
   /// A card by instance id, as far as this device is allowed to know it.
@@ -48,6 +87,8 @@ class RemoteBoard extends ChangeNotifier {
 
   void _receive(Map<String, Object?> message) {
     switch (message['type']) {
+      case 'welcome':
+        token = message['token'] as String? ?? token;
       case 'snapshot':
         final body = message['snapshot'];
         if (body is! Map) return;
@@ -62,7 +103,8 @@ class RemoteBoard extends ChangeNotifier {
 
   @override
   void dispose() {
-    unawaited(_listening.cancel());
+    onLost = null;
+    unawaited(_listening?.cancel());
     super.dispose();
   }
 }

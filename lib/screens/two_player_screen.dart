@@ -101,15 +101,36 @@ class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
           ),
         ),
         body: SafeArea(
-          child: board != null && stage == SessionStage.playing
+          child: board != null && stage != SessionStage.waiting
               ? RemoteBoardView(
                   board: board,
+                  notice: _notice(),
                   onLeave: () => Navigator.of(context).pop(),
                 )
               : _lobby(),
         ),
       ),
     );
+  }
+
+  /// What to say across the top of the board while the line is down.
+  String? _notice() {
+    final guest = _guest;
+    if (guest != null && guest.stage == SessionStage.reconnecting) {
+      return guest.attempts == 0
+          ? 'Lost the connection. Dialling the other phone again\u2026'
+          : 'Still trying to reach the other phone '
+                '(${guest.attempts} ${guest.attempts == 1 ? 'try' : 'tries'})'
+                '\u2026';
+    }
+    final host = _host;
+    if (host != null &&
+        host.stage == SessionStage.playing &&
+        !host.guestConnected) {
+      return 'The other player has dropped off. The game is held here until '
+          'they come back.';
+    }
+    return null;
   }
 
   Widget _lobby() {
