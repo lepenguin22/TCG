@@ -103,30 +103,66 @@ class PlaytestEngine {
 
     engine._deal(state.you, store.viewOf(yourDeck).items);
     engine._deal(state.opponent, store.viewOf(opponentDeck).items);
+    engine._openingDeal(turnOrder, solo: solo);
+    return engine;
+  }
 
+  /// Builds a game from decks that are not in this device's library.
+  ///
+  /// A game played across two devices has one deck from each, and the other
+  /// player's arrives over the wire as cards rather than as a deck anybody
+  /// here owns. It is dealt like any other: a deck is a list of cards and
+  /// quantities however it got here.
+  static PlaytestEngine startFromItems({
+    required List<DeckItem> yourItems,
+    required List<DeckItem> opponentItems,
+    required String yourName,
+    required String opponentName,
+    Iterable<CardDefinition> crests = const [],
+    TurnOrder turnOrder = TurnOrder.youFirst,
+    Random? random,
+  }) {
+    final rng = random ?? Random();
+    final state = PlaytestState(
+      you: PlaytestSide(name: yourName, isCpu: false),
+      opponent: PlaytestSide(name: opponentName, isCpu: false),
+    );
+    final engine = PlaytestEngine(state, random: rng);
+    engine.crestPool.addAll(
+      crests.where((card) => _crestTypes.contains(card.attributes['cardType'])),
+    );
+    engine._deal(state.you, yourItems);
+    engine._deal(state.opponent, opponentItems);
+    engine._openingDeal(turnOrder, solo: true);
+    return engine;
+  }
+
+  /// Everything both kinds of game do once the decks are dealt: who goes
+  /// first, the opening vanguards, and five cards each.
+  void _openingDeal(TurnOrder turnOrder, {required bool solo}) {
     // Who goes first, which the crest's energy rule cares about: the player
     // going second is paid three to make up for it.
     final youFirst = switch (turnOrder) {
       TurnOrder.youFirst => true,
       TurnOrder.cpuFirst => false,
-      TurnOrder.random => rng.nextBool(),
+      TurnOrder.random => _random.nextBool(),
     };
     state.you.goesFirst = youFirst;
     state.opponent.goesFirst = !youFirst;
 
     // The first vanguard is the ride deck's grade 0, and it starts on the
     // field rather than in the ride deck.
-    engine._standUpFirstVanguard(state.you);
-    engine._standUpFirstVanguard(state.opponent);
+    _standUpFirstVanguard(state.you);
+    _standUpFirstVanguard(state.opponent);
 
     for (var i = 0; i < 5; i += 1) {
-      engine._draw(state.you);
-      engine._draw(state.opponent);
+      _draw(state.you);
+      _draw(state.opponent);
     }
 
     // The CPU decides its opening at once; a hand you are playing waits for
     // you, and with both hands yours that means both of them.
-    if (!solo) engine._cpuMulligan(state.opponent);
+    if (!solo) _cpuMulligan(state.opponent);
 
     state.note(
       solo
@@ -138,7 +174,6 @@ class PlaytestEngine {
           : 'The CPU goes first. You are paid three energy for going second.',
     );
     state.note('Game on. Choose which cards to put back.');
-    return engine;
   }
 
   void _deal(PlaytestSide side, List<DeckItem> items) {
