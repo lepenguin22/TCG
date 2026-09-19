@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk \
-             "dist/tcg-decks-${TAG}.apk"
+             "dist/vanguard-simulator-${TAG}.apk"
 
       - uses: softprops/action-gh-release@v2
         with:

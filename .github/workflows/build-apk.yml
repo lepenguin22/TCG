@@ -71,12 +71,12 @@ jobs:
         run: |
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk \
-             "dist/tcg-decks-${GITHUB_SHA::7}.apk"
+             "dist/vanguard-simulator-${GITHUB_SHA::7}.apk"
           ls -lh dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: tcg-decks-apk
+          name: vanguard-simulator-apk
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 90

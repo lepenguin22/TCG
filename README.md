@@ -12,7 +12,7 @@ The Dart package is still called `tcg_decks`, and the icon is drawn by
 
 **From GitHub Actions (no toolchain needed).** Every push builds a signed,
 installable APK. Open the repository's **Actions** tab, click the most recent
-*Build APK* run, and download the `tcg-decks-apk` artifact at the bottom of the
+*Build APK* run, and download the `vanguard-simulator-apk` artifact at the bottom of the
 page. Unzip it, copy the `.apk` to your phone, and open it — Android will ask you
 to allow installs from that source the first time.
 
