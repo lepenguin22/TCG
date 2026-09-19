@@ -8,6 +8,7 @@ import '../store/deck_store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'playtest_screen.dart';
+import 'two_player_screen.dart';
 
 /// Chooses who the deck is being tested against.
 ///
@@ -23,11 +24,24 @@ class PlaytestSetupScreen extends StatefulWidget {
   State<PlaytestSetupScreen> createState() => _PlaytestSetupScreenState();
 }
 
+/// Who is on the other side of the table.
+///
+/// Two of these are modes of the local game; the third is another phone, and
+/// is not a mode of anything -- it is a different game entirely, played
+/// against somebody who is not in this app.
+enum _Across { cpu, bothSides, twoDevices }
+
 class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
   TurnOrder _turnOrder = TurnOrder.youFirst;
-  PlaytestMode _mode = PlaytestMode.vsCpu;
+  _Across _across = _Across.cpu;
 
-  bool get _bothSides => _mode == PlaytestMode.bothSides;
+  PlaytestMode get _mode => _across == _Across.bothSides
+      ? PlaytestMode.bothSides
+      : PlaytestMode.vsCpu;
+
+  bool get _bothSides => _across == _Across.bothSides;
+
+  bool get _twoDevices => _across == _Across.twoDevices;
 
   Deck get deck => widget.deck;
 
@@ -89,28 +103,38 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                 const SizedBox(height: 4),
                 SizedBox(
                   width: double.infinity,
-                  child: SegmentedButton<PlaytestMode>(
+                  child: SegmentedButton<_Across>(
                     segments: const [
                       ButtonSegment(
-                        value: PlaytestMode.vsCpu,
+                        value: _Across.cpu,
                         label: Text('The CPU'),
                         icon: Icon(Icons.smart_toy_outlined, size: 18),
                       ),
                       ButtonSegment(
-                        value: PlaytestMode.bothSides,
-                        label: Text('You, both sides'),
+                        value: _Across.bothSides,
+                        label: Text('Both sides'),
                         icon: Icon(Icons.groups_outlined, size: 18),
                       ),
+                      ButtonSegment(
+                        value: _Across.twoDevices,
+                        label: Text('Two devices'),
+                        icon: Icon(Icons.wifi_tethering, size: 18),
+                      ),
                     ],
-                    selected: {_mode},
+                    selected: {_across},
                     showSelectedIcon: false,
                     onSelectionChanged: (chosen) =>
-                        setState(() => _mode = chosen.first),
+                        setState(() => _across = chosen.first),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _bothSides
+                  _twoDevices
+                      ? 'Another person on another phone, both on the same '
+                            'Wi-Fi. One of you hosts and the other joins; '
+                            'each plays their own deck off their own phone, '
+                            'and neither holds the other\'s hand.'
+                      : _bothSides
                       ? 'Nothing moves unless you move it: both openings, '
                             'both boards, both guards. Every ability is '
                             'played by hand, so nothing is skipped because '
@@ -166,27 +190,67 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                SectionHeader(
-                  title: _bothSides ? 'The other deck' : 'Opponent',
-                ),
-                const SizedBox(height: 8),
-                _OpponentTile(
-                  title: 'Mirror match',
-                  subtitle: _bothSides
-                      ? 'The same deck on both sides.'
-                      : 'The CPU plays the same deck.',
-                  icon: Icons.flip_camera_android_outlined,
-                  onTap: () => _start(context, deck, deck),
-                ),
-                for (final other in others) ...[
+                if (_twoDevices) ...[
+                  const SectionHeader(
+                    title: 'Host or join',
+                    caption:
+                        'One phone hosts and shows an address; the other '
+                        'types it in. The host runs the game, and plays in '
+                        'it the same way the other player does.',
+                  ),
                   const SizedBox(height: 8),
                   _OpponentTile(
-                    title: other.name,
-                    subtitle: _describe(store, other),
-                    icon: Icons.style_outlined,
-                    accent: accentColor(other.accent),
-                    onTap: () => _start(context, deck, other),
+                    title: 'Host the game',
+                    subtitle: 'Wait for the other player to join you.',
+                    icon: Icons.wifi_tethering,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TwoPlayerScreen.host(
+                          deck: deck,
+                          turnOrder: _turnOrder,
+                        ),
+                      ),
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                  _OpponentTile(
+                    title: 'Join a game',
+                    subtitle: 'Type the address the other phone is showing.',
+                    icon: Icons.login,
+                    onTap: () => showJoinDialog(context, deck),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'A game across two devices plays the core of the game: '
+                    'riding, calling, attacking, guarding, the checks and '
+                    'the zones. The hand-applied ability tools -- striding, '
+                    'counter-blasts, searching the deck -- are still only on '
+                    'the board you play by yourself.',
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                  ),
+                ] else ...[
+                  SectionHeader(
+                    title: _bothSides ? 'The other deck' : 'Opponent',
+                  ),
+                  const SizedBox(height: 8),
+                  _OpponentTile(
+                    title: 'Mirror match',
+                    subtitle: _bothSides
+                        ? 'The same deck on both sides.'
+                        : 'The CPU plays the same deck.',
+                    icon: Icons.flip_camera_android_outlined,
+                    onTap: () => _start(context, deck, deck),
+                  ),
+                  for (final other in others) ...[
+                    const SizedBox(height: 8),
+                    _OpponentTile(
+                      title: other.name,
+                      subtitle: _describe(store, other),
+                      icon: Icons.style_outlined,
+                      accent: accentColor(other.accent),
+                      onTap: () => _start(context, deck, other),
+                    ),
+                  ],
                 ],
                 const SizedBox(height: 24),
                 const Panel(

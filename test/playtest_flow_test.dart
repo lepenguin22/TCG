@@ -584,7 +584,7 @@ void main() {
       final (store, deck) = await buildDeck();
       await pumpSetup(tester, store, deck);
 
-      await tester.tap(find.text('You, both sides'));
+      await tester.tap(find.text('Both sides'));
       await tester.pumpAndSettle();
       // The turn order is said in the words of a game with two players.
       expect(find.text('Player 1'), findsOneWidget);
