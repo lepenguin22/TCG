@@ -12,6 +12,7 @@ enum IntentKind {
   ride,
   call,
   playOrder,
+  playBlitz,
   discard,
   handToSoul,
   bottomDeck,

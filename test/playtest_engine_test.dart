@@ -577,6 +577,57 @@ void main() {
       expect(foe.hand.contains(shield), isFalse, reason: 'it left the hand');
     });
 
+    test('a blitz order holds an attack off from hand', () async {
+      // Not a guardian -- it has no shield and never reaches the guardian
+      // circle -- but it is the other thing a defender can do about an
+      // attack, and the numbers have to come out the same.
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = readyGame(store, deck);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      expect(engine.state.attack!.connects, isTrue);
+
+      final blitz = GameCard(
+        996,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Persona Shield',
+          attributes: {'grade': '0', 'cardType': 'order-blitz'},
+        ),
+      );
+      foe.hand.add(blitz);
+      expect(blitz.isBlitz, isTrue);
+
+      engine.playBlitz(foe, blitz, shield: 10000);
+
+      expect(engine.state.attack!.connects, isFalse);
+      expect(foe.drop, contains(blitz), reason: 'it goes to the drop zone');
+      expect(foe.hand.contains(blitz), isFalse);
+      expect(
+        engine.state.attack!.guardians.contains(blitz),
+        isFalse,
+        reason: 'an order is not a guardian',
+      );
+      expect(engine.state.log.last.text, contains('10000 shield'));
+    });
+
+    test('what a blitz order gave goes with the battle', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you, foe) = readyGame(store, deck);
+
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.addShield(foe, 20000);
+      expect(engine.state.attack!.connects, isFalse);
+
+      engine.resolveAttack();
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      expect(
+        engine.state.attack!.shield,
+        0,
+        reason: 'the next attack starts from nothing, as a battle does',
+      );
+    });
+
     test('a sentinel stops an attack whatever its power', () async {
       final (store, deck) = await buildDeck();
       final (engine, you, foe) = readyGame(store, deck);

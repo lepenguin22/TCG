@@ -184,6 +184,19 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  /// Plays a blitz order from the hand the board is showing, which during a
+  /// guard is the defender's.
+  void playBlitz(GameCard card, {int shield = 0}) {
+    engine.playBlitz(handSide, card, shield: shield);
+    holding = null;
+    _sync();
+  }
+
+  void addShield(PlaytestSide side, int amount) {
+    engine.addShield(side, amount);
+    _sync();
+  }
+
   void playOrder(GameCard card) {
     engine.playOrder(me, card);
     holding = null;

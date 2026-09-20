@@ -147,9 +147,13 @@ class PlaytestHost {
     if (state.isOver) return _refuse(side, 'the game is over');
 
     // Guarding happens on the other player's turn -- that is what guarding
-    // is -- and so does taking damage from an attack. Everything else waits
-    // for your own turn.
-    const offTurn = {IntentKind.guard, IntentKind.driveCheck};
+    // is -- and so does playing a blitz order, which either player may do
+    // during a battle. Everything else waits for your own turn.
+    const offTurn = {
+      IntentKind.guard,
+      IntentKind.driveCheck,
+      IntentKind.playBlitz,
+    };
     final needsTurn = !offTurn.contains(intent.kind);
     final mulliganing = state.phase == PlaytestPhase.mulligan;
     if (!mulliganing && needsTurn && state.active != side) {
@@ -187,6 +191,20 @@ class PlaytestHost {
         final card = _inHand(side, intent.card);
         if (card == null) return _refuse(side, 'no such order in hand');
         engine.playOrder(side, card);
+      case IntentKind.playBlitz:
+        if (state.attack == null && state.phase != PlaytestPhase.battle) {
+          return _refuse(side, 'a blitz order waits for a battle');
+        }
+        final card = _inHand(side, intent.card);
+        if (card == null) return _refuse(side, 'no such card in hand');
+        if (!card.isBlitz) return _refuse(side, 'that is not a blitz order');
+        // The shield it hands over comes with the request: the card knows
+        // what it gives and the board does not.
+        engine.playBlitz(
+          side,
+          card,
+          shield: (intent.amount ?? 0).clamp(0, 50000),
+        );
       case IntentKind.discard:
         final card = _inHand(side, intent.card);
         if (card == null) return _refuse(side, 'no such card in hand');

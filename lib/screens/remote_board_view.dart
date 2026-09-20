@@ -382,6 +382,22 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
           detail: '${face.shield} shield',
           onTap: () => ask(PlaytestIntent(IntentKind.guard, card: id)),
         ),
+      // The one card either player may play in the middle of a battle, and
+      // the answer for a defender with nothing to guard with.
+      if (face.isBlitz && attack != null)
+        for (final amount in [0, 5000, 10000, 15000, 20000])
+          _Action(
+            icon: Icons.flash_on_outlined,
+            label: amount == 0
+                ? 'Play as a blitz order'
+                : 'Play as a blitz order, +$amount',
+            detail: amount == 0
+                ? 'It goes to the drop zone; apply its text yourself.'
+                : 'Shield or power, it is the same off this attack.',
+            onTap: () => ask(
+              PlaytestIntent(IntentKind.playBlitz, card: id, amount: amount),
+            ),
+          ),
       if (snapshot.myTurn && !guarding) ...[
         if (face.isUnit && snapshot.phase == PlaytestPhase.ride)
           _Action(

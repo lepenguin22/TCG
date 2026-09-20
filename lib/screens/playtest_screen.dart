@@ -2830,14 +2830,20 @@ class _HandSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final held = game.holding == card;
+    // A blitz order is not a guardian, but it is the other thing a defender
+    // can do about an attack, so it is not greyed out of a guard either.
     final usable = guarding
-        ? card.canGuard
+        ? (card.canGuard || card.isBlitz)
         : (game.isTurnOf(game.handSide) && !game.state.isOver);
 
     return GestureDetector(
       onTap: () {
         if (guarding) {
-          if (card.canGuard) game.guardWith(card);
+          if (card.canGuard) {
+            game.guardWith(card);
+          } else if (card.isBlitz) {
+            _showHandSheet(context, game, card);
+          }
           return;
         }
         _showHandSheet(context, game, card);
@@ -2867,6 +2873,8 @@ class _HandSlot extends StatelessWidget {
                   child: Text(
                     guarding && card.canGuard
                         ? (card.isSentinel ? 'PG' : '${card.shield ~/ 1000}k')
+                        : guarding && card.isBlitz
+                        ? 'BLZ'
                         : 'G${card.grade}',
                     style: const TextStyle(
                       fontSize: 9,
@@ -3299,6 +3307,22 @@ void _showHandSheet(
                   Navigator.of(sheetContext).pop();
                 },
               ),
+            // The one card that can be played in the middle of a battle, and
+            // the defender's answer to an attack they cannot guard.
+            if (card.isBlitz && game.state.attack != null)
+              _SheetAction(
+                icon: Icons.flash_on_outlined,
+                label: 'Play as a blitz order',
+                detail: game.isTurnOf(game.handSide)
+                    ? 'In the middle of your own battle.'
+                    : 'Against the attack on the table. Say what shield it '
+                          'gives and the board counts it.',
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  final shield = await _askBlitzShield(context, card);
+                  if (shield != null) game.playBlitz(card, shield: shield);
+                },
+              ),
             _SheetAction(
               icon: Icons.delete_outline,
               label: 'Discard',
@@ -3327,6 +3351,50 @@ void _showHandSheet(
                 game.bottomDeck(game.handSide, card);
                 Navigator.of(sheetContext).pop();
               },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Asks what a blitz order hands the defending unit.
+///
+/// The card knows and the board does not: one gives ten thousand shield,
+/// another gives the unit being attacked ten thousand power, which comes to
+/// the same thing while an attack is being settled. So the number is asked
+/// for rather than guessed at, with the common ones a tap away.
+Future<int?> _askBlitzShield(BuildContext context, GameCard card) {
+  return showModalBottomSheet<int>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              title: card.name,
+              caption:
+                  'What does it hand the unit being attacked? Shield or '
+                  'power, either way it is the same number off this attack.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final amount in [0, 5000, 10000, 15000, 20000])
+                  OutlinedButton(
+                    key: ValueKey('blitz-$amount'),
+                    onPressed: () => Navigator.of(sheetContext).pop(amount),
+                    child: Text(amount == 0 ? 'Nothing' : '+$amount'),
+                  ),
+              ],
             ),
           ],
         ),

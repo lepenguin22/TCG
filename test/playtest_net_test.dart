@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tcg_decks/models/card_definition.dart';
 import 'package:tcg_decks/playtest/net/playtest_host.dart';
 import 'package:tcg_decks/playtest/net/playtest_intent.dart';
 import 'package:tcg_decks/playtest/net/playtest_transport.dart';
@@ -272,6 +273,111 @@ void main() {
       expect(game.sideTwo.hand.length, before);
       expect(game.sideOne.vanguard!.card.grade, 0);
       expect(game.one.refusal, contains('no such card'));
+    });
+
+    test(
+      'the defender may play a blitz order on the attacker\'s turn',
+      () async {
+        final game = await seatedGame();
+        final engine = game.host.engine;
+
+        // Past turn one, into a battle, and Player 1 swings.
+        while (engine.state.turn < 2 ||
+            engine.state.phase != PlaytestPhase.battle) {
+          engine.advancePhase();
+        }
+        game.host.broadcast();
+        await pumpEventQueue();
+        final attacker = engine.state.active;
+        final defender = engine.state.inactive;
+        final defending = defender == game.sideOne ? game.one : game.two;
+        final attacking = attacker == game.sideOne ? game.one : game.two;
+
+        attacking.ask(
+          const PlaytestIntent(
+            IntentKind.attack,
+            circle: Circle.vanguard,
+            to: Circle.vanguard,
+          ),
+        );
+        await pumpEventQueue();
+        final defence = engine.state.attack!.defence;
+
+        // A blitz order in the defender's hand, which they may play although
+        // it is not their turn.
+        final blitz = GameCard(
+          994,
+          CardDefinition(
+            id: 'blitz',
+            gameId: 'vanguard',
+            name: 'Persona Shield',
+            attributes: const {'grade': '0', 'cardType': 'order-blitz'},
+            createdAt: DateTime(2024),
+            updatedAt: DateTime(2024),
+          ),
+        );
+        defender.hand.add(blitz);
+
+        defending.ask(
+          PlaytestIntent(
+            IntentKind.playBlitz,
+            card: blitz.instanceId,
+            amount: 10000,
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(engine.state.attack!.defence, defence + 10000);
+        expect(defender.drop, contains(blitz));
+        expect(
+          engine.state.attack!.guardians,
+          isEmpty,
+          reason: 'an order is not a guardian',
+        );
+      },
+    );
+
+    test('an ordinary order still waits for its own turn', () async {
+      final game = await seatedGame();
+      final engine = game.host.engine;
+      while (engine.state.turn < 2 ||
+          engine.state.phase != PlaytestPhase.battle) {
+        engine.advancePhase();
+      }
+      game.host.broadcast();
+      await pumpEventQueue();
+      final defender = engine.state.inactive;
+      final defending = defender == game.sideOne ? game.one : game.two;
+
+      final order = GameCard(
+        993,
+        CardDefinition(
+          id: 'order',
+          gameId: 'vanguard',
+          name: 'Slow Order',
+          attributes: const {'grade': '0', 'cardType': 'order'},
+          createdAt: DateTime(2024),
+          updatedAt: DateTime(2024),
+        ),
+      );
+      defender.hand.add(order);
+
+      defending.ask(
+        PlaytestIntent(IntentKind.playOrder, card: order.instanceId),
+      );
+      await pumpEventQueue();
+
+      expect(defender.hand, contains(order), reason: 'it is not their turn');
+      expect(defending.refusal, contains('turn'));
+
+      // And a card that is not a blitz order is not one however it is asked
+      // for.
+      defending.ask(
+        PlaytestIntent(IntentKind.playBlitz, card: order.instanceId),
+      );
+      await pumpEventQueue();
+      expect(defender.hand, contains(order));
+      expect(defending.refusal, contains('not a blitz order'));
     });
 
     test('a message this build cannot read is refused, not obeyed', () async {

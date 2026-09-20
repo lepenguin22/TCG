@@ -69,6 +69,11 @@ class GameCard {
   /// Whether this is an order of any kind -- normal, blitz or set.
   bool get isOrder => cardType.startsWith('order');
 
+  /// A blitz order, which is the one kind of card that can be played in the
+  /// middle of a battle: either player may play one during a battle phase,
+  /// which is what makes them the defender's answer to an attack.
+  bool get isBlitz => cardType == 'order-blitz';
+
   /// Whether this is a ticket: a card an ability makes and hands you, which
   /// says so itself -- "(This card is a ticket card, and cannot be put in a
   /// deck)". It is in no deck, so it can only reach the board this way.
@@ -401,6 +406,12 @@ class PendingAttack {
   /// Cards called to the guardian circle to stop this attack.
   final List<GameCard> guardians = [];
 
+  /// Shield from something other than a guardian: a blitz order played in
+  /// the middle of the battle, or an ability that hands the defending unit
+  /// shield or power for the battle. It goes with the battle, as everything
+  /// bought for one battle does.
+  int shieldBonus = 0;
+
   /// Whether a sentinel has cancelled the attack outright.
   bool perfectGuarded = false;
 
@@ -427,7 +438,8 @@ class PendingAttack {
   /// the back row is counting on.
   int get attackPower => attacker.power + (booster?.power ?? 0);
 
-  int get shield => guardians.fold(0, (sum, card) => sum + card.shield);
+  int get shield =>
+      guardians.fold(shieldBonus, (sum, card) => sum + card.shield);
 
   int get defence => target.power + shield;
 

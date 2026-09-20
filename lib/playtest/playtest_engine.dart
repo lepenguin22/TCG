@@ -998,6 +998,37 @@ class PlaytestEngine {
     state.note('${side.name} plays ${card.name}.', by: side);
   }
 
+  /// Plays a blitz order out of hand in the middle of a battle.
+  ///
+  /// The one kind of card that can be played then, and the reason a defender
+  /// with no guardians is not out of answers: either player may play one
+  /// during a battle phase. What it does is the card's own business, so the
+  /// shield it hands over is given here rather than read off it.
+  void playBlitz(PlaytestSide side, GameCard card, {int shield = 0}) {
+    if (!side.hand.remove(card)) return;
+    side.drop.add(card);
+    state.note('${side.name} plays ${card.name} as a blitz order.', by: side);
+    if (shield > 0) addShield(side, shield);
+  }
+
+  /// Adds shield to the battle on the table, from something that is not a
+  /// guardian.
+  ///
+  /// Shield and power come to the same thing while an attack is being
+  /// settled -- both are subtracted from what the attacker needs -- so this
+  /// is also where "the unit being attacked gets [Power]+10000" lands. It is
+  /// bought for one battle and goes when the battle does.
+  void addShield(PlaytestSide side, int amount) {
+    final pending = state.attack;
+    if (pending == null || amount == 0) return;
+    pending.shieldBonus += amount;
+    state.note(
+      '${side.name} adds $amount shield to the battle '
+      '(${pending.attackPower} against ${pending.defence}).',
+      by: side,
+    );
+  }
+
   /// Uses a card's ability from the drop zone, which removes it from the game.
   ///
   /// Two kinds of card do this and both end the same way. An order can be

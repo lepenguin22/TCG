@@ -2267,6 +2267,65 @@ void main() {
       expect(find.text('Leave the game?'), findsNothing);
     });
 
+    testWidgets('a blitz order answers an attack from the hand', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      // Both hands are yours, so the attack and the guard can both be made
+      // here without waiting on the CPU.
+      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      // Nobody attacks on turn one, so the first turn is passed through and
+      // the battle happens on the second.
+      while (game.state.turn < 2 || game.state.phase != PlaytestPhase.battle) {
+        game.nextPhase();
+      }
+
+      // A blitz order in the defender's hand, which is where one is played
+      // from and the one card that can be played mid-battle.
+      final blitz = GameCard(
+        995,
+        store.saveCard(
+          gameId: 'vanguard',
+          name: 'Persona Shield',
+          attributes: {'grade': '0', 'cardType': 'order-blitz'},
+        ),
+      );
+      final defender = game.state.inactive;
+      defender.hand.add(blitz);
+      game.attack(from: Circle.vanguard, to: Circle.vanguard);
+      await tester.pumpAndSettle();
+      expect(game.stage, PlaytestStage.guarding);
+      final defence = game.state.attack!.defence;
+
+      // It is not a guardian, so it is played rather than thrown in front.
+      await tapOnBoard(
+        tester,
+        find.byKey(ValueKey('hand-${blitz.instanceId}')),
+      );
+      await tester.tap(find.text('Play as a blitz order'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('blitz-10000')));
+      await tester.pumpAndSettle();
+
+      expect(game.state.attack!.defence, defence + 10000);
+      expect(defender.drop, contains(blitz));
+      expect(defender.hand.contains(blitz), isFalse);
+      expect(
+        game.state.attack!.guardians,
+        isEmpty,
+        reason: 'an order never reaches the guardian circle',
+      );
+    });
+
     testWidgets('a ticket can be taken into hand from the board', (
       tester,
     ) async {
