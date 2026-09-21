@@ -224,6 +224,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   mine: true,
                   active: snapshot.myTurn,
                   phase: snapshot.phase,
+                  onPlayFromDrop: _playFromDrop,
                 ),
               ],
             ),
@@ -367,6 +368,45 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
   }
 
   // -------------------------------------------------------------- the sheets
+
+  /// A card used out of your own drop zone, which leaves the game as it goes.
+  ///
+  /// The same moment as a blitz order when it happens in a battle, so it is
+  /// asked the same question: what did it hand the unit being attacked.
+  Future<void> _playFromDrop(int id) async {
+    final face = board.cardOf(id);
+    if (face == null) return;
+    final inBattle = snapshot.attack != null;
+    await _sheet([
+      _CardHeading(face: face),
+      if (!inBattle)
+        _Action(
+          icon: Icons.replay,
+          label: face.isOrder ? 'Play it from the drop' : 'Use its ability',
+          detail: 'It is removed from the game afterwards.',
+          onTap: () =>
+              ask(PlaytestIntent(IntentKind.activateFromDrop, card: id)),
+        ),
+      if (inBattle)
+        for (final amount in [0, 5000, 10000, 15000, 20000])
+          _Action(
+            icon: Icons.replay,
+            label: amount == 0
+                ? 'Use it against this attack'
+                : 'Use it, +$amount to the defence',
+            detail: amount == 0
+                ? 'It is removed from the game afterwards.'
+                : 'Shield or power, it is the same off this attack.',
+            onTap: () => ask(
+              PlaytestIntent(
+                IntentKind.activateFromDrop,
+                card: id,
+                amount: amount,
+              ),
+            ),
+          ),
+    ]);
+  }
 
   Future<void> _handSheet(int id) async {
     final face = board.cardOf(id);
@@ -601,6 +641,7 @@ class _SideStrip extends StatelessWidget {
     required this.mine,
     required this.active,
     required this.phase,
+    this.onPlayFromDrop,
   });
 
   final SideSnapshot side;
@@ -608,6 +649,7 @@ class _SideStrip extends StatelessWidget {
   final bool mine;
   final bool active;
   final PlaytestPhase phase;
+  final void Function(int id)? onPlayFromDrop;
 
   @override
   Widget build(BuildContext context) {
@@ -660,6 +702,9 @@ class _SideStrip extends StatelessWidget {
                   cards: pile.$2,
                   board: board,
                   owner: side.name,
+                  // Cards work out of your own drop zone, and often in the
+                  // middle of somebody else's attack.
+                  onPlay: mine && pile.$1 == 'Drop' ? onPlayFromDrop : null,
                 ),
             ],
           ),
@@ -702,12 +747,16 @@ class _PileChip extends StatelessWidget {
     required this.cards,
     required this.board,
     required this.owner,
+    this.onPlay,
   });
 
   final String label;
   final List<int> cards;
   final RemoteBoard board;
   final String owner;
+
+  /// What a card in this pile can be asked to do, where it can do anything.
+  final void Function(int id)? onPlay;
 
   @override
   Widget build(BuildContext context) {
@@ -738,6 +787,16 @@ class _PileChip extends StatelessWidget {
                             fontSize: 14,
                           ),
                         ),
+                        trailing: onPlay == null
+                            ? null
+                            : TextButton(
+                                key: ValueKey('play-from-drop-$id'),
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  onPlay!(id);
+                                },
+                                child: const Text('Play'),
+                              ),
                       ),
                   ],
                 ),

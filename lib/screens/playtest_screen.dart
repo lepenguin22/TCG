@@ -1017,9 +1017,22 @@ void _showPileSheet(
                             // to the drop.
                             if (fromDrop && game.controls(side))
                               TextButton(
-                                onPressed: () {
-                                  game.activateFromDrop(side, card);
+                                onPressed: () async {
                                   Navigator.of(sheetContext).pop();
+                                  game.activateFromDrop(side, card);
+                                  // A drop ability used in the middle of a
+                                  // battle is usually there to stop it, so
+                                  // the board asks what it gave the same way
+                                  // it asks for a blitz order.
+                                  if (game.state.attack == null) return;
+                                  if (!context.mounted) return;
+                                  final shield = await _askBattleShield(
+                                    context,
+                                    card,
+                                  );
+                                  if (shield != null && shield > 0) {
+                                    game.addShield(side, shield);
+                                  }
                                 },
                                 child: Text(
                                   card.isOrder
@@ -3319,7 +3332,7 @@ void _showHandSheet(
                           'gives and the board counts it.',
                 onTap: () async {
                   Navigator.of(sheetContext).pop();
-                  final shield = await _askBlitzShield(context, card);
+                  final shield = await _askBattleShield(context, card);
                   if (shield != null) game.playBlitz(card, shield: shield);
                 },
               ),
@@ -3359,13 +3372,14 @@ void _showHandSheet(
   );
 }
 
-/// Asks what a blitz order hands the defending unit.
+/// Asks what a card played in the middle of a battle hands the defending
+/// unit.
 ///
 /// The card knows and the board does not: one gives ten thousand shield,
 /// another gives the unit being attacked ten thousand power, which comes to
 /// the same thing while an attack is being settled. So the number is asked
 /// for rather than guessed at, with the common ones a tap away.
-Future<int?> _askBlitzShield(BuildContext context, GameCard card) {
+Future<int?> _askBattleShield(BuildContext context, GameCard card) {
   return showModalBottomSheet<int>(
     context: context,
     backgroundColor: AppColors.surface,

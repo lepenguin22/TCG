@@ -13,6 +13,7 @@ enum IntentKind {
   call,
   playOrder,
   playBlitz,
+  activateFromDrop,
   discard,
   handToSoul,
   bottomDeck,

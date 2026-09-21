@@ -337,6 +337,68 @@ void main() {
       },
     );
 
+    test('a card in the drop answers an attack too', () async {
+      final game = await seatedGame();
+      final engine = game.host.engine;
+      while (engine.state.turn < 2 ||
+          engine.state.phase != PlaytestPhase.battle) {
+        engine.advancePhase();
+      }
+      game.host.broadcast();
+      await pumpEventQueue();
+      final defender = engine.state.inactive;
+      final attacker = engine.state.active;
+      final defending = defender == game.sideOne ? game.one : game.two;
+      final attacking = attacker == game.sideOne ? game.one : game.two;
+
+      attacking.ask(
+        const PlaytestIntent(
+          IntentKind.attack,
+          circle: Circle.vanguard,
+          to: Circle.vanguard,
+        ),
+      );
+      await pumpEventQueue();
+      final defence = engine.state.attack!.defence;
+
+      // A card in the defender's drop zone with something to say about it.
+      final inDrop = defender.hand.first;
+      engine.discard(defender, inDrop);
+      expect(defender.drop, contains(inDrop));
+
+      defending.ask(
+        PlaytestIntent(
+          IntentKind.activateFromDrop,
+          card: inDrop.instanceId,
+          amount: 5000,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(engine.state.attack!.defence, defence + 5000);
+      expect(
+        defender.removed,
+        contains(inDrop),
+        reason: 'used from the drop, it leaves the game',
+      );
+      expect(defender.drop.contains(inDrop), isFalse);
+    });
+
+    test('a card in their drop is not yours to use', () async {
+      final game = await seatedGame();
+      final engine = game.host.engine;
+      final theirs = game.sideTwo.hand.first;
+      engine.discard(game.sideTwo, theirs);
+
+      game.one.ask(
+        PlaytestIntent(IntentKind.activateFromDrop, card: theirs.instanceId),
+      );
+      await pumpEventQueue();
+
+      expect(game.sideTwo.drop, contains(theirs));
+      expect(game.one.refusal, contains('no such card in the drop zone'));
+    });
+
     test('an ordinary order still waits for its own turn', () async {
       final game = await seatedGame();
       final engine = game.host.engine;

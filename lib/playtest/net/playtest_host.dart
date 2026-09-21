@@ -153,6 +153,9 @@ class PlaytestHost {
       IntentKind.guard,
       IntentKind.driveCheck,
       IntentKind.playBlitz,
+      // A card answering an attack out of the drop zone is the same moment
+      // as a blitz order, and happens on the attacker's turn as often as not.
+      IntentKind.activateFromDrop,
     };
     final needsTurn = !offTurn.contains(intent.kind);
     final mulliganing = state.phase == PlaytestPhase.mulligan;
@@ -205,6 +208,21 @@ class PlaytestHost {
           card,
           shield: (intent.amount ?? 0).clamp(0, 50000),
         );
+      case IntentKind.activateFromDrop:
+        if (state.active != side && state.attack == null) {
+          return _refuse(side, 'it is not ${side.name}\'s turn');
+        }
+        final card = side.drop
+            .where((c) => c.instanceId == intent.card)
+            .firstOrNull;
+        if (card == null) {
+          return _refuse(side, 'no such card in the drop zone');
+        }
+        engine.activateFromDrop(side, card);
+        // What it gave the battle, if it was played into one.
+        if (state.attack != null && (intent.amount ?? 0) > 0) {
+          engine.addShield(side, intent.amount!.clamp(0, 50000));
+        }
       case IntentKind.discard:
         final card = _inHand(side, intent.card);
         if (card == null) return _refuse(side, 'no such card in hand');

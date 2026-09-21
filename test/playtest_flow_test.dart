@@ -2326,6 +2326,48 @@ void main() {
       );
     });
 
+    testWidgets('a drop zone ability answers an attack as well', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+
+      final game = Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+      while (game.state.turn < 2 || game.state.phase != PlaytestPhase.battle) {
+        game.nextPhase();
+      }
+
+      // Something in the defender's drop zone to answer with.
+      final defender = game.state.inactive;
+      final buried = defender.hand.first;
+      game.engine.discard(defender, buried);
+      game.attack(from: Circle.vanguard, to: Circle.vanguard);
+      await tester.pumpAndSettle();
+      final defence = game.state.attack!.defence;
+
+      // Yours is the lower of the two piles, theirs the upper; the defender
+      // is whichever of them is not taking the turn.
+      await tapOnBoard(
+        tester,
+        defender == game.you ? find.text('Drop').last : find.text('Drop').first,
+      );
+      // An order says "play", a unit with a drop ability says "activate".
+      await tester.tap(find.textContaining('from drop').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('blitz-5000')));
+      await tester.pumpAndSettle();
+
+      expect(game.state.attack!.defence, defence + 5000);
+      expect(defender.removed, contains(buried));
+    });
+
     testWidgets('a ticket can be taken into hand from the board', (
       tester,
     ) async {
