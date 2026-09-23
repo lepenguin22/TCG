@@ -194,6 +194,21 @@ class PlaytestHost {
         final card = _inHand(side, intent.card);
         if (card == null) return _refuse(side, 'no such order in hand');
         engine.playOrder(side, card);
+      case IntentKind.playSetOrder:
+        final card = _inHand(side, intent.card);
+        if (card == null) return _refuse(side, 'no such card in hand');
+        if (!card.isSetOrder) return _refuse(side, 'that is not a set order');
+        engine.playSetOrder(side, card);
+      case IntentKind.removeOrder:
+        // Only out of your own order zone: the other player's set orders are
+        // theirs to take away, however much you would like them gone.
+        final card = side.orderZone
+            .where((c) => c.instanceId == intent.card)
+            .firstOrNull;
+        if (card == null) {
+          return _refuse(side, 'no such card in the order zone');
+        }
+        engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
       case IntentKind.playBlitz:
         if (state.attack == null && state.phase != PlaytestPhase.battle) {
           return _refuse(side, 'a blitz order waits for a battle');

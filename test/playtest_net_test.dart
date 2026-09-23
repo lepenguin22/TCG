@@ -555,4 +555,108 @@ void main() {
       );
     });
   });
+
+  group('set orders across two devices', () {
+    /// A set order put straight into [side]'s hand, the way a deck full of
+    /// them would deal one.
+    /// [id] sits far above anything the engine hands out, so a test card
+    /// never turns out to be a card already in the game.
+    GameCard setOrder(PlaytestHost host, PlaytestSide side, {int id = 900770}) {
+      final card = GameCard(
+        id,
+        CardDefinition(
+          id: 'catalog:test-set-order-$id',
+          gameId: 'vanguard',
+          name: 'Product $id',
+          attributes: const {'grade': '1', 'cardType': 'order-set'},
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+      side.hand.add(card);
+      return card;
+    }
+
+    test('a set order played from hand shows on both devices', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      final order = setOrder(game.host, active);
+
+      mine.ask(PlaytestIntent(IntentKind.playSetOrder, card: order.instanceId));
+      await pumpEventQueue();
+
+      expect(active.orderZone, [order]);
+      expect(mine.snapshot!.me.orderZoneIds, [order.instanceId]);
+      expect(theirs.snapshot!.them.orderZoneIds, [
+        order.instanceId,
+      ], reason: 'a set order is on the table for both to see');
+      expect(
+        theirs.snapshot!.knows(order.instanceId),
+        isTrue,
+        reason: 'both players are playing under what it says',
+      );
+    });
+
+    test('only a set order is set', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final unit = active.hand.firstWhere((c) => c.isUnit);
+
+      mine.ask(PlaytestIntent(IntentKind.playSetOrder, card: unit.instanceId));
+      await pumpEventQueue();
+
+      expect(active.orderZone, isEmpty);
+      expect(game.host.refusals.last, contains('not a set order'));
+    });
+
+    test('a set order leaves by the way its owner picks', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final order = setOrder(game.host, active);
+      mine.ask(PlaytestIntent(IntentKind.playSetOrder, card: order.instanceId));
+      await pumpEventQueue();
+
+      mine.ask(
+        PlaytestIntent(
+          IntentKind.removeOrder,
+          card: order.instanceId,
+          exit: OrderExit.soul,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(active.orderZone, isEmpty);
+      expect(active.soul, contains(order));
+      expect(mine.snapshot!.me.soulIds, contains(order.instanceId));
+    });
+
+    test('the other player cannot take your set order away', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final idle = active == game.sideOne ? game.sideTwo : game.sideOne;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      final order = setOrder(game.host, active);
+      mine.ask(PlaytestIntent(IntentKind.playSetOrder, card: order.instanceId));
+      await pumpEventQueue();
+
+      // On their own turn, so what stops them is whose order zone it is
+      // rather than whose turn it is.
+      game.host.state.yourTurn = !game.host.state.yourTurn;
+      theirs.ask(
+        PlaytestIntent(IntentKind.removeOrder, card: order.instanceId),
+      );
+      await pumpEventQueue();
+
+      expect(active.orderZone, [
+        order,
+      ], reason: 'it is still where its owner set it');
+      expect(idle.drop.contains(order), isFalse);
+      expect(game.host.refusals.last, contains('order zone'));
+    });
+  });
 }

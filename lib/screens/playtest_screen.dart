@@ -730,6 +730,15 @@ class _ZoneRail extends StatelessWidget {
         count: side.soul.length,
         onTap: () => _showSoulSheet(context, game, side),
       ),
+      // Set orders, which stay on the table doing what they say. The pile
+      // appears once one is set, since most decks set none all game.
+      if (side.orderZone.isNotEmpty)
+        _Pile(
+          label: 'Orders',
+          count: side.orderZone.length,
+          highlight: true,
+          onTap: () => _showOrderZoneSheet(context, game, side),
+        ),
       // The crest. Shown even with none in play, since an empty crest zone
       // is where one gets played from -- a deck that brings no crest of its
       // own is exactly the deck that wants to choose one.
@@ -1592,6 +1601,75 @@ void _showDeckSearchSheet(
 /// crest beside it. Playing the second must not cost the first, so this shows
 /// what is there and offers what else could be, rather than making one crest
 /// the only crest.
+/// The order zone: the set orders on the table, and where each of them goes
+/// when its work is done.
+///
+/// Not a pile of spent cards. Everything here is still doing something, and
+/// a deck built on set orders counts them, so they are listed face up for
+/// either player to read rather than swept out of sight.
+void _showOrderZoneSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (_, scrollController) => ListenableBuilder(
+          listenable: game,
+          builder: (_, _) => ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              SectionHeader(
+                title:
+                    '${side.name}\u2019s order zone '
+                    '(${side.orderZone.length})',
+                caption:
+                    'Set orders stay here face up, doing what they say. '
+                    'Where one goes when it leaves is on the card.',
+              ),
+              if (side.orderZone.isEmpty)
+                const Text(
+                  'Nothing set.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              for (final card in side.orderZone) ...[
+                const SizedBox(height: 8),
+                _CardHeading(card: card),
+                if (game.controls(side))
+                  Wrap(
+                    spacing: 4,
+                    children: [
+                      for (final exit in [
+                        (OrderExit.drop, 'To the drop'),
+                        (OrderExit.soul, 'To the soul'),
+                        (OrderExit.hand, 'Back to hand'),
+                        (OrderExit.removed, 'Out of the game'),
+                      ])
+                        TextButton(
+                          key: ValueKey('order-exit-${exit.$1.name}'),
+                          onPressed: () =>
+                              game.removeOrder(side, card, to: exit.$1),
+                          child: Text(exit.$2),
+                        ),
+                    ],
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 void _showCrestSheet(
   BuildContext context,
   PlaytestController game,
@@ -3310,7 +3388,23 @@ void _showHandSheet(
                   Navigator.of(sheetContext).pop();
                 },
               ),
-            if (game.isTurnOf(game.handSide) && !card.isUnit)
+            // A set order is played and then stays on the table, which is
+            // the whole of what makes it a set order.
+            if (game.isTurnOf(game.handSide) && card.isSetOrder)
+              _SheetAction(
+                icon: Icons.push_pin_outlined,
+                label: 'Set in the order zone',
+                detail:
+                    'It stays there, doing what it says, until something '
+                    'takes it away.',
+                onTap: () {
+                  game.playSetOrder(card);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+            if (game.isTurnOf(game.handSide) &&
+                !card.isUnit &&
+                !card.isSetOrder)
               _SheetAction(
                 icon: Icons.bolt_outlined,
                 label: 'Play as an order',

@@ -69,6 +69,12 @@ class GameCard {
   /// Whether this is an order of any kind -- normal, blitz or set.
   bool get isOrder => cardType.startsWith('order');
 
+  /// A set order, which is played out of hand and then stays on the table
+  /// in the order zone, doing whatever it says, until something takes it
+  /// away. Every other card played out of hand is gone by the time it has
+  /// finished resolving.
+  bool get isSetOrder => cardType == 'order-set';
+
   /// A blitz order, which is the one kind of card that can be played in the
   /// middle of a battle: either player may play one during a battle phase,
   /// which is what makes them the defender's answer to an attack.
@@ -171,6 +177,10 @@ class FieldUnit {
 }
 
 /// Everything one player owns.
+/// Where a set order goes when it leaves the order zone. Its own text says
+/// which, so the board asks rather than deciding.
+enum OrderExit { drop, soul, hand, removed }
+
 class PlaytestSide {
   PlaytestSide({required this.name, required this.isCpu});
 
@@ -193,6 +203,14 @@ class PlaytestSide {
   /// a drive check and not left in the damage zone from a damage one. The
   /// pile exists so what left is visible rather than simply gone.
   final List<GameCard> removed = [];
+
+  /// The order zone, where a set order sits face up once it is played.
+  ///
+  /// It is not a pile of spent cards: everything here is still doing
+  /// something, and a deck built on set orders counts them -- "if your order
+  /// zone has three or more set orders" -- so they are kept where both
+  /// players can see them rather than swept into the drop.
+  final List<GameCard> orderZone = [];
 
   /// The G zone cards that are face up.
   ///

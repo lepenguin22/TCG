@@ -225,6 +225,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   active: snapshot.myTurn,
                   phase: snapshot.phase,
                   onPlayFromDrop: _playFromDrop,
+                  onRemoveOrder: _removeOrder,
                 ),
               ],
             ),
@@ -408,6 +409,30 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
     ]);
   }
 
+  /// Taking one of your own set orders off the table, wherever its text
+  /// says it goes.
+  Future<void> _removeOrder(int id) async {
+    final face = board.cardOf(id);
+    if (face == null) return;
+    await _sheet([
+      _CardHeading(face: face),
+      for (final exit in const [
+        (OrderExit.drop, 'To the drop zone', Icons.delete_outline),
+        (OrderExit.soul, 'Into the soul', Icons.auto_awesome_outlined),
+        (OrderExit.hand, 'Back to hand', Icons.back_hand_outlined),
+        (OrderExit.removed, 'Out of the game', Icons.block_outlined),
+      ])
+        _Action(
+          key: ValueKey('remote-order-exit-${exit.$1.name}'),
+          icon: exit.$3,
+          label: exit.$2,
+          onTap: () => ask(
+            PlaytestIntent(IntentKind.removeOrder, card: id, exit: exit.$1),
+          ),
+        ),
+    ]);
+  }
+
   Future<void> _handSheet(int id) async {
     final face = board.cardOf(id);
     if (face == null) return;
@@ -455,7 +480,17 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   PlaytestIntent(IntentKind.call, card: id, circle: circle),
                 ),
               ),
-        if (face.isOrder)
+        // A set order is played and then stays on the table, which is the
+        // whole of what makes it a set order, so it is not offered the way
+        // out through the drop zone.
+        if (face.isSetOrder)
+          _Action(
+            icon: Icons.push_pin_outlined,
+            label: 'Set in the order zone',
+            detail: 'It stays there until something takes it away.',
+            onTap: () => ask(PlaytestIntent(IntentKind.playSetOrder, card: id)),
+          ),
+        if (face.isOrder && !face.isSetOrder)
           _Action(
             icon: Icons.bolt_outlined,
             label: 'Play as an order',
@@ -558,6 +593,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
             for (final child in children)
               if (child is _Action)
                 _Action(
+                  key: child.key,
                   icon: child.icon,
                   label: child.label,
                   detail: child.detail,
@@ -642,6 +678,7 @@ class _SideStrip extends StatelessWidget {
     required this.active,
     required this.phase,
     this.onPlayFromDrop,
+    this.onRemoveOrder,
   });
 
   final SideSnapshot side;
@@ -650,6 +687,9 @@ class _SideStrip extends StatelessWidget {
   final bool active;
   final PlaytestPhase phase;
   final void Function(int id)? onPlayFromDrop;
+
+  /// Taking one of this player's own set orders off the table.
+  final void Function(int id)? onRemoveOrder;
 
   @override
   Widget build(BuildContext context) {
@@ -696,6 +736,9 @@ class _SideStrip extends StatelessWidget {
                 if (side.gZoneIds.isNotEmpty) ('G', side.gZoneIds),
                 if (side.removedIds.isNotEmpty) ('Removed', side.removedIds),
                 if (side.crestIds.isNotEmpty) ('Crest', side.crestIds),
+                // Set orders are face up for both players, since both are
+                // playing under what they say.
+                if (side.orderZoneIds.isNotEmpty) ('Orders', side.orderZoneIds),
               ])
                 _PileChip(
                   label: pile.$1,
@@ -703,8 +746,19 @@ class _SideStrip extends StatelessWidget {
                   board: board,
                   owner: side.name,
                   // Cards work out of your own drop zone, and often in the
-                  // middle of somebody else's attack.
-                  onPlay: mine && pile.$1 == 'Drop' ? onPlayFromDrop : null,
+                  // middle of somebody else's attack. A set order comes off
+                  // the table the same way: only its owner may move it.
+                  onPlay: !mine
+                      ? null
+                      : pile.$1 == 'Drop'
+                      ? onPlayFromDrop
+                      : pile.$1 == 'Orders'
+                      ? onRemoveOrder
+                      : null,
+                  playLabel: pile.$1 == 'Orders' ? 'Move' : 'Play',
+                  playKeyPrefix: pile.$1 == 'Orders'
+                      ? 'move-order'
+                      : 'play-from-drop',
                 ),
             ],
           ),
@@ -748,6 +802,8 @@ class _PileChip extends StatelessWidget {
     required this.board,
     required this.owner,
     this.onPlay,
+    this.playLabel = 'Play',
+    this.playKeyPrefix = 'play-from-drop',
   });
 
   final String label;
@@ -758,9 +814,16 @@ class _PileChip extends StatelessWidget {
   /// What a card in this pile can be asked to do, where it can do anything.
   final void Function(int id)? onPlay;
 
+  /// What that reads as on the button, and what a test finds it by.
+  final String playLabel;
+  final String playKeyPrefix;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      // The whole chip, not just the letters on it: a chip is a small target
+      // already without asking for the text to be hit exactly.
+      behavior: HitTestBehavior.opaque,
       onTap: cards.isEmpty
           ? null
           : () => showModalBottomSheet<void>(
@@ -790,12 +853,12 @@ class _PileChip extends StatelessWidget {
                         trailing: onPlay == null
                             ? null
                             : TextButton(
-                                key: ValueKey('play-from-drop-$id'),
+                                key: ValueKey('$playKeyPrefix-$id'),
                                 onPressed: () {
                                   Navigator.of(context).pop();
                                   onPlay!(id);
                                 },
-                                child: const Text('Play'),
+                                child: Text(playLabel),
                               ),
                       ),
                   ],
@@ -1135,6 +1198,7 @@ class _CardHeading extends StatelessWidget {
 /// One thing a sheet offers to do.
 class _Action extends StatelessWidget {
   const _Action({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,

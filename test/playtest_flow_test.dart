@@ -12,7 +12,7 @@ import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
 import 'playtest_engine_test.dart'
-    show buildDeck, buildEnergyDeck, buildStrideDeck;
+    show buildDeck, buildEnergyDeck, buildSetOrderDeck, buildStrideDeck;
 
 void main() {
   group('the playtest controller', () {
@@ -892,6 +892,40 @@ void main() {
       }
       return find.text('G1');
     }
+
+    testWidgets('a set order is set, and comes off the table again', (
+      tester,
+    ) async {
+      // A deck of nothing but set orders, so the opening hand is certain to
+      // hold one to set.
+      final (store, deck) = await buildSetOrderDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      expect(find.text('Orders'), findsNothing, reason: 'nothing set yet');
+
+      await tapOnBoard(tester, find.text('G1').first);
+      await tester.tap(find.text('Set in the order zone'));
+      await tester.pumpAndSettle();
+
+      // It is on the table rather than spent: the order zone has it and the
+      // drop does not.
+      expect(find.text('Orders'), findsOneWidget);
+      await tapOnBoard(tester, find.text('Orders'));
+      expect(find.textContaining('order zone (1)'), findsOneWidget);
+      expect(find.text('Set Product'), findsWidgets);
+
+      await tester.tap(find.byKey(const ValueKey('order-exit-soul')).first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('order zone (0)'), findsOneWidget);
+
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Orders'), findsNothing, reason: 'the table is clear');
+      await tapOnBoard(tester, find.text('Soul').last);
+      expect(find.text('Set Product'), findsWidgets);
+    });
 
     testWidgets('a rear-guard offers to move up its column', (tester) async {
       final (store, deck) = await buildDeck();

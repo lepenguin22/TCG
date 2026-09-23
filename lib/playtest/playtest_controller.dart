@@ -197,6 +197,21 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void playSetOrder(GameCard card) {
+    engine.playSetOrder(handSide, card);
+    holding = null;
+    _sync();
+  }
+
+  void removeOrder(
+    PlaytestSide side,
+    GameCard card, {
+    OrderExit to = OrderExit.drop,
+  }) {
+    engine.removeOrder(side, card, to: to);
+    _sync();
+  }
+
   void playOrder(GameCard card) {
     engine.playOrder(me, card);
     holding = null;

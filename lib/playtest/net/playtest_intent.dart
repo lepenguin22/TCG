@@ -12,6 +12,8 @@ enum IntentKind {
   ride,
   call,
   playOrder,
+  playSetOrder,
+  removeOrder,
   playBlitz,
   activateFromDrop,
   discard,
@@ -45,6 +47,7 @@ class PlaytestIntent {
     this.circle,
     this.to,
     this.amount,
+    this.exit,
   });
 
   final IntentKind kind;
@@ -61,12 +64,16 @@ class PlaytestIntent {
   /// A number: energy, power, however many.
   final int? amount;
 
+  /// Where a set order goes when it is taken off the table.
+  final OrderExit? exit;
+
   Map<String, Object?> toJson() => {
     'kind': kind.name,
     if (card != null) 'card': card,
     if (circle != null) 'circle': circle!.name,
     if (to != null) 'to': to!.name,
     if (amount != null) 'amount': amount,
+    if (exit != null) 'exit': exit!.name,
   };
 
   /// Reads an intent off the wire, or nothing at all.
@@ -85,6 +92,7 @@ class PlaytestIntent {
       circle: _circle(json['circle']),
       to: _circle(json['to']),
       amount: json['amount'] is int ? json['amount']! as int : null,
+      exit: OrderExit.values.where((e) => e.name == json['exit']).firstOrNull,
     );
   }
 

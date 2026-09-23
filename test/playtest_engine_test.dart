@@ -108,6 +108,28 @@ Future<(DeckStore, Deck)> buildEnergyDeck() async {
   return (store, store.decks.firstWhere((d) => d.id == deck.id));
 }
 
+/// A deck that plays out of the order zone: nothing in the main deck but set
+/// orders, so an opening hand is certain to hold one.
+Future<(DeckStore, Deck)> buildSetOrderDeck() async {
+  final (store, deck) = await buildDeck(name: 'Order deck');
+  for (final item in store.viewOf(deck).items) {
+    if (item.entry.zoneId == zoneMain) {
+      store.setQuantity(deck.id, item.card.id, item.entry.zoneId, 0);
+    }
+  }
+  final product = store.saveCard(
+    gameId: 'vanguard',
+    name: 'Set Product',
+    attributes: {
+      'grade': '1',
+      'cardType': 'order-set',
+      'effect': 'Put this card into your order zone. It sits there.',
+    },
+  );
+  store.addToDeck(deck.id, product.id, zoneMain, quantity: 50);
+  return (store, store.decks.firstWhere((d) => d.id == deck.id));
+}
+
 PlaytestEngine engineFor(DeckStore store, Deck deck, {int seed = 7}) =>
     PlaytestEngine.start(
       store: store,
@@ -3771,6 +3793,87 @@ void main() {
       expect(engine.state.isOver, isTrue, reason: 'the game reached an end');
       expect(engine.state.winner, isNotNull);
       expect(ai.state.log, isNotEmpty);
+    });
+  });
+
+  group('the order zone', () {
+    GameCard setOrder(DeckStore store, {int id = 900880}) => GameCard(
+      id,
+      store.saveCard(
+        gameId: 'vanguard',
+        name: 'Product $id',
+        attributes: {
+          'grade': '1',
+          'cardType': 'order-set',
+          'effect': 'It sits there and does this.',
+        },
+      ),
+    );
+
+    test('a set order played out of hand stays on the table', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final order = setOrder(store);
+      you.hand.add(order);
+      expect(order.isSetOrder, isTrue);
+
+      engine.playSetOrder(you, order);
+
+      expect(you.orderZone, [order]);
+      expect(you.hand.contains(order), isFalse);
+      expect(
+        you.drop.contains(order),
+        isFalse,
+        reason: 'a set order is not spent by being played',
+      );
+      expect(engine.state.log.last.text, contains('order zone'));
+    });
+
+    test('a card that is not in hand is not set', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      engine.playSetOrder(you, setOrder(store, id: 900881));
+
+      expect(you.orderZone, isEmpty);
+    });
+
+    test('each way out of the order zone leads where it says', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+
+      for (final (index, exit) in OrderExit.values.indexed) {
+        final order = setOrder(store, id: 900900 + index);
+        you.hand.add(order);
+        engine.playSetOrder(you, order);
+        engine.removeOrder(you, order, to: exit);
+
+        expect(you.orderZone.contains(order), isFalse);
+        expect(switch (exit) {
+          OrderExit.drop => you.drop,
+          OrderExit.soul => you.soul,
+          OrderExit.hand => you.hand,
+          OrderExit.removed => you.removed,
+        }, contains(order));
+      }
+    });
+
+    test('a set order nobody set goes nowhere', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final order = setOrder(store, id: 900890);
+
+      engine.removeOrder(you, order);
+
+      expect(you.drop.contains(order), isFalse);
     });
   });
 }

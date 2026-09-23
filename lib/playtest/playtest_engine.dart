@@ -991,6 +991,42 @@ class PlaytestEngine {
     state.note('${side.name} retires ${unit.card.name}.', by: side);
   }
 
+  /// Plays a set order, which stays on the table rather than being spent.
+  void playSetOrder(PlaytestSide side, GameCard card) {
+    if (!side.hand.remove(card)) return;
+    side.orderZone.add(card);
+    state.note('${side.name} sets ${card.name} in the order zone.', by: side);
+  }
+
+  /// Takes a set order off the table, wherever its text says it goes.
+  void removeOrder(
+    PlaytestSide side,
+    GameCard card, {
+    OrderExit to = OrderExit.drop,
+  }) {
+    if (!side.orderZone.remove(card)) return;
+    switch (to) {
+      case OrderExit.drop:
+        side.drop.add(card);
+      case OrderExit.soul:
+        side.soul.add(card);
+      case OrderExit.hand:
+        side.hand.add(card);
+      case OrderExit.removed:
+        side.removed.add(card);
+    }
+    state.note(
+      '${side.name} takes ${card.name} out of the order zone '
+      '${switch (to) {
+        OrderExit.drop => 'to the drop zone',
+        OrderExit.soul => 'into the soul',
+        OrderExit.hand => 'back to hand',
+        OrderExit.removed => 'and out of the game',
+      }}.',
+      by: side,
+    );
+  }
+
   /// Plays an order: it does its work as text and goes straight to the drop.
   void playOrder(PlaytestSide side, GameCard card) {
     side.hand.remove(card);

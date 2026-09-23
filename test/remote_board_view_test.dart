@@ -2,11 +2,13 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tcg_decks/models/card_definition.dart';
 import 'package:tcg_decks/playtest/net/playtest_host.dart';
 import 'package:tcg_decks/playtest/net/playtest_intent.dart';
 import 'package:tcg_decks/playtest/net/playtest_transport.dart';
 import 'package:tcg_decks/playtest/net/remote_board.dart';
 import 'package:tcg_decks/playtest/playtest_engine.dart';
+import 'package:tcg_decks/playtest/playtest_state.dart';
 import 'package:tcg_decks/screens/remote_board_view.dart';
 import 'package:tcg_decks/theme.dart';
 
@@ -167,5 +169,57 @@ void main() {
     // The far board is looking at it as the opponent's vanguard.
     await pumpBoard(tester, game.theirs);
     expect(find.text(riding.name), findsWidgets);
+  });
+
+  testWidgets('a set order sits in the order zone on both boards', (
+    tester,
+  ) async {
+    // A phone's worth of room, so the strip of piles is not under the hand.
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final game = await hosted();
+    game.mine.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.theirs.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await tester.pump();
+
+    final you = game.host.state.you;
+    // An id far above anything the engine hands out, so it is this card the
+    // board finds and not whatever else the counter reached.
+    final order = GameCard(
+      900760,
+      CardDefinition(
+        id: 'catalog:test-set-order',
+        gameId: 'vanguard',
+        name: 'Pinned Product',
+        attributes: const {'grade': '1', 'cardType': 'order-set'},
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+    you.hand.add(order);
+    game.mine.ask(
+      PlaytestIntent(IntentKind.playSetOrder, card: order.instanceId),
+    );
+
+    // The other player's board says what is set, since they are playing
+    // under it too.
+    await pumpBoard(tester, game.theirs);
+    expect(find.text('Orders 1'), findsOneWidget);
+
+    // And its owner can take it off the table again.
+    await pumpBoard(tester, game.mine);
+    await tester.tap(find.text('Orders 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pinned Product'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('move-order-900760')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('remote-order-exit-soul')));
+    await tester.pumpAndSettle();
+
+    expect(you.orderZone, isEmpty);
+    expect(you.soul, contains(order));
   });
 }
