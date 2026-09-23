@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../games/games.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
+import '../utils/app_build.dart';
 import '../widgets/action_sheet.dart';
 import '../widgets/common.dart';
 
@@ -123,10 +124,7 @@ class SettingsScreen extends StatelessWidget {
           // build passes the tag in; a build made by hand says so instead.
           const Center(
             child: Text(
-              String.fromEnvironment(
-                'APP_VERSION',
-                defaultValue: 'Local build',
-              ),
+              appBuildVersion,
               style: TextStyle(color: AppColors.textFaint, fontSize: 12),
             ),
           ),

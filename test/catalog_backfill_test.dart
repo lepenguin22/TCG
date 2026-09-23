@@ -271,6 +271,72 @@ void main() {
     expect(await backfillLibraryFromCatalog(store, seededCatalog()), 0);
   });
 
+  test('an app update repairs cards the new database can read', () async {
+    // The bug this guards: a card the database had never heard of was saved
+    // blank, the repair ran and marked itself done, and then a later build
+    // brought a database that did know the card. Nothing asked for the repair
+    // again, so the card stayed blank on every phone that had already run it.
+    final store = await loadedStore();
+    store.buildVersion = 'v1.0.0';
+    final card = store.saveCard(
+      gameId: 'vanguard',
+      name: 'Onslaught Surf Dragon',
+      attributes: {'cardNo': 'D-PR/1112EN'},
+    );
+    await backfillLibraryFromCatalog(store, seededCatalog());
+    expect(
+      store.cardById(card.id)!.attributes['power'],
+      isNull,
+      reason: 'the database of that build had never heard of it',
+    );
+    expect(store.needsCardBackfill, isFalse);
+
+    // The next release, carrying a database that has the card.
+    final updated = await loadedStore();
+    updated.buildVersion = 'v1.1.0';
+    expect(
+      updated.needsCardBackfill,
+      isTrue,
+      reason: 'a new build is a new database',
+    );
+    final refreshed = seededCatalog([
+      ..._catalog,
+      _card('Onslaught Surf Dragon', {
+        'g': 2,
+        't': 'normal',
+        'na': 'stoicheia',
+        'p': 10000,
+        's': 5000,
+        'no': 'D-PR/1112EN',
+        'e': '[AUTO]:When this unit is placed on (RC), something.',
+        'i': 'dpr/dpr_1112.png',
+        'sr': 'd',
+      }),
+    ]);
+
+    expect(await backfillLibraryFromCatalog(updated, refreshed), 1);
+    final filled = updated.cardById(card.id)!;
+    expect(filled.attributes['power'], '10000');
+    expect(filled.attributes['shield'], '5000');
+    expect(filled.attributes['series'], 'd');
+    expect(filled.attributes['effect'], contains('placed on (RC)'));
+  });
+
+  test('the same build does not read the catalogue again', () async {
+    final store = await loadedStore();
+    store.buildVersion = 'v1.0.0';
+    store.saveCard(
+      gameId: 'vanguard',
+      name: 'Dragonic Overlord',
+      attributes: {'grade': '3'},
+    );
+    await backfillLibraryFromCatalog(store, seededCatalog());
+
+    final relaunched = await loadedStore();
+    relaunched.buildVersion = 'v1.0.0';
+    expect(relaunched.needsCardBackfill, isFalse);
+  });
+
   test('the repair survives a restart', () async {
     final store = await loadedStore();
     store.saveCard(

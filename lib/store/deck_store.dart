@@ -11,10 +11,12 @@ import '../games/games.dart';
 import '../games/vanguard/vanguard_numbers.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
+import '../utils/app_build.dart';
 
 const _decksKey = 'tcgdecks.v1.decks';
 const _cardsKey = 'tcgdecks.v1.cards';
 const _backfillKey = 'tcgdecks.v1.backfill';
+const _backfillBuildKey = 'tcgdecks.v1.backfill.build';
 
 /// Bumped whenever the catalog starts carrying something worth filling into
 /// cards that were saved before it existed. Cards entered before the catalog
@@ -36,6 +38,11 @@ const _backfillKey = 'tcgdecks.v1.backfill';
 /// card has not got on a run of DZ-BT15 printings, and a saved card kept the
 /// wrong one until power and shield were counted as the printing's rather
 /// than the user's.
+///
+/// A refresh of the card database does not need a version of its own any
+/// more: the repair also runs whenever the app itself has been updated, which
+/// is the only way a new database reaches a phone. This is for changes to
+/// what the repair does.
 const cardBackfillVersion = 6;
 
 /// How many decks and cards an import brought in.
@@ -245,16 +252,34 @@ class DeckStore extends ChangeNotifier {
     return card;
   }
 
+  /// Which build this library was last filled in from. Settable so a test
+  /// can play an update through without building the app twice.
+  String buildVersion = appBuildVersion;
+
   /// Whether the library has yet to be filled in from the current catalog.
+  ///
+  /// Either the repair itself has changed, which [cardBackfillVersion] says,
+  /// or the app has been updated since the last one. An update is what brings
+  /// a new card database -- the database is bundled, so it cannot arrive any
+  /// other way -- and a card the old database had never heard of is saved
+  /// blank until something fills it in. Bumping the version by hand was the
+  /// only way to ask for that before, and a database refresh that forgot to
+  /// left the card blank on every phone that had already run the repair.
   bool get needsCardBackfill =>
-      (_preferences?.getInt(_backfillKey) ?? 0) < cardBackfillVersion;
+      (_preferences?.getInt(_backfillKey) ?? 0) < cardBackfillVersion ||
+      _preferences?.getString(_backfillBuildKey) != buildVersion;
 
   /// Records that the backfill has run, so it never loads the catalog again
   /// just to find nothing to do. Cards the catalog does not know stay as they
   /// are, and would otherwise make the app retry on every launch.
   void markCardBackfillDone() {
     unawaited(
-      _preferences?.setInt(_backfillKey, cardBackfillVersion) ?? Future.value(),
+      Future.wait([
+        _preferences?.setInt(_backfillKey, cardBackfillVersion) ??
+            Future.value(),
+        _preferences?.setString(_backfillBuildKey, buildVersion) ??
+            Future.value(),
+      ]),
     );
   }
 

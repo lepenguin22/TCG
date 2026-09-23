@@ -750,6 +750,23 @@ void main() {
       expect(vSeries.attributes['nation'], isNull);
     });
 
+    test('the promos asked for by hand are in the database', () {
+      // Cards reported missing by someone playing with them. The database is
+      // rebuilt from the official list, so a card can only be here because
+      // the list carries it -- but a rebuild that dropped one of these would
+      // otherwise be noticed the same way it was the first time.
+      final surf = cards.firstWhere(
+        (c) => c.allNumbers.contains('D-PR/1112EN'),
+      );
+      expect(surf.name, 'Onslaught Surf Dragon');
+      expect(surf.attributes['grade'], '2');
+      expect(surf.attributes['power'], '10000');
+      expect(surf.attributes['shield'], '5000');
+      expect(surf.attributes['nation'], 'stoicheia');
+      expect(CardCatalog.search(cards, 'onslaught surf dragon').first, surf);
+      expect(CardCatalog.search(cards, 'D-PR/1112EN').first, surf);
+    });
+
     test('searching the real catalog finds a card by name', () {
       final results = CardCatalog.search(cards, 'dragonic overlord');
       expect(results.first.name, 'Dragonic Overlord');
