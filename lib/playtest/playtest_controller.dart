@@ -488,6 +488,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void swapUnits(PlaytestSide side, Circle from, Circle to) {
+    engine.swapUnits(side, from, to);
+    _sync();
+  }
+
   void setEnergy(PlaytestSide side, int value) {
     engine.setEnergy(side, value);
     _sync();

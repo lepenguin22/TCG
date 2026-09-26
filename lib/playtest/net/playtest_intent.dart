@@ -28,11 +28,13 @@ enum IntentKind {
   toggleRest,
   retire,
   moveUnit,
+  swapUnits,
   unitToSoul,
   setEnergy,
   shuffleDeck,
   addPower,
   addCritical,
+  addDrive,
 }
 
 /// One request, named and with its arguments.

@@ -299,6 +299,16 @@ class PlaytestHost {
           return _refuse(side, 'that unit cannot move');
         }
         engine.moveUnit(side, circle);
+      case IntentKind.swapUnits:
+        final from = intent.circle;
+        final to = intent.to;
+        if (from == null || to == null) {
+          return _refuse(side, 'swap which two circles?');
+        }
+        if (!engine.canSwap(side, from, to)) {
+          return _refuse(side, 'those two cannot change places');
+        }
+        engine.swapUnits(side, from, to);
       case IntentKind.unitToSoul:
         final circle = intent.circle;
         if (circle == null) return _refuse(side, 'which circle?');
@@ -315,6 +325,10 @@ class PlaytestHost {
         final circle = intent.circle;
         if (circle == null) return _refuse(side, 'which circle?');
         engine.addCritical(side, circle, intent.amount ?? 0);
+      case IntentKind.addDrive:
+        final circle = intent.circle;
+        if (circle == null) return _refuse(side, 'which circle?');
+        engine.addDrive(side, circle, intent.amount ?? 0);
     }
     broadcast();
   }

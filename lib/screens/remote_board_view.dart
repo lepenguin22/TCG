@@ -284,7 +284,10 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
       says = mine
           ? '${attack.attackPower} against ${attack.defence}.'
           : 'They are attacking. Guard from your hand, or let it through.';
-      if (mine && !attack.driveChecked) {
+      // Owed a check or not, rather than "has it checked yet": a rear-guard
+      // an ability gave drive to checks like anything else, and a vanguard
+      // an ability took drive off has nothing to check.
+      if (mine && attack.drivesOwed > 0) {
         children.add(
           FilledButton(
             onPressed: () => ask(const PlaytestIntent(IntentKind.driveCheck)),
@@ -534,6 +537,25 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
     ]);
   }
 
+  /// Which rear-guard to exchange places with, for an ability that says to.
+  Future<void> _swapSheet(Circle from) async {
+    await _sheet([
+      const _SheetTitle('Swap with'),
+      for (final to in Circle.values)
+        if (to.isRearGuard && to != from)
+          _Action(
+            key: ValueKey('remote-swap-to-${to.name}'),
+            icon: to.isFrontRow ? Icons.arrow_upward : Icons.arrow_downward,
+            label: to.label,
+            detail:
+                board.cardOf(snapshot.me.units[to]?.cardId ?? -1)?.name ??
+                'Empty — it moves there',
+            onTap: () =>
+                ask(PlaytestIntent(IntentKind.swapUnits, circle: from, to: to)),
+          ),
+    ]);
+  }
+
   Future<void> _unitSheet(Circle circle, UnitSnapshot unit) async {
     final face = board.cardOf(unit.cardId);
     await _sheet([
@@ -557,11 +579,36 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
           PlaytestIntent(IntentKind.addCritical, circle: circle, amount: 1),
         ),
       ),
+      // Drive is the vanguard's by default, but abilities hand a rear-guard
+      // a check of its own, so it is offered on every circle.
+      _Action(
+        key: ValueKey('remote-drive-up-${circle.name}'),
+        icon: Icons.casino_outlined,
+        label: 'Give it a drive check',
+        onTap: () =>
+            ask(PlaytestIntent(IntentKind.addDrive, circle: circle, amount: 1)),
+      ),
+      if (unit.driveBonus > 0)
+        _Action(
+          key: ValueKey('remote-drive-down-${circle.name}'),
+          icon: Icons.casino_outlined,
+          label: 'Take a drive check back',
+          onTap: () => ask(
+            PlaytestIntent(IntentKind.addDrive, circle: circle, amount: -1),
+          ),
+        ),
       if (circle.isRearGuard) ...[
         _Action(
           icon: Icons.swap_vert,
           label: 'Move it up or back',
           onTap: () => ask(PlaytestIntent(IntentKind.moveUnit, circle: circle)),
+        ),
+        _Action(
+          key: ValueKey('remote-swap-${circle.name}'),
+          icon: Icons.swap_horiz,
+          label: 'Swap with another rear-guard',
+          detail: 'Any circle, front row or back.',
+          onTap: () => _swapSheet(circle),
         ),
         _Action(
           icon: Icons.auto_awesome_outlined,

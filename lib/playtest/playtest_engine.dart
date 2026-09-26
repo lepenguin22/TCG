@@ -924,7 +924,55 @@ class PlaytestEngine {
     if (!canMove(side, from)) return;
     final to = moveTargetOf(from);
     if (to == null) return;
+    _exchange(side, from, to);
+  }
 
+  /// Whether the unit on [from] can change places with [to].
+  ///
+  /// The wider version of [canMove]: a card that says to exchange the
+  /// positions of two of your rear-guards is not limited to one column, and
+  /// most often reads front row for back row across the board. So any two
+  /// rear-guard circles will do, and unlike the column move this is not a
+  /// main phase action -- an ability fires when it fires.
+  ///
+  /// The vanguard's circle is not one of them: nothing moves onto it or off
+  /// it. Neither is a circle taking part in the attack on the table, since
+  /// the attack remembers where its units are standing and moving one out
+  /// from under it would settle the battle against whoever arrived.
+  bool canSwap(PlaytestSide side, Circle from, Circle to) {
+    if (from == to || !from.isRearGuard || !to.isRearGuard) return false;
+    final moving = side.field[from];
+    if (moving == null || moving.locked) return false;
+    if ((side.field[to]?.locked ?? false)) return false;
+    final attack = state.attack;
+    if (attack != null && side == state.active) {
+      if (from == attack.attackerCircle || to == attack.attackerCircle) {
+        return false;
+      }
+      final boosting = attack.attackerCircle.boostedBy;
+      if (attack.booster != null && (from == boosting || to == boosting)) {
+        return false;
+      }
+    }
+    if (attack != null && side == state.inactive) {
+      if (from == attack.targetCircle || to == attack.targetCircle) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Exchanges two rear-guards, for the ability that says to.
+  ///
+  /// Where the circle named is empty this is a move rather than a swap, which
+  /// is the same thing with one unit in it.
+  void swapUnits(PlaytestSide side, Circle from, Circle to) {
+    if (!canSwap(side, from, to)) return;
+    _exchange(side, from, to);
+  }
+
+  /// Puts what is on [from] onto [to] and what is on [to] onto [from].
+  void _exchange(PlaytestSide side, Circle from, Circle to) {
     final moving = side.field[from];
     if (moving == null) return;
     final displaced = side.field[to];
@@ -1204,31 +1252,20 @@ class PlaytestEngine {
     }
   }
 
-  /// Runs the drive check, which only a vanguard's attack gets.
+  /// How many drive checks a unit's attack makes.
   ///
   /// A grade 3 vanguard twin drives and a grade 4 triple drives; everything
-  /// below checks once.
-  int driveCount(FieldUnit vanguard) {
-    final base = switch (vanguard.card.grade) {
-      >= 4 => 3,
-      3 => 2,
-      _ => 1,
-    };
-    // An ability can add to that, or take it away. Nought is a real answer:
-    // a card that stops the vanguard drive checking exists.
-    return (base + vanguard.driveBonus).clamp(0, 9);
-  }
+  /// below checks once. A rear-guard checks nothing of its own -- drive is
+  /// the vanguard's -- so [asVanguard] is false for one, and it drive checks
+  /// only for as much as an ability gave it. Several cards do exactly that.
+  int driveCount(FieldUnit unit, {bool asVanguard = true}) =>
+      driveChecksOf(unit, asVanguard: asVanguard);
 
   /// How many drive checks the attack on the table still owes.
   ///
   /// Counted rather than stored, so an ability that changes the vanguard's
   /// drive between one check and the next is followed.
-  int drivesLeft() {
-    final pending = state.attack;
-    if (pending == null || !pending.isVanguardAttack) return 0;
-    final owed = driveCount(pending.attacker) - pending.drivesTaken;
-    return owed < 0 ? 0 : owed;
-  }
+  int drivesLeft() => state.attack?.drivesOwed ?? 0;
 
   /// Flips one drive check, or null where there is none left to flip.
   ///
@@ -1238,7 +1275,7 @@ class PlaytestEngine {
   GameCard? driveCheckOne() {
     final pending = state.attack;
     final side = state.active;
-    if (pending == null || !pending.isVanguardAttack) return null;
+    if (pending == null) return null;
     if (drivesLeft() <= 0) {
       pending.driveChecked = true;
       return null;
@@ -1275,7 +1312,7 @@ class PlaytestEngine {
   /// the whole thing settled in one go -- the CPU's own turn, and tests.
   List<GameCard> driveCheck() {
     final pending = state.attack;
-    if (pending == null || !pending.isVanguardAttack) return const [];
+    if (pending == null) return const [];
 
     final flipped = <GameCard>[];
     while (drivesLeft() > 0) {
@@ -1808,20 +1845,23 @@ class PlaytestEngine {
     );
   }
 
-  /// Gives the vanguard another drive check, for an ability that grants one.
+  /// Gives a unit another drive check, for an ability that grants one.
   ///
-  /// Only the vanguard drive checks, so this does nothing anywhere else. Like
-  /// power and critical it lasts the turn: a card that grants drive for the
-  /// turn needs nothing further, and one that grants it continuously is
-  /// re-applied each turn -- which is the safer way round, because forgetting
-  /// to add it shows up as a missing check, where forgetting to take it away
-  /// would quietly hand out cards.
+  /// Usually the vanguard, which is the only unit that drive checks by
+  /// itself. A rear-guard granted drive checks too, though: the ability is
+  /// printed on real cards, and a rear-guard on +1 drive checks once when it
+  /// attacks. Like power and critical it lasts the turn: a card that grants
+  /// drive for the turn needs nothing further, and one that grants it
+  /// continuously is re-applied each turn -- which is the safer way round,
+  /// because forgetting to add it shows up as a missing check, where
+  /// forgetting to take it away would quietly hand out cards.
   void addDrive(PlaytestSide side, Circle circle, int amount) {
     final unit = side.field[circle];
     if (unit == null) return;
-    final before = driveCount(unit);
+    final asVanguard = circle == Circle.vanguard;
+    final before = driveCount(unit, asVanguard: asVanguard);
     unit.driveBonus += amount;
-    final now = driveCount(unit);
+    final now = driveCount(unit, asVanguard: asVanguard);
     if (now == before) {
       unit.driveBonus -= amount;
       return;

@@ -384,6 +384,110 @@ void main() {
       );
     });
 
+    test('two rear-guards in different columns change places', () async {
+      // What the cards that move units about actually say: exchange the
+      // positions of two of your rear-guards, front row for back row, with
+      // no regard for columns.
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+
+      final front = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.frontLeft),
+      );
+      engine.call(you, front, Circle.frontLeft);
+      final back = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backRight),
+      );
+      engine.call(you, back, Circle.backRight);
+
+      expect(engine.canSwap(you, Circle.frontLeft, Circle.backRight), isTrue);
+      engine.swapUnits(you, Circle.frontLeft, Circle.backRight);
+
+      expect(you.field[Circle.frontLeft]!.card, back);
+      expect(you.field[Circle.backRight]!.card, front);
+      expect(engine.state.log.last.text, contains('swaps'));
+    });
+
+    test('swapping onto an empty circle is a move', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backCenter),
+      );
+      engine.call(you, unit, Circle.backCenter);
+
+      engine.swapUnits(you, Circle.backCenter, Circle.frontRight);
+      expect(you.field[Circle.frontRight]!.card, unit);
+      expect(you.field[Circle.backCenter], isNull);
+    });
+
+    test('a swapped unit keeps everything about itself', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+      engine.addPower(you, Circle.backLeft, 5000);
+      you.field[Circle.backLeft]!.rested = true;
+
+      engine.swapUnits(you, Circle.backLeft, Circle.frontRight);
+      final moved = you.field[Circle.frontRight]!;
+      expect(moved.powerBonus, 5000);
+      expect(moved.rested, isTrue);
+    });
+
+    test('the vanguard is in no swap, either way round', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+
+      expect(engine.canSwap(you, Circle.backLeft, Circle.vanguard), isFalse);
+      expect(engine.canSwap(you, Circle.vanguard, Circle.backLeft), isFalse);
+      engine.swapUnits(you, Circle.backLeft, Circle.vanguard);
+      expect(you.field[Circle.backLeft], isNotNull);
+    });
+
+    test('a swap is not a main phase action', () async {
+      // Unlike the free column move: a card that swaps two rear-guards does
+      // it whenever its ability fires, which is often mid-battle.
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.backLeft),
+      );
+      engine.call(you, unit, Circle.backLeft);
+
+      engine.state.phase = PlaytestPhase.battle;
+      expect(engine.canMove(you, Circle.backLeft), isFalse);
+      expect(engine.canSwap(you, Circle.backLeft, Circle.frontRight), isTrue);
+      engine.swapUnits(you, Circle.backLeft, Circle.frontRight);
+      expect(you.field[Circle.frontRight]!.card, unit);
+    });
+
+    test('the unit in the attack on the table stays where it is', () async {
+      // The attack remembers which circles it is between, so moving one of
+      // them out from under it would settle the battle against whoever
+      // arrived.
+      final (store, deck) = await buildDeck();
+      final (engine, you) = inMain(store, deck);
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.frontLeft),
+      );
+      engine.call(you, unit, Circle.frontLeft);
+      you.field[Circle.frontLeft]!.rested = false;
+      engine.state.turn = 3;
+      engine.state.phase = PlaytestPhase.battle;
+      engine.declareAttack(from: Circle.frontLeft, to: Circle.vanguard);
+
+      expect(engine.canSwap(you, Circle.frontLeft, Circle.backRight), isFalse);
+      engine.swapUnits(you, Circle.frontLeft, Circle.backRight);
+      expect(you.field[Circle.frontLeft]!.card, unit);
+    });
+
     test('an empty circle has nothing to move', () async {
       final (store, deck) = await buildDeck();
       final (engine, you) = inMain(store, deck);
@@ -1161,7 +1265,7 @@ void main() {
       expect(you.vanguard!.driveBonus, 0);
     });
 
-    test('a rear-guard drive checks nothing whatever it is given', () async {
+    test('a rear-guard drive checks nothing until it is given some', () async {
       final (store, deck) = await buildDeck();
       final (engine, you) = atGrade(store, deck, 2);
 
@@ -1169,14 +1273,58 @@ void main() {
         (c) => engine.canCall(you, c, Circle.frontLeft),
       );
       engine.call(you, unit, Circle.frontLeft);
-      engine.addDrive(you, Circle.frontLeft, 2);
+      expect(
+        engine.driveCount(you.field[Circle.frontLeft]!, asVanguard: false),
+        0,
+        reason: 'drive is the vanguard\u2019s',
+      );
 
       engine.declareAttack(from: Circle.frontLeft, to: Circle.vanguard);
-      expect(
-        engine.driveCheck(),
-        isEmpty,
-        reason: 'only the vanguard drive checks at all',
+      expect(engine.drivesLeft(), 0);
+      expect(engine.driveCheck(), isEmpty);
+    });
+
+    test('a rear-guard an ability gave drive to checks for it', () async {
+      // Printed on real cards: a rear-guard that drive checks when it
+      // attacks. What it turns up is a trigger like any other.
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 2);
+
+      final unit = you.hand.firstWhere(
+        (c) => engine.canCall(you, c, Circle.frontLeft),
       );
+      engine.call(you, unit, Circle.frontLeft);
+      engine.addDrive(you, Circle.frontLeft, 1);
+      expect(
+        engine.driveCount(you.field[Circle.frontLeft]!, asVanguard: false),
+        1,
+      );
+
+      final hand = you.hand.length;
+      engine.declareAttack(from: Circle.frontLeft, to: Circle.vanguard);
+      expect(engine.drivesLeft(), 1);
+
+      final flipped = engine.driveCheck();
+      expect(flipped, hasLength(1));
+      expect(engine.drivesLeft(), 0);
+      expect(
+        you.hand.length,
+        hand + 1,
+        reason: 'a drive check is a card into hand',
+      );
+      expect(engine.state.attack!.driveChecked, isTrue);
+      expect(engine.state.triggerZone.single.kind, CheckKind.drive);
+    });
+
+    test('drive given to the vanguard is still the vanguard\u2019s', () async {
+      final (store, deck) = await buildDeck();
+      final (engine, you) = atGrade(store, deck, 2);
+      engine.addDrive(you, Circle.frontLeft, 3);
+
+      // Nothing on that circle, so nothing was given away.
+      expect(you.field[Circle.frontLeft], isNull);
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      expect(engine.drivesLeft(), 1, reason: 'a grade 2 checks once');
     });
 
     test('a striding vanguard keeps its triple drive on top', () async {

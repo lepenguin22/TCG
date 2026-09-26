@@ -1607,6 +1607,65 @@ void _showDeckSearchSheet(
 /// Not a pile of spent cards. Everything here is still doing something, and
 /// a deck built on set orders counts them, so they are listed face up for
 /// either player to read rather than swept out of sight.
+/// Picking which rear-guard to exchange places with.
+///
+/// The column move is a rule of the game and sits on the unit itself. This
+/// is the ability version: a card names two of your rear-guards and swaps
+/// them, across columns and rows alike, so every circle that can take the
+/// unit is offered rather than the one above or below it.
+void _showSwapSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+  Circle from,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        children: [
+          SectionHeader(
+            title: 'Swap ${side.field[from]?.card.name ?? 'this unit'} with',
+            caption:
+                'The two change places and nothing else about them changes: '
+                'a rested unit stays rested, and what an ability gave it '
+                'travels with it.',
+          ),
+          for (final to in Circle.values)
+            if (game.engine.canSwap(side, from, to))
+              ListTile(
+                key: ValueKey('swap-to-${to.name}'),
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  to.isFrontRow ? Icons.arrow_upward : Icons.arrow_downward,
+                  color: AppColors.textMuted,
+                ),
+                title: Text(
+                  to.label,
+                  style: const TextStyle(color: AppColors.text),
+                ),
+                subtitle: Text(
+                  side.field[to]?.card.name ?? 'Empty — it moves there',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+                onTap: () {
+                  game.swapUnits(side, from, to);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+        ],
+      ),
+    ),
+  );
+}
+
 void _showOrderZoneSheet(
   BuildContext context,
   PlaytestController game,
@@ -3086,7 +3145,9 @@ class _Controls extends StatelessWidget {
 
       case PlaytestStage.yourAttack:
         final attack = state.attack!;
-        final drove = attack.driveChecked || !attack.isVanguardAttack;
+        // Owed a check or not, rather than "is this the vanguard": a
+        // rear-guard an ability gave drive to checks like anything else.
+        final drove = attack.driveChecked || game.drivesLeft == 0;
         // One check per tap. A twin drive is two moments at a table, and what
         // the first turns up is read before the second is flipped.
         final owed = game.drivesLeft;
@@ -3542,9 +3603,17 @@ void _showUnitSheet(
               card: unit.card,
               unit: unit,
               circle: circle,
-              drive: circle == Circle.vanguard
-                  ? game.engine.driveCount(unit)
-                  : null,
+              // A rear-guard shows a drive only once an ability has given it
+              // one, since nought drive on a rear-guard is just what a
+              // rear-guard is.
+              drive: switch (game.engine.driveCount(
+                unit,
+                asVanguard: circle == Circle.vanguard,
+              )) {
+                final count when circle == Circle.vanguard || count > 0 =>
+                  count,
+                _ => null,
+              },
             ),
             // A locked card is face down and can do nothing: there is only
             // one thing to offer, which is turning it back over.
@@ -3577,6 +3646,38 @@ void _showUnitSheet(
                   onDone: () => Navigator.of(sheetContext).pop(),
                 ),
               ],
+              // Exchanging two rear-guards anywhere on the board, which is
+              // what the cards that move units about actually say -- the
+              // column move above is the one the rules give for free.
+              if (game.controls(side) &&
+                  circle.isRearGuard &&
+                  Circle.values.any(
+                    (to) => game.engine.canSwap(side, circle, to),
+                  ))
+                ListTile(
+                  key: ValueKey('swap-from-${circle.name}'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.swap_horiz,
+                    color: AppColors.accent,
+                  ),
+                  title: const Text(
+                    'Swap with another rear-guard',
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Any circle, front row or back, for an ability that '
+                    'exchanges two of them.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _showSwapSheet(context, game, side, circle);
+                  },
+                ),
               const SizedBox(height: 14),
               const Text(
                 'Applied by hand',
@@ -3606,20 +3707,26 @@ void _showUnitSheet(
                         : () => game.addCritical(side, circle, -1),
                     child: const Text('-1 critical'),
                   ),
-                  // Only the vanguard drive checks, so the drive controls only
-                  // appear where they would do something.
-                  if (circle == Circle.vanguard) ...[
-                    OutlinedButton(
-                      onPressed: () => game.addDrive(side, circle, 1),
-                      child: const Text('+1 drive'),
-                    ),
-                    OutlinedButton(
-                      onPressed: game.engine.driveCount(unit) <= 0
-                          ? null
-                          : () => game.addDrive(side, circle, -1),
-                      child: const Text('-1 drive'),
-                    ),
-                  ],
+                  // Drive is the vanguard's by default, but an ability can
+                  // hand a rear-guard a check of its own, so the controls are
+                  // on every circle.
+                  OutlinedButton(
+                    key: ValueKey('drive-up-${circle.name}'),
+                    onPressed: () => game.addDrive(side, circle, 1),
+                    child: const Text('+1 drive'),
+                  ),
+                  OutlinedButton(
+                    key: ValueKey('drive-down-${circle.name}'),
+                    onPressed:
+                        game.engine.driveCount(
+                              unit,
+                              asVanguard: circle == Circle.vanguard,
+                            ) <=
+                            0
+                        ? null
+                        : () => game.addDrive(side, circle, -1),
+                    child: const Text('-1 drive'),
+                  ),
                   OutlinedButton(
                     onPressed: () => game.toggleRest(side, circle),
                     child: Text(unit.rested ? 'Stand' : 'Rest'),
@@ -3881,7 +3988,7 @@ class _CardHeading extends StatelessWidget {
   final FieldUnit? unit;
   final Circle? circle;
 
-  /// How many drive checks this unit makes, for the vanguard alone.
+  /// How many drive checks this unit makes, where it makes any.
   final int? drive;
 
   @override

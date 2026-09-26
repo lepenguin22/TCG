@@ -405,6 +405,29 @@ class CheckedCard {
   bool get isSplittable => powerGiven > 0 || criticalGiven > 0;
 }
 
+/// How many drive checks a unit makes when it attacks.
+///
+/// A grade 3 vanguard twin drives and a grade 4 triple drives; everything
+/// below checks once. A rear-guard has no drive of its own -- drive is the
+/// vanguard's -- so it checks only for as much as an ability gave it, which
+/// several cards do.
+///
+/// It lives here rather than in the engine because the attack itself is
+/// asked how many checks it owes, and a board on another device has the
+/// attack without having an engine to ask.
+int driveChecksOf(FieldUnit unit, {required bool asVanguard}) {
+  final base = asVanguard
+      ? switch (unit.card.grade) {
+          >= 4 => 3,
+          3 => 2,
+          _ => 1,
+        }
+      : 0;
+  // An ability can add to that, or take it away. Nought is a real answer:
+  // a card that stops the vanguard drive checking exists.
+  return (base + unit.driveBonus).clamp(0, 9);
+}
+
 /// An attack that has been declared and is waiting to be guarded and resolved.
 class PendingAttack {
   PendingAttack({
@@ -445,6 +468,16 @@ class PendingAttack {
   int drivesTaken = 0;
 
   bool get isVanguardAttack => attackerCircle == Circle.vanguard;
+
+  /// How many drive checks this attack still owes.
+  ///
+  /// Counted rather than stored, so an ability that changes the attacker's
+  /// drive between one check and the next is followed.
+  int get drivesOwed {
+    final owed =
+        driveChecksOf(attacker, asVanguard: isVanguardAttack) - drivesTaken;
+    return owed < 0 ? 0 : owed;
+  }
 
   bool get hitsVanguard => targetCircle == Circle.vanguard;
 

@@ -251,6 +251,7 @@ class AttackSnapshot {
     required this.perfectGuarded,
     required this.driveChecked,
     required this.drivesTaken,
+    required this.drivesOwed,
     required this.attackPower,
     required this.defence,
   });
@@ -262,6 +263,11 @@ class AttackSnapshot {
   final bool perfectGuarded;
   final bool driveChecked;
   final int drivesTaken;
+
+  /// How many checks are still owed, which is not something the far device
+  /// can work out: a rear-guard drive checks only for what an ability gave
+  /// it, and the ability is on the attack rather than in any rule.
+  final int drivesOwed;
   final int attackPower;
   final int defence;
 
@@ -276,6 +282,7 @@ class AttackSnapshot {
         perfectGuarded: attack.perfectGuarded,
         driveChecked: attack.driveChecked,
         drivesTaken: attack.drivesTaken,
+        drivesOwed: attack.drivesOwed,
         attackPower: attack.attackPower,
         defence: attack.defence,
       );
@@ -288,6 +295,7 @@ class AttackSnapshot {
     'perfect': perfectGuarded,
     'drove': driveChecked,
     'drives': drivesTaken,
+    'owed': drivesOwed,
     'power': attackPower,
     'defence': defence,
   };
@@ -302,6 +310,7 @@ class AttackSnapshot {
     perfectGuarded: json['perfect'] as bool? ?? false,
     driveChecked: json['drove'] as bool? ?? false,
     drivesTaken: json['drives'] as int? ?? 0,
+    drivesOwed: json['owed'] as int? ?? 0,
     attackPower: json['power'] as int? ?? 0,
     defence: json['defence'] as int? ?? 0,
   );

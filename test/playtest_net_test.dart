@@ -659,4 +659,124 @@ void main() {
       expect(game.host.refusals.last, contains('order zone'));
     });
   });
+
+  group('moving units and drive across two devices', () {
+    /// A unit of [side]'s put straight onto [circle], the way a call would
+    /// leave it.
+    void place(PlaytestHost host, PlaytestSide side, Circle circle) {
+      final card = side.hand.firstWhere((c) => c.isUnit);
+      side.hand.remove(card);
+      side.field[circle] = FieldUnit(card);
+    }
+
+    test('a guest swaps two of its own rear-guards', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      place(game.host, active, Circle.frontLeft);
+      final moving = active.field[Circle.frontLeft]!.card;
+
+      mine.ask(
+        const PlaytestIntent(
+          IntentKind.swapUnits,
+          circle: Circle.frontLeft,
+          to: Circle.backRight,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(active.field[Circle.frontLeft], isNull);
+      expect(active.field[Circle.backRight]!.card, moving);
+      expect(mine.snapshot!.me.units[Circle.backRight], isNotNull);
+      expect(mine.snapshot!.me.units[Circle.frontLeft], isNull);
+    });
+
+    test('nothing is swapped onto the vanguard', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      place(game.host, active, Circle.frontLeft);
+      final vanguard = active.vanguard;
+
+      mine.ask(
+        const PlaytestIntent(
+          IntentKind.swapUnits,
+          circle: Circle.frontLeft,
+          to: Circle.vanguard,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(active.vanguard, same(vanguard));
+      expect(active.field[Circle.frontLeft], isNotNull);
+      expect(game.host.refusals.last, contains('cannot change places'));
+    });
+
+    test('a rear-guard given drive owes the attack a check', () async {
+      final game = await seatedGame();
+      final engine = game.host.engine;
+      // Turn one attacks nobody, so hand the turn on and play the second.
+      engine.endTurn();
+      final active = engine.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      place(game.host, active, Circle.frontLeft);
+      engine.state.phase = PlaytestPhase.battle;
+
+      mine.ask(
+        const PlaytestIntent(
+          IntentKind.addDrive,
+          circle: Circle.frontLeft,
+          amount: 1,
+        ),
+      );
+      await pumpEventQueue();
+      expect(active.field[Circle.frontLeft]!.driveBonus, 1);
+
+      mine.ask(
+        const PlaytestIntent(
+          IntentKind.attack,
+          circle: Circle.frontLeft,
+          to: Circle.vanguard,
+        ),
+      );
+      await pumpEventQueue();
+      expect(
+        mine.snapshot!.attack!.drivesOwed,
+        1,
+        reason: 'the far board has to be told, since only the ability knows',
+      );
+
+      final hand = active.hand.length;
+      mine.ask(const PlaytestIntent(IntentKind.driveCheck));
+      await pumpEventQueue();
+
+      expect(active.hand.length, hand + 1);
+      expect(mine.snapshot!.attack!.drivesOwed, 0);
+      expect(mine.snapshot!.attack!.driveChecked, isTrue);
+    });
+
+    test('a rear-guard on no drive owes nothing', () async {
+      final game = await seatedGame();
+      final engine = game.host.engine;
+      engine.endTurn();
+      final active = engine.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      place(game.host, active, Circle.frontLeft);
+      engine.state.phase = PlaytestPhase.battle;
+
+      mine.ask(
+        const PlaytestIntent(
+          IntentKind.attack,
+          circle: Circle.frontLeft,
+          to: Circle.vanguard,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(mine.snapshot!.attack!.drivesOwed, 0);
+      mine.ask(const PlaytestIntent(IntentKind.driveCheck));
+      await pumpEventQueue();
+      expect(game.host.refusals.last, contains('no drive owed'));
+    });
+  });
 }

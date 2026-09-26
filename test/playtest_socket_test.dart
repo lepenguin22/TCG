@@ -9,6 +9,18 @@ import 'package:tcg_decks/playtest/playtest_state.dart';
 
 import 'playtest_engine_test.dart' show buildDeck;
 
+/// Waits until [done] is true, or gives up and lets the test say why.
+///
+/// A real socket delivers when the operating system says so, not after a
+/// fixed number of turns round the event queue: pumping a set number of
+/// times passes on a quiet machine and fails on a busy one, which is a test
+/// that reports the weather rather than the code.
+Future<void> until(bool Function() done) async {
+  for (var i = 0; i < 600 && !done(); i += 1) {
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 void main() {
   test('a socket carries messages both ways', () async {
     final server = await PlaytestServer.bind(port: 0);
@@ -23,7 +35,7 @@ void main() {
 
     dialled.send({'type': 'hello', 'from': 'the guest'});
     host.send({'type': 'hello', 'from': 'the host'});
-    await pumpEventQueue();
+    await until(() => heardByHost.isNotEmpty && heardByGuest.isNotEmpty);
 
     expect(heardByHost.single['from'], 'the guest');
     expect(heardByGuest.single['from'], 'the host');
@@ -46,7 +58,7 @@ void main() {
     final long = List.generate(400, (i) => 'card $i');
     guest.send({'type': 'deck', 'cards': long});
     guest.send({'type': 'ready'});
-    await pumpEventQueue();
+    await until(() => heard.length >= 2);
 
     expect(heard, hasLength(2));
     expect((heard.first['cards']! as List), hasLength(400));
@@ -65,7 +77,7 @@ void main() {
     host.messages.listen(heard.add);
 
     guest.send({'type': 'first'});
-    await pumpEventQueue();
+    await until(() => heard.isNotEmpty);
     // Something that is not this protocol at all.
     await guest.close();
 
@@ -93,31 +105,35 @@ void main() {
       retryAfter: retryAfter,
     );
     await guest.join('127.0.0.1', port: host.port!);
-    while (host.stage != SessionStage.playing) {
-      await pumpEventQueue();
-    }
+    await until(() => host.stage == SessionStage.playing);
     return (host: host, guest: guest);
   }
 
   test('a phone that drops off comes back to the same game', () async {
-    final game = await table();
+    // Long enough between redials that the board can be looked at while the
+    // phone is away, and short enough that the test does not sit waiting.
+    final game = await table(retryAfter: const Duration(milliseconds: 300));
 
     // Play far enough in that coming back to the start would be obvious.
     game.host.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
     game.guest.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
-    await pumpEventQueue();
+    await until(() => game.host.host!.state.phase != PlaytestPhase.mulligan);
     final riding = game.host.host!.state.you.rideDeck.firstWhere(
       (card) => card.grade == 1,
     );
     game.host.board!.ask(
       PlaytestIntent(IntentKind.ride, card: riding.instanceId),
     );
-    await pumpEventQueue();
+    await until(
+      () =>
+          game.guest.board!.snapshot!.them.units[Circle.vanguard]?.cardId ==
+          riding.instanceId,
+    );
     expect(game.guest.board!.snapshot!.turn, greaterThan(0));
 
     // The guest's Wi-Fi goes. The game does not.
     await game.guest.board!.transport.close();
-    await pumpEventQueue();
+    await until(() => !game.host.guestConnected);
     expect(game.guest.stage, SessionStage.reconnecting);
     expect(game.host.guestConnected, isFalse);
     expect(
@@ -127,9 +143,7 @@ void main() {
     );
 
     // It dials again by itself, and the board picks up where it was.
-    while (game.guest.stage != SessionStage.playing) {
-      await pumpEventQueue();
-    }
+    await until(() => game.guest.stage == SessionStage.playing);
     expect(game.host.guestConnected, isTrue);
     expect(
       game.guest.board!.snapshot!.them.units[Circle.vanguard]!.cardId,
@@ -142,8 +156,15 @@ void main() {
     // down from the phone that dropped.
     final engine = game.host.host!;
     while (engine.state.active != engine.state.opponent) {
+      // One phase at a time, waiting for each to land: asking again before
+      // the last one arrived would run the turn past where it was wanted.
+      final phase = engine.state.phase;
       game.host.board!.ask(const PlaytestIntent(IntentKind.nextPhase));
-      await pumpEventQueue();
+      await until(
+        () =>
+            engine.state.phase != phase ||
+            engine.state.active == engine.state.opponent,
+      );
     }
     final before = engine.state.opponent.hand.length;
     game.guest.board!.ask(
@@ -152,7 +173,7 @@ void main() {
         card: engine.state.opponent.hand.first.instanceId,
       ),
     );
-    await pumpEventQueue();
+    await until(() => engine.state.opponent.hand.length == before - 1);
     expect(engine.state.opponent.hand.length, before - 1);
 
     await game.guest.close();
@@ -163,7 +184,7 @@ void main() {
     final game = await table(retryAfter: const Duration(seconds: 30));
     game.host.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
     game.guest.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
-    await pumpEventQueue();
+    await until(() => game.host.host!.state.phase != PlaytestPhase.mulligan);
 
     // A third phone dials the host and asks for the seat without the token
     // the seat was given.
@@ -174,7 +195,7 @@ void main() {
     final heard = <Map<String, Object?>>[];
     intruder.messages.listen(heard.add);
     intruder.send({'type': 'resume', 'token': 'not-the-token'});
-    await pumpEventQueue();
+    await until(() => heard.isNotEmpty);
 
     expect(heard.single['type'], 'refused');
     expect(
@@ -192,7 +213,7 @@ void main() {
     final alsoHeard = <Map<String, Object?>>[];
     latecomer.messages.listen(alsoHeard.add);
     latecomer.send({'type': 'deck', 'deck': const <String, Object?>{}});
-    await pumpEventQueue();
+    await until(() => alsoHeard.isNotEmpty);
     expect(alsoHeard.single['reason'], contains('already in a game'));
 
     await intruder.close();
@@ -214,9 +235,7 @@ void main() {
     );
     final opened = host.open(port: 0);
     // The address is offered as soon as there is one to offer.
-    while (host.port == null) {
-      await pumpEventQueue();
-    }
+    await until(() => host.port != null);
     expect(host.stage, SessionStage.waiting);
 
     final guest = GuestSession(
@@ -225,7 +244,10 @@ void main() {
     );
     await guest.join('127.0.0.1', port: host.port!);
     await opened;
-    await pumpEventQueue();
+    await until(
+      () =>
+          host.stage == SessionStage.playing && guest.board?.connected == true,
+    );
 
     expect(host.stage, SessionStage.playing);
     expect(guest.board!.connected, isTrue, reason: 'the first board arrived');
@@ -246,7 +268,11 @@ void main() {
     // And a move made on one phone lands on the other.
     host.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
     guest.board!.ask(const PlaytestIntent(IntentKind.confirmMulligan));
-    await pumpEventQueue();
+    await until(
+      () =>
+          host.host!.state.phase != PlaytestPhase.mulligan &&
+          guest.board!.snapshot!.phase != PlaytestPhase.mulligan,
+    );
     expect(host.host!.state.phase, isNot(PlaytestPhase.mulligan));
     expect(guest.board!.snapshot!.phase, isNot(PlaytestPhase.mulligan));
     expect(guest.board!.snapshot!.turn, greaterThan(0));

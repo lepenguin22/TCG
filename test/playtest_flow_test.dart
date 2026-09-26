@@ -972,6 +972,76 @@ void main() {
       expect(find.textContaining('Move to back left'), findsOneWidget);
     });
 
+    testWidgets('a rear-guard swaps with any other rear-guard', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+
+      Finder circle(String name) => find.byKey(ValueKey('circle-You-$name'));
+      expect(
+        find.descendant(of: circle('backRight'), matching: find.text('—')),
+        findsOneWidget,
+        reason: 'nothing over there yet',
+      );
+
+      // The column move offers the circle above or below. This offers the
+      // rest of the board, which is what the cards actually say.
+      await tapOnBoard(tester, circle('frontLeft'));
+      await tester.tap(find.byKey(const ValueKey('swap-from-frontLeft')));
+      await tester.pumpAndSettle();
+      expect(find.text('Front right'), findsOneWidget);
+      expect(find.text('Back left'), findsOneWidget);
+      expect(
+        find.text('Vanguard'),
+        findsNothing,
+        reason: 'nothing swaps onto the vanguard',
+      );
+
+      // The far corner of the board, which is the whole point of this over
+      // the column move.
+      await scrollSheetTo(
+        tester,
+        find.byKey(const ValueKey('swap-to-backRight')),
+      );
+      await tester.tap(find.byKey(const ValueKey('swap-to-backRight')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(of: circle('backRight'), matching: find.text('—')),
+        findsNothing,
+        reason: 'it went across',
+      );
+      expect(
+        find.descendant(of: circle('frontLeft'), matching: find.text('—')),
+        findsOneWidget,
+        reason: 'and left where it was',
+      );
+    });
+
+    testWidgets('the vanguard is offered no swap', (tester) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      expect(find.text('Swap with another rear-guard'), findsNothing);
+    });
+
     testWidgets('the vanguard is never offered a move', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
@@ -1079,7 +1149,7 @@ void main() {
       expect(add.onPressed, isNull, reason: 'nothing to add');
     });
 
-    testWidgets('drive is offered on the vanguard alone', (tester) async {
+    testWidgets('the vanguard counts down its drive checks', (tester) async {
       final (store, deck) = await buildDeck();
       // The drive check is only reached by attacking, and nobody attacks on
       // turn one, so the CPU takes it.
@@ -1129,18 +1199,18 @@ void main() {
       expect(find.text('Resolve'), findsOneWidget);
     });
 
-    testWidgets('a rear-guard is offered no drive', (tester) async {
+    testWidgets('a rear-guard given drive checks when it attacks', (
+      tester,
+    ) async {
+      // Cards that hand a rear-guard a drive check are printed, so the
+      // control is on every circle and the battle owes the check.
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck);
+      // Nobody attacks on turn one, so the CPU takes it.
+      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
       await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
-      await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Ride deck · grade 1'));
-      await tester.pumpAndSettle();
-      // A ride out of the ride deck costs a card, and which one is asked.
-      await tester.tap(find.text('Discard').first);
-      await tester.pumpAndSettle();
+      await pastTheFirstTurn(tester);
+      // Into the main phase, which is where a unit is called.
       await tester.tap(find.text('Next'));
       await tester.pump();
 
@@ -1156,10 +1226,64 @@ void main() {
         tester,
         find.byKey(const ValueKey('circle-You-frontLeft')),
       );
-      // It has power and critical controls, but nothing drive: a rear-guard
-      // never drive checks.
-      expect(find.text('+1 critical'), findsOneWidget);
-      expect(find.text('+1 drive'), findsNothing);
+      // Nought drive is not shown on a rear-guard, since that is simply what
+      // a rear-guard is.
+      expect(find.textContaining('0 drive'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('drive-up-frontLeft')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 drive'), findsWidgets);
+
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      // It attacks, and the board owes it the check its ability bought.
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+      expect(find.text('Drive check'), findsOneWidget);
+      await tester.tap(find.text('Drive check'));
+      await tester.pumpAndSettle();
+      expect(find.text('Resolve'), findsOneWidget);
+    });
+
+    testWidgets('a rear-guard with no drive goes straight to resolving', (
+      tester,
+    ) async {
+      final (store, deck) = await buildDeck();
+      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pumpAndSettle();
+      await pastTheFirstTurn(tester);
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(tester, callableHandCard().first);
+      await tester.tap(find.text('Call to a circle'));
+      await tester.pumpAndSettle();
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+      await tester.tap(find.text('Next'));
+      await tester.pump();
+
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-You-frontLeft')),
+      );
+      await tapOnBoard(
+        tester,
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+      expect(find.text('Drive check'), findsNothing);
+      expect(find.text('Resolve'), findsOneWidget);
     });
 
     testWidgets('the battle shows its guardian and trigger zones', (
