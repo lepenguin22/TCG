@@ -1,6 +1,6 @@
-name: Release APK
+name: Release
 
-# Publishes a downloadable APK on the repository's Releases page, which is a
+# Publishes downloadable builds on the repository's Releases page, which is a
 # nicer link to open from a phone than a build artifact -- and unlike an
 # artifact, it does not expire.
 #
@@ -9,6 +9,11 @@ name: Release APK
 # or run this from the Actions tab and give it the version, which creates the
 # tag here. That second way exists because pushing a tag needs credentials
 # that a branch-scoped checkout does not have.
+#
+# The Android and Windows builds run side by side and the release is published
+# once, with whatever they produced. A Windows build that fails does not hold
+# the APK back: the release still goes out, and the failure is on the run for
+# anyone to read.
 on:
   push:
     tags: ['v*']
@@ -22,8 +27,11 @@ on:
 permissions:
   contents: write
 
+env:
+  FLUTTER_VERSION: '3.47.2'
+
 jobs:
-  release:
+  android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +43,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.2'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
@@ -46,7 +54,7 @@ jobs:
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         # APP_VERSION is what the app shows in its settings, so an
-        # installed APK can say which release it is.
+        # installed build can say which release it is.
         run: |
           flutter build apk --release \
             --build-number=${{ github.run_number }} \
@@ -61,8 +69,65 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
              "dist/vanguard-simulator-${TAG}.apk"
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build the Windows app
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          flutter build windows --release \
+            --build-number=${{ github.run_number }} \
+            --build-name="${TAG#v}" \
+            --dart-define=APP_VERSION="${TAG}"
+
+      - name: Package it
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: ./tool/package_windows.ps1 -Name "vanguard-simulator-$env:TAG-windows-x64"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    # The APK is the one that has to go out; Windows joins it when it built.
+    needs: [android, windows]
+    if: always() && needs.android.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - run: ls -lh dist
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            dist/*.zip
           generate_release_notes: true

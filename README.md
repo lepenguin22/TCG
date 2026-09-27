@@ -1,7 +1,9 @@
 # Vanguard Simulator
 
-An offline Android app for storing trading card game decklists and playing them
-out, written in Flutter. The game it supports is **Cardfight!! Vanguard**, and it
+An offline app for storing trading card game decklists and playing them out,
+written in Flutter. It runs on Android and on Windows, from the one codebase:
+the screens, the rules and the card database are shared, and each platform
+adds only the folder that wraps them. The game it supports is **Cardfight!! Vanguard**, and it
 knows the format rules — it checks a list as you build it and tells you exactly
 what is wrong with it.
 
@@ -43,6 +45,53 @@ number becomes the Android `versionCode`, so newer builds always win.
 
 Android installs these APKs happily. The Play Store will not accept them; swap in
 a real release key first if you ever go that way.
+
+## Getting it onto a Windows PC
+
+**From GitHub Actions.** Every push builds the app. Open the **Actions** tab,
+click the most recent *Build Windows* run, and download the
+`vanguard-simulator-windows` artifact.
+
+**As a release.** Every tagged release carries a
+`vanguard-simulator-<tag>-windows-x64.zip` next to the APK.
+
+Either way it arrives as a folder: unzip the lot somewhere and run
+`vanguard_simulator.exe`. The `.exe` needs the files beside it, so moving it
+out on its own will not work. Windows SmartScreen will say it does not
+recognise the app, because the build is not signed with a paid-for
+certificate; **More info** then **Run anyway** gets past it.
+
+**Building it yourself.** On Windows, with the Flutter SDK and Visual Studio's
+"Desktop development with C++" workload:
+
+```powershell
+flutter pub get
+flutter build windows --release
+# build/windows/x64/runner/Release/vanguard_simulator.exe
+./tool/package_windows.ps1 -Name vanguard-simulator-windows-x64   # zips it
+```
+
+A Windows binary cannot be cross-compiled from Linux or a Mac, which is why
+that one job in CI runs on a Windows machine.
+
+### What is different on a desktop
+
+Almost nothing, deliberately. The same board, the same decks, the same rules.
+Two things are worth knowing:
+
+- **The window is capped at 1100 logical pixels wide.** The board is laid out
+  for a phone held upright; stretched across a maximised monitor, six circles
+  and a hand of cards become a row nobody would deal out on a table. Below that
+  width — every phone, most tablets, and the window the app opens at — the cap
+  does nothing.
+- **Decks do not travel by themselves.** A PC and a phone are separate devices
+  with separate storage, and there is no account and no server. Settings →
+  *Copy a backup* puts the library on the clipboard, and Settings on the other
+  device reads it back.
+
+Two-player mode works between a PC and a phone on the same network. Windows
+asks whether to allow the app through the firewall the first time it hosts;
+without that, nothing can dial in.
 
 ## What it does
 
@@ -811,6 +860,8 @@ dart format --set-exit-if-changed lib test
 ```
 
 CI runs all three before it builds the APK, so a red run means no artifact.
+The Windows build runs the same tests through the release workflow before
+anything is published.
 
 The test suite covers the deck construction rules case by case, the store
 (quantities, moving cards between zones, persistence, backup round trips) and the
@@ -858,6 +909,10 @@ lib/
 tool/
   build_catalog.dart             regenerates the card database
   scrape_cardlist.py             reads new sets from the official card list
+  make_icon.py                   draws the icons, Android and Windows alike
+  package_windows.ps1            zips a Windows build into something runnable
+android/                         the Android wrapper
+windows/                         the Windows wrapper, and nothing else
 data/
   cardlist/extra_sets.json       what it read, an input to the generator
 assets/
@@ -879,11 +934,15 @@ test/
   playtest_ai_test.dart          the CPU's decisions, measured in self-play
   playtest_flow_test.dart        the board, driven end to end
   playtest_layout_test.dart      the board at four screen sizes
+  desktop_layout_test.dart       and what a desktop window does to it
   settings_screen_test.dart      the build it says it is
 ```
 
-## Adding iOS
+## Adding another platform
 
-The project is Android only right now, since the goal was an APK. Adding iOS is
-one command on a Mac — `flutter create --platforms ios .` — and no Dart code
-changes, because nothing in the app is Android specific.
+Android and Windows are built from this repository today. iOS, macOS and Linux
+are each one command — `flutter create --platforms ios .` and so on — and no
+Dart code changes, because nothing in the app is specific to a platform: the
+only `dart:io` in it is the socket layer two-player mode runs over, which every
+one of them has. What each needs is its own folder, its own icon, and its own
+job in CI, since a binary for a platform can only be built on it.

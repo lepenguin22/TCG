@@ -10,8 +10,9 @@ Bushiroad and is not ours to ship.
     python3 tool/make_icon.py [--preview PATH]
 
 Writes the legacy launcher icon and the adaptive icon's foreground layer into
-android/app/src/main/res. With --preview it also writes a large copy of the
-icon to PATH, for looking at.
+android/app/src/main/res, and the Windows icon into windows/runner/resources.
+With --preview it also writes a large copy of the icon to PATH, for looking
+at.
 """
 
 import math
@@ -27,6 +28,11 @@ PAPER = (233, 238, 245, 255)
 CARD = (28, 35, 44, 255)
 
 RES = pathlib.Path("android/app/src/main/res")
+WINDOWS_ICON = pathlib.Path("windows/runner/resources/app_icon.ico")
+
+# What Windows asks for: one file holding every size from the 16px one beside
+# a window title to the 256px one in a large-icon folder view.
+ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 # Legacy launcher icons are the whole icon; an adaptive icon's foreground is
 # 108dp of which only the middle 72dp is guaranteed to be visible, so the mark
@@ -115,6 +121,13 @@ def foreground() -> Image.Image:
     return image
 
 
+def write_ico(image: Image.Image) -> None:
+    """The Windows icon: every size Windows draws, in the one file it wants."""
+    WINDOWS_ICON.parent.mkdir(parents=True, exist_ok=True)
+    image.save(WINDOWS_ICON, format="ICO", sizes=[(n, n) for n in ICO_SIZES])
+    print(f"  {WINDOWS_ICON} ({', '.join(f'{n}px' for n in ICO_SIZES)})")
+
+
 def write(image: Image.Image, name: str, sizes: dict[str, int]) -> None:
     for density, pixels in sizes.items():
         folder = RES / f"mipmap-{density}"
@@ -127,6 +140,7 @@ def main() -> None:
     print("writing launcher icons:")
     write(legacy(), "ic_launcher", LEGACY)
     write(foreground(), "ic_launcher_foreground", ADAPTIVE)
+    write_ico(legacy())
     if "--preview" in sys.argv:
         path = sys.argv[sys.argv.index("--preview") + 1]
         legacy().resize((512, 512), Image.LANCZOS).save(path)
