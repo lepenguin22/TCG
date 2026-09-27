@@ -10,10 +10,12 @@ name: Release
 # tag here. That second way exists because pushing a tag needs credentials
 # that a branch-scoped checkout does not have.
 #
-# The Android and Windows builds run side by side and the release is published
-# once, with whatever they produced. A Windows build that fails does not hold
-# the APK back: the release still goes out, and the failure is on the run for
-# anyone to read.
+# The Android build publishes the release; the Windows build adds its zip to
+# it afterwards. Each uploads straight to the release rather than handing a
+# file to a later job, because passing files between jobs goes through Actions
+# artifact storage, and a full quota there would take the release down with
+# it. A Windows build that fails costs the zip and nothing else: the APK is
+# already published, and the failure is on the run for anyone to read.
 on:
   push:
     tags: ['v*']
@@ -69,13 +71,17 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
              "dist/vanguard-simulator-${TAG}.apk"
 
-      - uses: actions/upload-artifact@v4
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
         with:
-          name: release-apk
-          path: dist/*.apk
-          if-no-files-found: error
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: dist/*.apk
+          generate_release_notes: true
 
   windows:
+    # After the release exists, so this only ever adds a file to it. Running
+    # the two side by side would have them both try to create it.
+    needs: android
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -104,30 +110,8 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: ./tool/package_windows.ps1 -Name "vanguard-simulator-$env:TAG-windows-x64"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-windows
-          path: dist/*.zip
-          if-no-files-found: error
-
-  publish:
-    # The APK is the one that has to go out; Windows joins it when it built.
-    needs: [android, windows]
-    if: always() && needs.android.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          pattern: release-*
-          merge-multiple: true
-
-      - run: ls -lh dist
-
-      - uses: softprops/action-gh-release@v2
+      - name: Add it to the release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          files: |
-            dist/*.apk
-            dist/*.zip
-          generate_release_notes: true
+          files: dist/*.zip

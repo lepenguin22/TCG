@@ -45,4 +45,4 @@ jobs:
           name: vanguard-simulator-windows
           path: dist/*.zip
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 14
