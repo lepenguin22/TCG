@@ -498,6 +498,29 @@ class _HandCard extends StatelessWidget {
 
 // ------------------------------------------------------------------------ board
 
+/// Where a window stops being a phone.
+///
+/// Below this the board is a column you scroll: the phone it was drawn for
+/// cannot show two players at once and does not pretend to. Above it there
+/// is room to put the piles beside each field instead of above and below,
+/// which is what makes both boards fit on the screen together.
+const wideBoardWidth = 820.0;
+
+/// The width of the column down the left of a wide board, holding the battle
+/// and the log.
+const _sideColumn = 220.0;
+
+/// The width of a player's piles beside their own field. Four pile chips
+/// across, and the damage zone's six places on a line of their own.
+const _railColumn = 176.0;
+
+/// The largest and smallest a circle is drawn on a wide board. The large end
+/// is about the size of a card on a phone -- past that the board stops
+/// looking like a table and starts looking like a shop window -- and the
+/// small end is where a card stops being readable.
+const _widestCircle = 132.0;
+const _narrowestCircle = 64.0;
+
 class _Board extends StatelessWidget {
   const _Board({required this.game});
 
@@ -505,45 +528,293 @@ class _Board extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= wideBoardWidth;
     return Column(
       children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Column(
-              children: [
-                _SideFrame(
-                  game: game,
-                  side: game.cpu,
-                  children: [
-                    _SideSummary(side: game.cpu, game: game),
-                    const SizedBox(height: 6),
-                    _ZoneRail(game: game, side: game.cpu),
-                    const SizedBox(height: 8),
-                    _Field(game: game, side: game.cpu, isYours: false),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                _Middle(game: game),
-                const SizedBox(height: 10),
-                _SideFrame(
-                  game: game,
-                  side: game.you,
-                  children: [
-                    _Field(game: game, side: game.you, isYours: true),
-                    const SizedBox(height: 8),
-                    _ZoneRail(game: game, side: game.you),
-                    const SizedBox(height: 6),
-                    _SideSummary(side: game.you, game: game),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+        Expanded(child: wide ? _wide() : _stacked()),
         _Hand(game: game),
         _Controls(game: game),
       ],
+    );
+  }
+
+  /// The board as a phone shows it: everything in one column, scrolled.
+  Widget _stacked() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Column(
+        children: [
+          _SideFrame(
+            game: game,
+            side: game.cpu,
+            children: [
+              _SideSummary(side: game.cpu, game: game),
+              const SizedBox(height: 6),
+              _ZoneRail(game: game, side: game.cpu),
+              const SizedBox(height: 8),
+              _Field(game: game, side: game.cpu, isYours: false),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _Middle(game: game),
+          const SizedBox(height: 10),
+          _SideFrame(
+            game: game,
+            side: game.you,
+            children: [
+              _Field(game: game, side: game.you, isYours: true),
+              const SizedBox(height: 8),
+              _ZoneRail(game: game, side: game.you),
+              const SizedBox(height: 6),
+              _SideSummary(side: game.you, game: game),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The board as a desktop window shows it: both players at once, without
+  /// scrolling.
+  ///
+  /// Three columns. The battle and the log go down the left, where a phone
+  /// puts the battle between the two boards and hides the log in a sheet.
+  /// Each player's piles sit beside their own field, on the side of the
+  /// table they would be on. What is left is the fields, drawn at whatever
+  /// size fits both of them in the height there is.
+  Widget _wide() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: _sideColumn,
+            child: _BattleColumn(game: game),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final circle = circleSizeFor(
+                  constraints.maxHeight,
+                  constraints.maxWidth,
+                );
+                // Scrollable only as a last resort: the size above is worked
+                // out so that everything fits, and the scroll view is there
+                // for a window too short for even the smallest cards.
+                return SingleChildScrollView(
+                  key: const ValueKey('board-scroll'),
+                  child: Column(
+                    children: [
+                      _SideFrame(
+                        game: game,
+                        side: game.cpu,
+                        children: [
+                          _WideSide(
+                            game: game,
+                            side: game.cpu,
+                            isYours: false,
+                            circle: circle,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(height: 1, color: AppColors.border),
+                      const SizedBox(height: 10),
+                      _SideFrame(
+                        game: game,
+                        side: game.you,
+                        children: [
+                          _WideSide(
+                            game: game,
+                            side: game.you,
+                            isYours: true,
+                            circle: circle,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// How wide to draw a circle so that both fields fit in the room there is.
+  ///
+  /// The height is what usually decides it: four rows of circles share it --
+  /// two fields of two rows each -- along with the gap between the boards
+  /// and the frames drawn around them. A narrow window can run out of width
+  /// first, with the piles taking a strip out of each row, so both are
+  /// worked out and the smaller wins.
+  ///
+  /// Neither depends on anything that changes during a game, so the cards
+  /// stay the size they were when an attack starts rather than resizing
+  /// under the hand that is playing them.
+  static double circleSizeFor(double height, double width) {
+    // The gap and rule between the two boards, and each frame's padding and
+    // border.
+    const chrome = 21.0 + 2 * 16.0;
+    final perRow = (height - chrome) / 4;
+    final byHeight = (perRow - _Field.rowGap * 2) * _Field.shape;
+    final byWidth = (width - 16 - _railColumn) / 3 - _Field.columnGap;
+    return (byHeight < byWidth ? byHeight : byWidth).clamp(
+      _narrowestCircle,
+      _widestCircle,
+    );
+  }
+}
+
+/// One player's half of a wide board: their piles beside their field.
+///
+/// Both players' piles go on the same side, which looks less like a table
+/// than mirroring them would but plays far better: it leaves the two fields
+/// in the same columns, so an attacker sits directly above what it is
+/// attacking and a glance down a column is a glance down a column.
+class _WideSide extends StatelessWidget {
+  const _WideSide({
+    required this.game,
+    required this.side,
+    required this.isYours,
+    required this.circle,
+  });
+
+  final PlaytestController game;
+  final PlaytestSide side;
+  final bool isYours;
+  final double circle;
+
+  @override
+  Widget build(BuildContext context) {
+    // The field decides how tall this half of the board is, so the piles are
+    // held to the same height rather than being allowed to stretch it. A
+    // window short enough to squeeze them scrolls that column alone, which
+    // costs a few pixels of pile rather than half the board.
+    final fieldHeight = (circle / _Field.shape + _Field.rowGap * 2) * 2;
+    final rail = SizedBox(
+      width: _railColumn,
+      height: fieldHeight,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SideSummary(side: side, game: game),
+            const SizedBox(height: 8),
+            _ZoneRail(game: game, side: side, stacked: true),
+          ],
+        ),
+      ),
+    );
+    final field = SizedBox(
+      width: _Field.widthFor(circle),
+      child: _Field(
+        game: game,
+        side: side,
+        isYours: isYours,
+        circleSize: circle,
+      ),
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: Center(child: field)),
+        rail,
+      ],
+    );
+  }
+}
+
+/// The left-hand column of a wide board: the battle, and then the log.
+///
+/// On a phone the battle is a band between the two boards and the log is
+/// behind a button. A desktop window has a column to spare, and both of them
+/// are things you want to be able to read without opening anything.
+class _BattleColumn extends StatelessWidget {
+  const _BattleColumn({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    final attack = game.state.attack;
+    final checks = game.triggerZone;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (attack != null || checks.isNotEmpty) ...[
+          _Middle(game: game),
+          const SizedBox(height: 10),
+        ],
+        Expanded(child: _LogPanel(game: game)),
+      ],
+    );
+  }
+}
+
+/// The game's own account of itself, most recent first.
+class _LogPanel extends StatelessWidget {
+  const _LogPanel({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    final log = game.state.log;
+    return Panel(
+      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'LOG',
+            style: TextStyle(
+              color: AppColors.textFaint,
+              fontSize: 10,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: log.isEmpty
+                ? const Text(
+                    'Nothing yet.',
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 11),
+                  )
+                : ListView.builder(
+                    key: const ValueKey('board-log'),
+                    padding: EdgeInsets.zero,
+                    itemCount: log.length,
+                    itemBuilder: (_, index) {
+                      final entry = log[log.length - 1 - index];
+                      final heading = entry.text.startsWith('---');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 5, right: 4),
+                        child: Text(
+                          entry.text,
+                          style: TextStyle(
+                            color: heading
+                                ? AppColors.text
+                                : AppColors.textMuted,
+                            fontWeight: heading
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                            fontSize: 11,
+                            height: 1.35,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -669,10 +940,18 @@ class _Pip extends StatelessWidget {
 /// out of damage, a soul-blast out of soul, a search goes through the deck --
 /// so they are on the board and tappable rather than left as numbers.
 class _ZoneRail extends StatelessWidget {
-  const _ZoneRail({required this.game, required this.side});
+  const _ZoneRail({
+    required this.game,
+    required this.side,
+    this.stacked = false,
+  });
 
   final PlaytestController game;
   final PlaytestSide side;
+
+  /// Whether this is the narrow column a wide board puts beside the field,
+  /// where the damage count reads better above its places than beside them.
+  final bool stacked;
 
   @override
   Widget build(BuildContext context) {
@@ -688,7 +967,7 @@ class _ZoneRail extends StatelessWidget {
           key: ValueKey('damage-${side.name}'),
           onTap: () => _showDamageSheet(context, game, side),
           behavior: HitTestBehavior.opaque,
-          child: _DamageRow(side: side),
+          child: _DamageRow(side: side, stacked: stacked),
         ),
         const SizedBox(height: 4),
         Wrap(
@@ -802,9 +1081,13 @@ class _ZoneRail extends StatelessWidget {
 /// box at a time made that something to count rather than something to see.
 /// A card turned face down has been spent on a counter-blast.
 class _DamageRow extends StatelessWidget {
-  const _DamageRow({required this.side});
+  const _DamageRow({required this.side, this.stacked = false});
 
   final PlaytestSide side;
+
+  /// Whether to put the count above the row of places rather than beside it,
+  /// for the narrow column a wide board puts the piles in.
+  final bool stacked;
 
   /// The sixth card is the game, so the row says so before it gets there.
   static const _lethal = 6;
@@ -812,34 +1095,46 @@ class _DamageRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final taken = side.damage.length;
+    final count = Text(
+      taken == 0 ? 'No damage' : 'Damage $taken/$_lethal',
+      style: TextStyle(
+        color: taken >= 5 ? AppColors.danger : AppColors.textFaint,
+        fontSize: 11,
+        fontWeight: taken >= 5 ? FontWeight.w700 : FontWeight.w400,
+      ),
+    );
+    final places = [
+      for (var index = 0; index < _lethal; index += 1)
+        Padding(
+          padding: const EdgeInsets.only(right: 3),
+          child: _DamageBox(
+            // Past the end of the damage taken, this place is empty; up
+            // to it, the card is either standing or spent.
+            state: index >= taken
+                ? _DamageState.empty
+                : side.isSpent(side.damage[index])
+                ? _DamageState.spent
+                : _DamageState.taken,
+          ),
+        ),
+    ];
+
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          count,
+          const SizedBox(height: 4),
+          Row(children: places),
+        ],
+      );
+    }
     return SizedBox(
       height: 30,
       child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Text(
-              taken == 0 ? 'No damage' : 'Damage $taken/$_lethal',
-              style: TextStyle(
-                color: taken >= 5 ? AppColors.danger : AppColors.textFaint,
-                fontSize: 11,
-                fontWeight: taken >= 5 ? FontWeight.w700 : FontWeight.w400,
-              ),
-            ),
-          ),
-          for (var index = 0; index < _lethal; index += 1)
-            Padding(
-              padding: const EdgeInsets.only(right: 3),
-              child: _DamageBox(
-                // Past the end of the damage taken, this place is empty; up
-                // to it, the card is either standing or spent.
-                state: index >= taken
-                    ? _DamageState.empty
-                    : side.isSpent(side.damage[index])
-                    ? _DamageState.spent
-                    : _DamageState.taken,
-              ),
-            ),
+          Padding(padding: const EdgeInsets.only(right: 8), child: count),
+          ...places,
         ],
       ),
     );
@@ -2232,11 +2527,37 @@ void _showStrideCostSheet(
 /// One player's six circles, back row nearer the middle for the opponent so
 /// the two boards face each other the way they would on a table.
 class _Field extends StatelessWidget {
-  const _Field({required this.game, required this.side, required this.isYours});
+  const _Field({
+    required this.game,
+    required this.side,
+    required this.isYours,
+    this.circleSize,
+  });
 
   final PlaytestController game;
   final PlaytestSide side;
   final bool isYours;
+
+  /// How wide to draw each circle, where something has worked that out.
+  ///
+  /// A phone gives the field its whole width and the circles divide it up.
+  /// A desktop window is wider than the board wants to be and shorter than
+  /// two fields of that width would need, so there the size comes from the
+  /// height there is to fit them in, and the field is only as wide as that
+  /// makes it.
+  final double? circleSize;
+
+  /// The vertical gap above and below a row of circles.
+  static const rowGap = 3.0;
+
+  /// The gap between two circles, counting both their paddings.
+  static const columnGap = 6.0;
+
+  /// A circle is a shade wider than it is tall, like the card on it.
+  static const shape = 1.05;
+
+  /// How wide a field of circles [size] across comes out.
+  static double widthFor(double size) => size * 3 + columnGap * 3;
 
   @override
   Widget build(BuildContext context) {
@@ -2248,13 +2569,18 @@ class _Field extends StatelessWidget {
       children: [
         for (final row in rows)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
+            padding: const EdgeInsets.symmetric(vertical: rowGap),
             child: Row(
+              mainAxisSize: circleSize == null
+                  ? MainAxisSize.max
+                  : MainAxisSize.min,
               children: [
                 for (final circle in row)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                  _sized(
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: columnGap / 2,
+                      ),
                       child: _CircleSlot(
                         // Named so a test can reach one circle in particular
                         // rather than counting its way across the board.
@@ -2272,6 +2598,10 @@ class _Field extends StatelessWidget {
       ],
     );
   }
+
+  Widget _sized(Widget child) => circleSize == null
+      ? Expanded(child: child)
+      : SizedBox(width: circleSize! + columnGap, child: child);
 }
 
 class _CircleSlot extends StatelessWidget {
@@ -2792,12 +3122,20 @@ class _ZoneStrip extends StatelessWidget {
             ),
             if (trailing != null) ...[
               const SizedBox(width: 8),
-              Text(
-                trailing!,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
+              // Takes what is left of the line rather than however much it
+              // wants: "+15000 shield" beside a label does not fit the
+              // narrow column a wide board puts this in.
+              Expanded(
+                child: Text(
+                  trailing!,
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -2897,14 +3235,28 @@ class _Hand extends StatelessWidget {
 
   final PlaytestController game;
 
+  /// How wide a card in hand is drawn, on a phone and on a desktop window.
+  ///
+  /// The board holds itself to a size that fits both players on the screen,
+  /// and on a desktop that leaves room underneath it -- which the hand is
+  /// the right thing to spend on, since the hand is what you are reading
+  /// when you are deciding what to do.
+  static const _cardWidth = 58.0;
+  static const _wideCardWidth = 92.0;
+
   @override
   Widget build(BuildContext context) {
     final guarding = game.stage == PlaytestStage.guarding;
     final side = game.handSide;
     final hand = side.hand;
+    final wide = MediaQuery.sizeOf(context).width >= wideBoardWidth;
+    final cardWidth = wide ? _wideCardWidth : _cardWidth;
+    // The card, the padding above and below it, and the line naming whose
+    // hand this is where both of them are yours.
+    final height = cardWidth / cardAspectRatio + 16 + (game.bothSides ? 18 : 0);
 
     return Container(
-      height: game.bothSides ? 124 : 108,
+      height: height,
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
@@ -2954,6 +3306,7 @@ class _Hand extends StatelessWidget {
                             game: game,
                             card: card,
                             guarding: guarding,
+                            width: cardWidth,
                           ),
                         ),
                     ],
@@ -2971,11 +3324,13 @@ class _HandSlot extends StatelessWidget {
     required this.game,
     required this.card,
     required this.guarding,
+    this.width = 58,
   });
 
   final PlaytestController game;
   final GameCard card;
   final bool guarding;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
@@ -3010,7 +3365,7 @@ class _HandSlot extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              CardImage(url: card.imageUrl, width: 58),
+              CardImage(url: card.imageUrl, width: width),
               Positioned(
                 left: 0,
                 top: 0,

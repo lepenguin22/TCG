@@ -8,6 +8,7 @@ import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
 import 'package:tcg_decks/playtest/playtest_controller.dart';
+import 'package:tcg_decks/playtest/playtest_state.dart';
 
 import 'playtest_engine_test.dart' show buildStrideDeck;
 
@@ -118,6 +119,167 @@ void main() {
         reason: 'the piles are below the damage, not beside it',
       );
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('the board in a desktop window', () {
+    // The sizes a Windows window actually has: the one it opens at, the same
+    // window made shorter, and a maximised one on an ordinary monitor. The
+    // app holds itself to 1100 wide, so that is as wide as this gets.
+    const opening = Size(884, 921);
+
+    Future<PlaytestController> pump(WidgetTester tester, Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final (store, deck) = await buildStrideDeck();
+      await tester.pumpWidget(
+        ChangeNotifierProvider<DeckStore>.value(
+          value: store,
+          child: MaterialApp(
+            theme: buildTheme(),
+            home: PlaytestScreen(
+              yourDeck: deck,
+              opponentDeck: deck,
+              random: Random(7),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Keep this hand'));
+      await tester.pump();
+      return Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+    }
+
+    double circleWidth(WidgetTester tester, String key) =>
+        tester.getSize(find.byKey(ValueKey(key))).width;
+
+    testWidgets('both players are on the screen at once, unscrolled', (
+      tester,
+    ) async {
+      await pump(tester, opening);
+
+      // Every circle of both boards, without moving anything.
+      for (final side in ['You', 'CPU']) {
+        for (final circle in Circle.values) {
+          expect(
+            find.byKey(ValueKey('circle-$side-${circle.name}')),
+            findsOneWidget,
+            reason: '$side $circle',
+          );
+        }
+      }
+      // The outermost scrollable under that key: the piles have one of
+      // their own inside it.
+      final board = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('board-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(
+        board.position.maxScrollExtent,
+        0,
+        reason: 'there is nothing below the fold to scroll to',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the cards are drawn to fit the height there is', (
+      tester,
+    ) async {
+      await pump(tester, opening);
+      final roomy = circleWidth(tester, 'circle-You-vanguard');
+      expect(roomy, lessThanOrEqualTo(132));
+
+      // The same game, in a window dragged shorter.
+      tester.view.physicalSize = const Size(884, 700);
+      await tester.pump();
+      final cramped = circleWidth(tester, 'circle-You-vanguard');
+      expect(
+        cramped,
+        lessThan(roomy),
+        reason: 'a shorter window draws smaller cards rather than scrolling',
+      );
+
+      // The outermost scrollable under that key: the piles have one of
+      // their own inside it.
+      final board = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('board-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(board.position.maxScrollExtent, 0);
+    });
+
+    testWidgets('the piles sit beside the field, and the fields line up', (
+      tester,
+    ) async {
+      await pump(tester, opening);
+
+      final theirField = tester.getRect(
+        find.byKey(const ValueKey('circle-CPU-vanguard')),
+      );
+      final yourField = tester.getRect(
+        find.byKey(const ValueKey('circle-You-vanguard')),
+      );
+      for (final damage in ['damage-CPU', 'damage-You']) {
+        final rect = tester.getRect(find.byKey(ValueKey(damage)));
+        expect(
+          rect.left,
+          greaterThanOrEqualTo(yourField.right),
+          reason: '$damage is beside the field, not above it',
+        );
+      }
+
+      // And the two fields are in the same columns, so an attacker is
+      // directly above what it attacks.
+      expect(theirField.left, yourField.left);
+      expect(theirField.right, yourField.right);
+    });
+
+    testWidgets('the log is on the board rather than behind a button', (
+      tester,
+    ) async {
+      await pump(tester, opening);
+
+      expect(find.text('LOG'), findsOneWidget);
+      expect(find.byKey(const ValueKey('board-log')), findsOneWidget);
+      // And it is saying something: the openings have been settled by now,
+      // which is the line the log opens on.
+      expect(find.textContaining('kept the opening hand'), findsWidgets);
+    });
+
+    testWidgets('a phone keeps the board it was built for', (tester) async {
+      await pump(tester, const Size(390, 844));
+
+      expect(find.text('LOG'), findsNothing);
+      expect(find.byKey(const ValueKey('board-scroll')), findsNothing);
+    });
+
+    testWidgets('a turn plays through at a desktop size', (tester) async {
+      await pump(tester, opening);
+
+      final step = RegExp(
+        r'^(Next|End turn|Take it|Continue|Resolve|Drive check)$',
+      );
+      for (var i = 0; i < 8; i += 1) {
+        final button = find.textContaining(step);
+        if (button.evaluate().isEmpty) break;
+        await tester.tap(button.first);
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: 'after step $i');
+      }
     });
   });
 }

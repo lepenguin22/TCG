@@ -133,7 +133,13 @@ void main() {
 
     // The guest's Wi-Fi goes. The game does not.
     await game.guest.board!.transport.close();
-    await until(() => !game.host.guestConnected);
+    // Both ends have to notice, and they notice separately: waiting for one
+    // and then asking the other is a race the busy machine wins.
+    await until(
+      () =>
+          !game.host.guestConnected &&
+          game.guest.stage == SessionStage.reconnecting,
+    );
     expect(game.guest.stage, SessionStage.reconnecting);
     expect(game.host.guestConnected, isFalse);
     expect(
@@ -143,7 +149,10 @@ void main() {
     );
 
     // It dials again by itself, and the board picks up where it was.
-    await until(() => game.guest.stage == SessionStage.playing);
+    await until(
+      () =>
+          game.guest.stage == SessionStage.playing && game.host.guestConnected,
+    );
     expect(game.host.guestConnected, isTrue);
     expect(
       game.guest.board!.snapshot!.them.units[Circle.vanguard]!.cardId,
