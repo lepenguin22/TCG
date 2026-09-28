@@ -1,9 +1,14 @@
 name: Build Windows
 
-# Every push builds the Windows app and attaches it to the run, the way the
-# APK workflow does for Android. It is a separate workflow rather than another
-# job in that one so that neither can hide the other's failure: a Windows
-# compiler error should not look like a broken Android build.
+# Every push builds and packages the Windows app, to prove both still work.
+# The zip is not kept -- a release publishes one, and artifact storage is an
+# allowance the whole account shares -- but it is still built here, because
+# zipping it is what a release does, and a packaging script that broke would
+# otherwise be found by a release that failed.
+#
+# It is a separate workflow rather than another job in the APK one so that
+# neither can hide the other's failure: a Windows compiler error should not
+# look like a broken Android build.
 on:
   push:
     branches: ['**']
@@ -39,10 +44,3 @@ jobs:
       - name: Package it
         shell: pwsh
         run: ./tool/package_windows.ps1 -Name "vanguard-simulator-$($env:GITHUB_SHA.Substring(0,7))-windows-x64"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vanguard-simulator-windows
-          path: dist/*.zip
-          if-no-files-found: error
-          retention-days: 14

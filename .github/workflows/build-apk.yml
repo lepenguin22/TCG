@@ -1,7 +1,14 @@
 name: Build APK
 
-# Every push builds an installable APK and attaches it to the run. Download it
-# from the run's "Artifacts" section, copy it to your phone and open it.
+# Every push builds the Android app, to prove it still builds. The APK is not
+# kept: an installable one comes from tagging a release, which publishes it on
+# the Releases page where it does not expire and is a link a phone can open.
+#
+# It used to be attached to the run as an artifact. Artifacts are charged
+# against a storage allowance the whole account shares, a 55MB APK on every
+# push filled it, and the upload then failed on every run -- which turned a
+# build that passed into a red cross, and a red cross nobody reads is worse
+# than not keeping the file.
 on:
   push:
     branches: ['**']
@@ -67,16 +74,5 @@ jobs:
             --build-number=${{ github.run_number }} \
             --dart-define=APP_VERSION="build ${{ github.run_number }}"
 
-      - name: Name the APK after the commit
-        run: |
-          mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk \
-             "dist/vanguard-simulator-${GITHUB_SHA::7}.apk"
-          ls -lh dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vanguard-simulator-apk
-          path: dist/*.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Say how big it came out
+        run: ls -lh build/app/outputs/flutter-apk/app-release.apk
