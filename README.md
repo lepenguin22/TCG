@@ -12,18 +12,20 @@ The Dart package is still called `tcg_decks`, and the icon is drawn by
 
 ## Getting the APK onto your phone
 
-**From GitHub Actions (no toolchain needed).** Every push builds a signed,
-installable APK. Open the repository's **Actions** tab, click the most recent
-*Build APK* run, and download the `vanguard-simulator-apk` artifact at the bottom of the
-page. Unzip it, copy the `.apk` to your phone, and open it — Android will ask you
-to allow installs from that source the first time.
-
-**As a release.** Tag a commit and the APK is published on the Releases page,
-which is a nicer link to open from the phone itself:
+**As a release (no toolchain needed).** Tag a commit and a signed, installable
+APK is published on the Releases page, which is a link the phone itself can
+open:
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
 ```
+
+Open it on the phone and Android will ask to allow installs from that source
+the first time. A release does not expire, and the same run publishes the
+Windows build beside it.
+
+Every push still builds the APK, to prove it builds, but does not keep it —
+see [Why a build is not a download](#why-a-build-is-not-a-download).
 
 **Building it yourself.** With the Flutter SDK and Android SDK installed:
 
@@ -48,14 +50,10 @@ a real release key first if you ever go that way.
 
 ## Getting it onto a Windows PC
 
-**From GitHub Actions.** Every push builds the app. Open the **Actions** tab,
-click the most recent *Build Windows* run, and download the
-`vanguard-simulator-windows` artifact.
-
 **As a release.** Every tagged release carries a
 `vanguard-simulator-<tag>-windows-x64.zip` next to the APK.
 
-Either way it arrives as a folder: unzip the lot somewhere and run
+It arrives as a folder: unzip the lot somewhere and run
 `vanguard_simulator.exe`. The `.exe` needs the files beside it, so moving it
 out on its own will not work. Windows SmartScreen will say it does not
 recognise the app, because the build is not signed with a paid-for
@@ -74,16 +72,34 @@ flutter build windows --release
 A Windows binary cannot be cross-compiled from Linux or a Mac, which is why
 that one job in CI runs on a Windows machine.
 
+## Why a build is not a download
+
+Every push builds both apps, and keeps neither. A release is the only place a
+file comes from.
+
+Attaching them to the run was the obvious thing and it did not last. Run
+artifacts are charged against a storage allowance the whole account shares,
+a 55MB APK on every push spent it inside a few weeks, and from then on every
+run went red on the upload while the build itself passed — a red cross that
+means nothing, on every push, which is how a real failure gets missed. The
+builds still run, so a broken one is still caught on the push that broke it;
+what changed is that the file is not kept.
+
+Release assets are not artifacts and are not charged the same way, so a
+tagged release is unaffected by any of this, and a release does not expire.
+
 ### What is different on a desktop
 
 Almost nothing, deliberately. The same board, the same decks, the same rules.
 Two things are worth knowing:
 
-- **The window is capped at 1100 logical pixels wide.** The board is laid out
-  for a phone held upright; stretched across a maximised monitor, six circles
-  and a hand of cards become a row nobody would deal out on a table. Below that
-  width — every phone, most tablets, and the window the app opens at — the cap
-  does nothing.
+- **The board is laid out for the window above 820 logical pixels wide.** The
+  cards are drawn to whatever size fits both players on the screen at once,
+  the piles move to a column beside each field, and the battle and the log —
+  which a phone squeezes between the boards and hides behind a button — get a
+  column of their own down the left. The whole app is held to 1100 pixels
+  wide, since six circles stretched across a maximised monitor is a row nobody
+  would deal out on a table. Below 820 a phone gets the board it always had.
 - **Decks do not travel by themselves.** A PC and a phone are separate devices
   with separate storage, and there is no account and no server. Settings →
   *Copy a backup* puts the library on the clipboard, and Settings on the other
@@ -859,9 +875,9 @@ flutter test                       # rules, store and widget tests
 dart format --set-exit-if-changed lib test
 ```
 
-CI runs all three before it builds the APK, so a red run means no artifact.
-The Windows build runs the same tests through the release workflow before
-anything is published.
+CI runs all three before it builds the APK, so a red run means a build that
+never happened. The release workflow runs them again before it publishes
+anything, on both platforms.
 
 The test suite covers the deck construction rules case by case, the store
 (quantities, moving cards between zones, persistence, backup round trips) and the
