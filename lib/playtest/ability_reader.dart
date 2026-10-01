@@ -23,6 +23,12 @@
 ///
 /// It still refuses everything that chooses a target, searches a deck, calls
 /// a unit or asks the board something it cannot count.
+///
+/// There is a second, wider tier beside it. [PromptedAbility] is the same
+/// text read only as far as a *player* needs it -- when it fires and what it
+/// costs, with the effect left as printed -- because the person holding the
+/// cards can carry out the half the board cannot. That reaches several
+/// thousand more clauses, and nothing in it is written per card.
 library;
 
 /// When an ability fires.
@@ -340,10 +346,68 @@ class Ability {
       zones.isEmpty || zones.contains(vanguard ? 'VC' : 'RC');
 }
 
+/// A clause the reader could time and price, but not carry out.
+///
+/// [Ability] is all-or-nothing on purpose: the CPU has nobody to ask, so a
+/// clause it only half-follows is refused rather than guessed at. A player
+/// needs much less than that. What they are missing is never the meaning of
+/// the ability -- that is printed on the card in front of them -- but the two
+/// things the board knows and they would have to track by hand: the moment it
+/// applies, and what it costs.
+///
+/// So this is the same parse stopped early. The timing, the circles, the cost
+/// and whatever conditions the board can check are read; the effect is left as
+/// the printed text, for the player to carry out with the controls the board
+/// already has. It reaches far more cards than [Ability] does, because a
+/// clause like "choose one of your rear-guards and [Stand] it" needs a person
+/// for exactly one step of it.
+///
+/// Unreadable parts are passed over rather than refused, which means a
+/// condition the reader cannot follow is not checked: the prompt may be
+/// offered on a board that does not actually meet it. That is the right way
+/// round for a prompt -- it is an offer, and declining costs nothing -- but it
+/// is why this is kept well away from [Ability], which must never guess.
+class PromptedAbility {
+  const PromptedAbility({
+    required this.timing,
+    required this.zones,
+    required this.oncePerTurn,
+    required this.cost,
+    required this.text,
+    this.condition = const AbilityCondition(),
+  });
+
+  final AbilityTiming timing;
+
+  /// The circles it works from: 'VC', 'RC', 'GC'. Empty means the card did
+  /// not say.
+  final Set<String> zones;
+
+  final bool oncePerTurn;
+
+  /// What the board can pay on the player's behalf when they accept.
+  final AbilityCost cost;
+
+  /// The conditions the reader could follow. Anything it could not is absent
+  /// rather than assumed false, so this gates the prompt without hiding it.
+  final AbilityCondition condition;
+
+  /// The clause as printed. This is the part the player reads and applies, so
+  /// it is shown verbatim rather than summarised.
+  final String text;
+
+  bool worksOn({required bool vanguard}) =>
+      zones.isEmpty || zones.contains(vanguard ? 'VC' : 'RC');
+}
+
 /// Everything the reader made of one card: what it can play, and what it
 /// could not follow.
 class CardAbilities {
-  const CardAbilities({required this.playable, required this.unread});
+  const CardAbilities({
+    required this.playable,
+    required this.unread,
+    this.prompted = const [],
+  });
 
   final List<Ability> playable;
 
@@ -351,6 +415,13 @@ class CardAbilities {
   /// swallowing: they are the reason a CPU board is doing less than the deck
   /// really does.
   final List<String> unread;
+
+  /// Clauses it could time and price but not carry out, which the board
+  /// offers to the player at the moment they apply. Every one of these is
+  /// also in [unread]: the two lists answer different questions -- what the
+  /// CPU is missing, and what the player can be prompted for -- and a clause
+  /// belongs to both.
+  final List<PromptedAbility> prompted;
 
   static const CardAbilities none = CardAbilities(playable: [], unread: []);
 }
@@ -612,6 +683,7 @@ CardAbilities readAbilities(String effect) {
 
   final playable = <Ability>[];
   final unread = <String>[];
+  final prompted = <PromptedAbility>[];
 
   for (final printed in text.split('\n')) {
     final clause = printed.trim();
@@ -620,11 +692,16 @@ CardAbilities readAbilities(String effect) {
     final ability = _readClause(clause);
     if (ability == null) {
       unread.add(clause);
+      // What the CPU cannot play, the player still can. Reading it a second
+      // time for the timing alone is what turns most of a real deck from
+      // text into something the board can raise at the right moment.
+      final prompt = _readPrompt(clause);
+      if (prompt != null) prompted.add(prompt);
     } else {
       playable.add(ability);
     }
   }
-  return CardAbilities(playable: playable, unread: unread);
+  return CardAbilities(playable: playable, unread: unread, prompted: prompted);
 }
 
 /// Lines that are not an ability the reader has failed to follow.
@@ -670,20 +747,7 @@ Ability? _readClause(String printed, {void Function(String)? onRefusal}) {
     );
   }
 
-  final line = printed
-      .replaceAll(_reminder, '')
-      .replaceAll('[Power] +', '[Power]+')
-      .replaceAll('[Critical] +', '[Critical]+')
-      .toLowerCase()
-      // The mirror's text puts the bracket in the wrong place on a few
-      // hundred cards -- "[Counter-Blast]1]" for "[Counter-Blast 1]" -- and
-      // that is a typo in the printing, not an ability the reader cannot
-      // follow, so it is straightened out rather than refused.
-      .replaceAllMapped(
-        RegExp(r'\[(counter-blast|soul-blast|energy-blast)\](\d+)\]'),
-        (m) => '[${m.group(1)} ${m.group(2)}]',
-      )
-      .trim();
+  final line = _normalise(printed);
 
   final header = _header.firstMatch(line);
   if (header == null) {
@@ -804,6 +868,124 @@ Ability? _readClause(String printed, {void Function(String)? onRefusal}) {
     oncePerTurn: oncePerTurn,
     cost: cost,
     effect: effect,
+    condition: condition,
+    text: printed.trim(),
+  );
+}
+
+/// A clause as the readers want it: no reminder text, lower case, and the
+/// printing's own typos straightened out.
+String _normalise(String printed) => printed
+    .replaceAll(_reminder, '')
+    .replaceAll('[Power] +', '[Power]+')
+    .replaceAll('[Critical] +', '[Critical]+')
+    .toLowerCase()
+    // The mirror's text puts the bracket in the wrong place on a few hundred
+    // cards -- "[Counter-Blast]1]" for "[Counter-Blast 1]" -- and that is a
+    // typo in the printing, not an ability the reader cannot follow, so it is
+    // straightened out rather than refused.
+    .replaceAllMapped(
+      RegExp(r'\[(counter-blast|soul-blast|energy-blast)\](\d+)\]'),
+      (m) => '[${m.group(1)} ${m.group(2)}]',
+    )
+    .trim();
+
+/// One clause read only as far as a player needs it: when it applies and what
+/// it costs, with the effect left to them.
+///
+/// Deliberately more forgiving than [_readClause]. A part it cannot follow is
+/// passed over, because that part is the effect and the player has it printed
+/// on the card. Two things are still refused outright: a cost it cannot read,
+/// since paying the cost is the whole of what accepting a prompt does, and a
+/// clause naming two different moments, since a prompt raised at the wrong
+/// one is worse than no prompt at all.
+PromptedAbility? _readPrompt(String printed) {
+  final line = _normalise(printed);
+  final header = _header.firstMatch(line);
+  if (header == null) return null;
+
+  final kind = header.group(1)!;
+  final zones = _zonesOf(header.group(3));
+  final markers = header.group(4) ?? '';
+  final generationBreak = RegExp(r'\[generation break (\d+)\]')
+      .firstMatch(markers);
+  final limitBreak = RegExp(r'\[limit[- ]break (\d+)\]').firstMatch(markers);
+  var condition = AbilityCondition(
+    generationBreak: generationBreak == null
+        ? null
+        : int.parse(generationBreak.group(1)!),
+    damageAtLeast: limitBreak == null ? null : int.parse(limitBreak.group(1)!),
+  );
+  var body = header.group(5)!;
+
+  var cost = const AbilityCost();
+  final costs = _costSpan(body);
+  if (costs != null) {
+    for (final part in _costParts(costs.costs)) {
+      final paid = _readCost(part);
+      if (paid == null) return null;
+      cost = AbilityCost(
+        counterBlast: cost.counterBlast + paid.counterBlast,
+        soulBlast: cost.soulBlast + paid.soulBlast,
+        energy: cost.energy + paid.energy,
+        discard: cost.discard + paid.discard,
+        mill: cost.mill + paid.mill,
+        flipG: cost.flipG + paid.flipG,
+        restSelf: cost.restSelf || paid.restSelf,
+        retireSelf: cost.retireSelf || paid.retireSelf,
+        selfToSoul: cost.selfToSoul || paid.selfToSoul,
+      );
+    }
+    body = body.replaceRange(costs.start, costs.end, '');
+  }
+
+  var timing = switch (kind) {
+    'act' => AbilityTiming.activated,
+    'cont' => AbilityTiming.continuous,
+    _ => null,
+  };
+
+  // Conditions before timings, the order [_readClause] uses, so a part the
+  // two readers both recognise is taken the same way by each.
+  for (final part in _parts(body.trim().replaceAll(RegExp(r'\.$'), ''))) {
+    final asked = _readCondition(part);
+    if (asked != null) {
+      condition = condition.merge(asked);
+      continue;
+    }
+    final fires = _readTiming(part);
+    if (fires == null) continue; // The effect: the player's half.
+    if (timing != null &&
+        timing != AbilityTiming.continuous &&
+        fires != timing) {
+      return null;
+    }
+    timing = fires == AbilityTiming.continuous && kind == 'cont'
+        ? AbilityTiming.continuous
+        : fires;
+  }
+
+  // A cost that spends the unit itself is not offered. The board pays a
+  // prompt's cost the moment it is accepted and the player applies the effect
+  // afterwards, so retiring the unit first would take away the thing the rest
+  // of the clause is about. The executable reader refuses these for the same
+  // reason, from the other end.
+  if (cost.retireSelf || cost.selfToSoul) return null;
+
+  if (timing == null) return null;
+  // An [AUTO] with no moment of its own has nothing to fire on.
+  if (kind == 'auto' && timing == AbilityTiming.continuous) return null;
+  // A [CONT] is simply true while the unit stands there. There is no moment
+  // to raise it at, and nothing for the player to accept.
+  if (timing == AbilityTiming.continuous) return null;
+  if (timing == AbilityTiming.onPlaced && zones.length == 1) {
+    timing = zones.first == 'VC' ? AbilityTiming.onRide : AbilityTiming.onCall;
+  }
+  return PromptedAbility(
+    timing: timing,
+    zones: zones,
+    oncePerTurn: markers.contains('[1/turn]'),
+    cost: cost,
     condition: condition,
     text: printed.trim(),
   );

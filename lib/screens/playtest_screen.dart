@@ -9,6 +9,7 @@ import '../games/game_definition.dart';
 import '../games/games.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
+import '../playtest/ability_reader.dart';
 import '../playtest/playtest_controller.dart';
 import '../playtest/playtest_engine.dart';
 import '../playtest/playtest_state.dart';
@@ -521,6 +522,279 @@ const _railColumn = 176.0;
 const _widestCircle = 132.0;
 const _narrowestCircle = 64.0;
 
+/// The strip that says an ability is waiting.
+///
+/// Deliberately a strip and not a dialog. An ability firing is not a question
+/// the board needs answered before play can go on -- most of them are small,
+/// and some are not worth using -- so it sits there until it is read, and
+/// goes away with the moment that raised it.
+class _PromptBar extends StatelessWidget {
+  const _PromptBar({required this.game});
+
+  final PlaytestController game;
+
+  @override
+  Widget build(BuildContext context) {
+    final waiting = game.prompts;
+    if (waiting.isEmpty) return const SizedBox.shrink();
+
+    final one = waiting.length == 1;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Material(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _showPromptSheet(context, game),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome,
+                  size: 18,
+                  color: AppColors.warning,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    one
+                        ? '${waiting.first.card.name} has an ability now'
+                        : '${waiting.length} abilities to apply',
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Read',
+                  style: TextStyle(color: AppColors.warning, fontSize: 12),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: AppColors.warning,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What an ability takes to use, in the words the board's own buttons use.
+String _costLabel(AbilityCost cost) {
+  if (cost.isFree) return 'No cost';
+  final parts = <String>[
+    if (cost.counterBlast > 0) 'Counter-Blast ${cost.counterBlast}',
+    if (cost.soulBlast > 0) 'Soul-Blast ${cost.soulBlast}',
+    if (cost.energy > 0) 'Energy-Blast ${cost.energy}',
+    if (cost.discard > 0)
+      'discard ${cost.discard} card${cost.discard == 1 ? '' : 's'}',
+    if (cost.mill > 0) 'top ${cost.mill} of the deck to the drop',
+    if (cost.flipG > 0) 'turn ${cost.flipG} face up in the G zone',
+    if (cost.restSelf) 'rest this unit',
+  ];
+  return parts.join(', ');
+}
+
+/// The abilities waiting, each with what it costs and what it says.
+///
+/// The board pays the cost and writes the line into the log. What the ability
+/// then does is applied with the controls that were always there -- this is
+/// not a step towards the board playing the card for you, it is the board
+/// knowing when to ask.
+void _showPromptSheet(BuildContext context, PlaytestController game) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => AnimatedBuilder(
+      animation: game,
+      builder: (builderContext, _) {
+        final waiting = game.prompts;
+        if (waiting.isEmpty) {
+          // The last one answered takes the sheet with it.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (Navigator.canPop(sheetContext)) Navigator.pop(sheetContext);
+          });
+          return const SizedBox.shrink();
+        }
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeader(
+                  title: 'Abilities now',
+                  caption:
+                      'The board pays the cost and logs it. '
+                      'Apply what the card says with the usual controls.',
+                ),
+                for (final prompt in waiting)
+                  _PromptTile(game: game, prompt: prompt),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class _PromptTile extends StatelessWidget {
+  const _PromptTile({required this.game, required this.prompt});
+
+  final PlaytestController game;
+  final AbilityPrompt prompt;
+
+  @override
+  Widget build(BuildContext context) {
+    final cost = prompt.ability.cost;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            prompt.card.name,
+            style: const TextStyle(
+              color: AppColors.text,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            '${prompt.circle.label} · ${_costLabel(cost)}',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            prompt.ability.text,
+            style: const TextStyle(
+              color: AppColors.text,
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => game.dismissPrompt(prompt),
+                child: const Text(
+                  'Skip',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () => _use(context),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                ),
+                child: Text(cost.isFree ? 'Use' : 'Pay and use'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _use(BuildContext context) async {
+    final cost = prompt.ability.cost;
+    var discards = const <GameCard>[];
+    if (cost.discard > 0) {
+      final picked = await _pickDiscards(context, game, prompt);
+      // Backing out of the picker leaves the offer standing.
+      if (picked == null) return;
+      discards = picked;
+    }
+    game.takePrompt(prompt, discardable: discards);
+  }
+}
+
+/// Picks which cards pay a discard cost, since that is a decision and not the
+/// board's to make.
+Future<List<GameCard>?> _pickDiscards(
+  BuildContext context,
+  PlaytestController game,
+  AbilityPrompt prompt,
+) {
+  final wanted = prompt.ability.cost.discard;
+  final hand = prompt.side.hand.toList();
+  final picks = <GameCard>[];
+
+  return showModalBottomSheet<List<GameCard>>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (builderContext, setSheetState) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SectionHeader(
+                title: 'Pay for ${prompt.card.name}',
+                caption:
+                    'Discard $wanted card${wanted == 1 ? '' : 's'}. '
+                    'Picked: ${picks.length}.',
+              ),
+              for (final card in hand)
+                CheckboxListTile(
+                  value: picks.contains(card),
+                  dense: true,
+                  title: Text(
+                    card.name,
+                    style: const TextStyle(color: AppColors.text, fontSize: 13),
+                  ),
+                  onChanged: (on) => setSheetState(() {
+                    if (on ?? false) {
+                      if (picks.length < wanted) picks.add(card);
+                    } else {
+                      picks.remove(card);
+                    }
+                  }),
+                ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                  ),
+                  onPressed: picks.length == wanted
+                      ? () => Navigator.pop(sheetContext, picks.toList())
+                      : null,
+                  child: const Text('Discard and use'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _Board extends StatelessWidget {
   const _Board({required this.game});
 
@@ -532,6 +806,7 @@ class _Board extends StatelessWidget {
     return Column(
       children: [
         Expanded(child: wide ? _wide() : _stacked()),
+        _PromptBar(game: game),
         _Hand(game: game),
         _Controls(game: game),
       ],

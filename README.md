@@ -560,6 +560,55 @@ actually holds that crest, so nothing is paid for a cost that cannot finish.
 
 What it still refuses: anything that chooses a target, searches a deck, calls
 a unit, retires somebody else's, or asks the board something it cannot count.
+Those are not lost — see below, where the board offers them to you instead.
+
+### Abilities the board offers you
+
+Playing an ability out itself is a high bar, and most of a real deck fails it:
+the board has to understand the timing, the cost **and** every effect, because
+a CPU has nobody to ask. A player is not in that position. You are holding the
+cards, and what you are missing is never what the ability means — it is
+printed in front of you — but the two things easy to lose track of mid-game:
+**the moment it applies**, and **what it costs**.
+
+So the same text is read a second time, stopping earlier. Where the board can
+work out when a clause fires and what it takes, but not what it does, it says
+so at the moment it fires:
+
+```
+Shiranui has an ability now                                        Read ›
+
+  Shiranui, Vice-Emperor Dragon            Front left · Counter-Blast 1
+  [AUTO](RC):When this unit is placed on (RC), [COST][Counter-Blast 1],
+  choose one of your rear-guards, and [Stand] it.
+
+                                                    Skip   Pay and use
+```
+
+Accepting turns the damage face down, writes the line into the log, and stops
+there. Standing the rear-guard is yours, with the same controls you would have
+used anyway. The board is not playing the card for you — it is knowing when to
+ask, which is the part a person actually loses track of.
+
+Nothing about this is written per card, which is the whole point. One strip
+serves the entire pool, so what the board can help with grows with the reader
+rather than with anything typed out by hand. Today that is **5,239 clauses
+offered on top of the 862 it plays itself** — seven times the reach, from one
+screen's worth of interface.
+
+The same two rules still hold. A cost it cannot read is not offered, since
+paying the cost is the whole of what accepting does. A cost that spends the
+unit itself is not offered either: the board pays when you accept and you
+apply the effect afterwards, so retiring the unit first would take away the
+thing the rest of the clause is about. An offer left unanswered when the turn
+ends was declined by not being answered.
+
+What it cannot yet raise is a matter of vocabulary rather than design. The
+reader knows about twenty-five ways of writing a timing, and the card pool
+uses far more — *"when this unit is put on (GC)"*, *"when your vanguard
+attacks"*, *"at the beginning of your battle phase"*. Each one taught is more
+of the pool offered, with no new interface, and `tool/ability_coverage.dart`
+ranks them by what they would buy.
 
 A worked example, and the reason the reader grew: the Stride Deckset
 -Nightrose- (`DZ-SS03`). Nothing in it could be played at all — 0 of its 36

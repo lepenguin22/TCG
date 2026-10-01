@@ -64,6 +64,7 @@ void main(List<String> args) {
 
   var played = 0;
   var unread = 0;
+  var prompted = 0;
   final unreadClauses = <String, int>{};
   stdout.writeln('${wanted.length} cards\n');
 
@@ -75,15 +76,28 @@ void main(List<String> args) {
       played += 1;
       stdout.writeln('  ✓ ${ability.text}');
     }
+    // A clause the player can be prompted for is marked apart from one that
+    // is nothing but text: the first is a moment the board can raise, the
+    // second is work it cannot help with at all.
+    final promptable = {for (final p in read.prompted) p.text};
     for (final clause in read.unread) {
       unread += 1;
       unreadClauses[clause] = (unreadClauses[clause] ?? 0) + 1;
-      stdout.writeln('  ✗ $clause');
+      if (promptable.contains(clause)) {
+        prompted += 1;
+        stdout.writeln('  ? $clause');
+      } else {
+        stdout.writeln('  ✗ $clause');
+      }
     }
     stdout.writeln('');
   }
 
-  stdout.writeln('--- $played clauses played, $unread not read');
+  final text = unread - prompted;
+  stdout.writeln(
+    '--- $played played by the board, $prompted offered to the player, '
+    '$text text only',
+  );
   if (unreadClauses.isEmpty) return;
 
   // Which phrase stopped each one, so the next pattern to write is the one
