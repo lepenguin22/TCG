@@ -51,8 +51,11 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull, reason: 'the opening hand');
 
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      // Both openings are yours, so the hand is kept twice.
+      for (var i = 0; i < 2; i += 1) {
+        await tester.tap(find.text('Keep this hand'));
+        await tester.pump();
+      }
       expect(tester.takeException(), isNull, reason: 'the board');
 
       // Play on far enough to lay out the attacking and guarding states too,
@@ -90,8 +93,11 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      // Both openings are yours, so the hand is kept twice.
+      for (var i = 0; i < 2; i += 1) {
+        await tester.tap(find.text('Keep this hand'));
+        await tester.pump();
+      }
 
       // The board at its widest: a G zone, a removed pile and five damage.
       final game = Provider.of<PlaytestController>(
@@ -110,8 +116,12 @@ void main() {
 
       // The zone is read, not counted: it is on a line of its own above the
       // piles, and every one of its six places is on the screen.
-      final damage = tester.getRect(find.byKey(const ValueKey('damage-You')));
-      final piles = tester.getRect(find.byKey(const ValueKey('piles-You')));
+      final damage = tester.getRect(
+        find.byKey(const ValueKey('damage-Player 1')),
+      );
+      final piles = tester.getRect(
+        find.byKey(const ValueKey('piles-Player 1')),
+      );
       expect(damage.right, lessThanOrEqualTo(size.width));
       expect(
         damage.bottom,
@@ -148,8 +158,11 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      // Both openings are yours, so the hand is kept twice.
+      for (var i = 0; i < 2; i += 1) {
+        await tester.tap(find.text('Keep this hand'));
+        await tester.pump();
+      }
       return Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
         listen: false,
@@ -165,7 +178,7 @@ void main() {
       await pump(tester, opening);
 
       // Every circle of both boards, without moving anything.
-      for (final side in ['You', 'CPU']) {
+      for (final side in ['Player 1', 'Player 2']) {
         for (final circle in Circle.values) {
           expect(
             find.byKey(ValueKey('circle-$side-${circle.name}')),
@@ -196,13 +209,13 @@ void main() {
       tester,
     ) async {
       await pump(tester, opening);
-      final roomy = circleWidth(tester, 'circle-You-vanguard');
+      final roomy = circleWidth(tester, 'circle-Player 1-vanguard');
       expect(roomy, lessThanOrEqualTo(132));
 
       // The same game, in a window dragged shorter.
       tester.view.physicalSize = const Size(884, 700);
       await tester.pump();
-      final cramped = circleWidth(tester, 'circle-You-vanguard');
+      final cramped = circleWidth(tester, 'circle-Player 1-vanguard');
       expect(
         cramped,
         lessThan(roomy),
@@ -228,12 +241,12 @@ void main() {
       await pump(tester, opening);
 
       final theirField = tester.getRect(
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
       final yourField = tester.getRect(
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
-      for (final damage in ['damage-CPU', 'damage-You']) {
+      for (final damage in ['damage-Player 2', 'damage-Player 1']) {
         final rect = tester.getRect(find.byKey(ValueKey(damage)));
         expect(
           rect.left,

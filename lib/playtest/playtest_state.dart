@@ -183,10 +183,9 @@ class FieldUnit {
 enum OrderExit { drop, soul, hand, removed }
 
 class PlaytestSide {
-  PlaytestSide({required this.name, required this.isCpu});
+  PlaytestSide({required this.name});
 
   final String name;
-  final bool isCpu;
 
   /// The main deck, top of deck last so drawing is a cheap remove.
   final List<GameCard> deck = [];
@@ -321,32 +320,13 @@ class PlaytestSide {
 /// first gets to build a board a turn earlier. A real game settles it with
 /// rock-paper-scissors, which [random] stands in for.
 enum TurnOrder {
-  youFirst('You go first'),
-  cpuFirst('The CPU goes first'),
+  playerOneFirst('Player 1 goes first'),
+  playerTwoFirst('Player 2 goes first'),
   random('Decided at random');
 
   const TurnOrder(this.label);
 
   final String label;
-
-  /// The same choice said in the words of a game where both hands are yours.
-  String get soloLabel => switch (this) {
-    TurnOrder.youFirst => 'Player 1 goes first',
-    TurnOrder.cpuFirst => 'Player 2 goes first',
-    TurnOrder.random => 'Decided at random',
-  };
-}
-
-/// Who plays the other side of the board.
-enum PlaytestMode {
-  /// The CPU does, as far as it can: it rides, calls, attacks and guards,
-  /// and plays the abilities the reader can follow.
-  vsCpu,
-
-  /// You do. Both hands are yours, nothing moves unless you move it, and no
-  /// ability goes unplayed because a program could not read it -- which is
-  /// what a real test of a deck against a deck needs.
-  bothSides,
 }
 
 enum PlaytestPhase {
@@ -529,8 +509,15 @@ class AbilityPrompt {
 
   final PlaytestSide side;
 
-  /// The circle the unit is standing on, which is what the cost is paid from.
-  final Circle circle;
+  /// The circle the unit is standing on, which is what a cost that spends the
+  /// unit is paid from.
+  ///
+  /// Null where the card is not on the field at all. One clause reaches the
+  /// board that way -- "when this card is discarded from hand while paying the
+  /// cost for [Stride]" -- and it fires on its way to the drop, with no circle
+  /// to hang on. Costs that need a unit cannot be paid for those, so they are
+  /// never offered.
+  final Circle? circle;
 
   final GameCard card;
   final PromptedAbility ability;
@@ -575,8 +562,8 @@ class PlaytestState {
   /// Abilities waiting on the player, oldest first.
   ///
   /// Raised by the engine as the game reaches each moment and cleared as they
-  /// are taken or dismissed. Only ever holds a human side's: the CPU plays
-  /// what it can read and logs the rest, and has nobody to ask about either.
+  /// are taken or dismissed. Both sides are yours, so both sides' offers
+  /// land here and each is shown against the player it belongs to.
   final List<AbilityPrompt> prompts = [];
 
   PlaytestSide get active => yourTurn ? you : opponent;

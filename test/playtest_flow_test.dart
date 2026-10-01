@@ -16,13 +16,14 @@ import 'playtest_engine_test.dart'
 
 void main() {
   group('the playtest controller', () {
-    /// Steps the CPU's first turn out, so the board is on your turn two.
+    /// Passes turn one, so the board is on turn two.
     ///
-    /// Nobody attacks on turn one, so a test about attacking gives that turn
-    /// to the CPU and plays it through.
+    /// Nobody attacks on turn one, so a test about attacking has to be off it
+    /// first, which takes as many taps as the turn has phases.
     void pastTheFirstTurn(PlaytestController game) {
-      for (var i = 0; i < 30 && game.stage == PlaytestStage.cpuTurn; i += 1) {
-        game.cpuStep();
+      final started = game.state.active;
+      for (var i = 0; i < 8 && game.state.active == started; i += 1) {
+        game.nextPhase();
       }
     }
 
@@ -71,7 +72,6 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
-        mode: PlaytestMode.bothSides,
         random: Random(seed),
       );
     }
@@ -81,7 +81,7 @@ void main() {
       expect(game.stage, PlaytestStage.mulligan);
       expect(game.mulliganSide, game.you);
       expect(game.you.name, 'Player 1');
-      expect(game.cpu.name, 'Player 2');
+      expect(game.opponent.name, 'Player 2');
 
       game.confirmMulligan();
       expect(
@@ -89,13 +89,13 @@ void main() {
         PlaytestStage.mulligan,
         reason: 'the second hand is yours as well',
       );
-      expect(game.mulliganSide, game.cpu);
+      expect(game.mulliganSide, game.opponent);
 
       game.confirmMulligan();
       expect(game.stage, PlaytestStage.yours);
       expect(game.you.hand.length, 6, reason: 'five kept, one drawn');
       expect(
-        game.cpu.hand.length,
+        game.opponent.hand.length,
         5,
         reason: 'the second player has not drawn',
       );
@@ -114,24 +114,24 @@ void main() {
       game.confirmMulligan();
       game.confirmMulligan();
 
-      final theirBoard = game.cpu.units.length;
-      final theirHand = game.cpu.hand.length;
+      final theirBoard = game.opponent.units.length;
+      final theirHand = game.opponent.hand.length;
       passTheTurn(game);
 
       // The turn is the other player's, and it is still yours to play: no
       // CPU step, no board that filled itself in while you were not looking.
       expect(game.state.yourTurn, isFalse);
       expect(game.stage, PlaytestStage.yours);
-      expect(game.me, game.cpu, reason: 'you are playing them now');
-      expect(game.handSide, game.cpu);
-      expect(game.cpu.units.length, theirBoard);
+      expect(game.me, game.opponent, reason: 'you are playing them now');
+      expect(game.handSide, game.opponent);
+      expect(game.opponent.units.length, theirBoard);
       expect(
-        game.cpu.hand.length,
+        game.opponent.hand.length,
         theirHand + 1,
         reason: 'their own draw step, and nothing else',
       );
       expect(game.controls(game.you), isTrue);
-      expect(game.controls(game.cpu), isTrue);
+      expect(game.controls(game.opponent), isTrue);
     });
 
     test(
@@ -142,16 +142,15 @@ void main() {
           store: store,
           yourDeck: deck,
           opponentDeck: deck,
-          mode: PlaytestMode.bothSides,
           random: Random(6),
         );
         game.confirmMulligan();
         game.confirmMulligan();
         passTheTurn(game);
-        expect(game.me, game.cpu, reason: 'player two is playing');
+        expect(game.me, game.opponent, reason: 'player two is playing');
 
         // A grade 3 vanguard to stride over, and a hand that can pay for it.
-        final them = game.cpu;
+        final them = game.opponent;
         // The grade 3 lives in the ride deck, which is where a real one is
         // ridden from.
         final grade3 = them.rideDeck.firstWhere((c) => c.grade == 3);
@@ -204,8 +203,12 @@ void main() {
 
       // The defender guards -- by hand, with their own cards.
       expect(game.stage, PlaytestStage.guarding);
-      expect(game.handSide, game.cpu, reason: 'the defender holds the shields');
-      final shield = game.cpu.hand.firstWhere((c) => c.shield > 0);
+      expect(
+        game.handSide,
+        game.opponent,
+        reason: 'the defender holds the shields',
+      );
+      final shield = game.opponent.hand.firstWhere((c) => c.shield > 0);
       final before = game.state.attack!.defence;
       game.guardWith(shield);
       expect(game.state.attack!.defence, before + shield.shield);
@@ -241,7 +244,9 @@ void main() {
         random: Random(1),
       );
 
-      game.confirmMulligan();
+      game.confirmMulligan(); // Player 1's opening.
+      expect(game.stage, PlaytestStage.mulligan, reason: 'Player 2 is next');
+      game.confirmMulligan(); // Player 2's.
       expect(game.stage, PlaytestStage.yours);
       expect(game.state.turn, 1);
       expect(game.state.yourTurn, isTrue);
@@ -264,6 +269,7 @@ void main() {
       }
       expect(game.mulliganPicks.length, 2);
       game.confirmMulligan();
+      game.confirmMulligan(); // The far side keeps its own.
 
       expect(game.you.hand.length, 6, reason: 'five again, plus the draw');
       for (final card in pitched) {
@@ -271,7 +277,7 @@ void main() {
       }
     });
 
-    test('ending your turn hands over to the CPU', () async {
+    test('ending a turn passes it to the other player', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(
         store: store,
@@ -280,14 +286,17 @@ void main() {
         random: Random(5),
       );
       game.confirmMulligan();
+      game.confirmMulligan();
+      final first = game.state.active;
 
-      game.nextPhase(); // ride -> main
-      game.nextPhase(); // main -> battle
-      game.nextPhase(); // battle -> end, which passes the turn
+      // However many phases the turn has left in it.
+      for (var i = 0; i < 8 && game.state.active == first; i += 1) {
+        game.nextPhase();
+      }
 
-      // The CPU has taken its turn far enough to be attacking, or has finished
-      // and handed back. Either way it is no longer waiting on nothing.
-      expect(game.stage, anyOf(PlaytestStage.guarding, PlaytestStage.yours));
+      expect(game.state.active, isNot(first), reason: 'the other player now');
+      expect(game.stage, PlaytestStage.yours, reason: 'and it is theirs');
+      expect(game.me, game.state.active, reason: 'the board acts as them');
     });
 
     test('an attack you declare is guarded and then resolved', () async {
@@ -296,9 +305,10 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
+        turnOrder: TurnOrder.playerTwoFirst,
         random: Random(11),
       );
+      game.confirmMulligan();
       game.confirmMulligan();
       pastTheFirstTurn(game);
       game.nextPhase();
@@ -307,8 +317,11 @@ void main() {
 
       game.selectAttacker(Circle.vanguard);
       game.attackWithSelected(Circle.vanguard);
-      expect(game.stage, PlaytestStage.yourAttack);
+      // The defender guards first, since that hand is yours as well.
+      expect(game.stage, PlaytestStage.guarding);
       expect(game.state.attack, isNotNull);
+      game.confirmGuard();
+      expect(game.stage, PlaytestStage.yourAttack);
 
       game.driveCheck();
       expect(
@@ -328,7 +341,7 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
+        turnOrder: TurnOrder.playerTwoFirst,
         random: Random(3),
       );
       game.confirmMulligan();
@@ -359,7 +372,7 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
+        turnOrder: TurnOrder.playerTwoFirst,
         random: Random(3),
       );
       game.confirmMulligan();
@@ -408,105 +421,6 @@ void main() {
       expect(game.boostSelected, isFalse);
     });
 
-    test('the CPU going first waits to be stepped through', () async {
-      final (store, deck) = await buildDeck();
-      final game = PlaytestController(
-        store: store,
-        yourDeck: deck,
-        opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
-        random: Random(4),
-      );
-      expect(game.stage, PlaytestStage.mulligan);
-
-      game.confirmMulligan();
-      // Turn one belongs to the CPU, so keeping your hand hands straight over
-      // to it -- and its main phase is yours to step through rather than a
-      // finished board handed back to you.
-      expect(game.state.turn, 1);
-      expect(game.stage, PlaytestStage.cpuTurn);
-      expect(
-        game.cpu.vanguard!.card.grade,
-        0,
-        reason: 'still its starting vanguard, not ridden up',
-      );
-
-      for (var i = 0; i < 20 && game.stage == PlaytestStage.cpuTurn; i += 1) {
-        game.cpuStep();
-      }
-      expect(
-        game.stage,
-        anyOf(PlaytestStage.guarding, PlaytestStage.yours),
-        reason: 'it played its turn out',
-      );
-      expect(game.cpu.vanguard!.card.grade, 1, reason: 'it rode up');
-    });
-
-    test('the CPU plays one action per step', () async {
-      final (store, deck) = await buildDeck();
-      final game = PlaytestController(
-        store: store,
-        yourDeck: deck,
-        opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
-        random: Random(4),
-      );
-      game.confirmMulligan();
-
-      // The ride is the first thing it does, and it is the only thing that
-      // first tap does.
-      game.cpuStep();
-      expect(game.cpu.vanguard!.card.grade, 1, reason: 'it rode');
-      expect(game.cpu.units, hasLength(1), reason: 'and called nothing yet');
-      expect(game.lastCpuAction, contains('rides'));
-
-      // Each tap after that puts at most one more unit on the board.
-      var units = game.cpu.units.length;
-      while (game.stage == PlaytestStage.cpuTurn) {
-        game.cpuStep();
-        final now = game.cpu.units.length;
-        expect(
-          now - units,
-          lessThanOrEqualTo(1),
-          reason: 'one action at a time',
-        );
-        units = now;
-      }
-      expect(units, greaterThan(1), reason: 'it did build a board');
-    });
-
-    test('stepping to the end is the same board as playing it out', () async {
-      Future<PlaytestController> game(bool stepped) async {
-        final (store, deck) = await buildDeck();
-        final controller = PlaytestController(
-          store: store,
-          yourDeck: deck,
-          opponentDeck: deck,
-          turnOrder: TurnOrder.cpuFirst,
-          random: Random(9),
-        );
-        controller.confirmMulligan();
-        if (stepped) {
-          while (controller.stage == PlaytestStage.cpuTurn) {
-            controller.cpuStep();
-          }
-        } else {
-          // What the CPU does when nobody is watching it: the same steps,
-          // run to the end in one go.
-          controller.ai.takeTurn();
-        }
-        return controller;
-      }
-
-      final stepped = await game(true);
-      final atOnce = await game(false);
-      expect(
-        stepped.cpu.units.map((u) => u.card.name).toList(),
-        atOnce.cpu.units.map((u) => u.card.name).toList(),
-      );
-      expect(stepped.cpu.hand.length, atOnce.cpu.hand.length);
-    });
-
     test('a rear-guard attack skips the drive check', () async {
       final (store, deck) = await buildDeck();
       final game = PlaytestController(
@@ -548,36 +462,49 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('turn order is offered, with you first to start', (
+    testWidgets('turn order is offered, Player 1 first to start', (
       tester,
     ) async {
       final (store, deck) = await buildDeck();
       await pumpSetup(tester, store, deck);
 
       expect(find.text('Turn order'), findsOneWidget);
-      expect(find.text('You'), findsOneWidget);
-      expect(find.text('CPU'), findsOneWidget);
+      expect(find.text('Player 1'), findsWidgets);
+      expect(find.text('Player 2'), findsWidgets);
       expect(find.text('Random'), findsOneWidget);
-      expect(find.text('You go first'), findsOneWidget);
+      expect(find.text('Player 1 goes first'), findsOneWidget);
     });
 
-    testWidgets('choosing the CPU deals it the first turn', (tester) async {
+    testWidgets('the other player can be given the first turn', (tester) async {
       final (store, deck) = await buildDeck();
       await pumpSetup(tester, store, deck);
 
-      await tester.tap(find.text('CPU'));
+      await tester.tap(find.text('Player 2').first);
       await tester.pumpAndSettle();
-      expect(find.text('The CPU goes first'), findsOneWidget);
+      expect(find.text('Player 2 goes first'), findsOneWidget);
 
-      // The opponent list sits below the mode and turn order choices.
-      await tester.ensureVisible(find.text('Mirror match'));
-      await tester.pumpAndSettle();
+      // The opponent list sits below the choices, and a list only builds what
+      // is on screen, so it is scrolled to rather than found.
+      for (
+        var i = 0;
+        i < 8 && find.text('Mirror match').evaluate().isEmpty;
+        i += 1
+      ) {
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text('Mirror match'));
       await tester.pumpAndSettle();
 
       // The board opens on the mulligan and says who has turn one.
-      expect(find.text('Opening hand'), findsOneWidget);
-      expect(find.textContaining('The CPU goes first'), findsOneWidget);
+      expect(
+        find.textContaining('opening hand'),
+        findsOneWidget,
+        reason: 'named, since both hands are yours',
+      );
+      // Player 1's own frame is what the mulligan shows, so what it says is
+      // that they are the one going second.
+      expect(find.textContaining('goes second'), findsWidgets);
     });
 
     testWidgets('the setup screen offers taking both sides', (tester) async {
@@ -644,12 +571,28 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// Keeps both opening hands.
+    ///
+    /// Both sides are yours, so the board asks twice before the game starts.
+    Future<void> keepBothHands(
+      WidgetTester tester, {
+      bool settle = false,
+    }) async {
+      for (var i = 0; i < 2; i += 1) {
+        await tester.tap(find.text('Keep this hand'));
+        if (settle) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump();
+        }
+      }
+    }
+
     Future<void> pump(
       WidgetTester tester,
       DeckStore store,
       deck, {
-      TurnOrder turnOrder = TurnOrder.youFirst,
-      PlaytestMode mode = PlaytestMode.vsCpu,
+      TurnOrder turnOrder = TurnOrder.playerOneFirst,
     }) async {
       await tester.pumpWidget(
         ChangeNotifierProvider<DeckStore>.value(
@@ -660,7 +603,6 @@ void main() {
               yourDeck: deck,
               opponentDeck: deck,
               turnOrder: turnOrder,
-              mode: mode,
               // A fixed shuffle: these tests reach for particular
               // cards, and a board that is a different board every
               // run fails one time in a hundred for no reason.
@@ -676,7 +618,8 @@ void main() {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
 
-      expect(find.text('Opening hand'), findsOneWidget);
+      // Named, since the hand after it is yours as well.
+      expect(find.textContaining('Player 1\u2019s opening hand'), findsOne);
       expect(find.text('Keep this hand'), findsOneWidget);
     });
 
@@ -684,20 +627,18 @@ void main() {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
 
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // The board names both players and the turn.
       expect(find.textContaining('Turn 1'), findsOneWidget);
-      expect(find.text('You'), findsOneWidget);
-      expect(find.text('CPU'), findsOneWidget);
+      expect(find.text('Player 1'), findsWidgets);
+      expect(find.text('Player 2'), findsWidgets);
     });
 
     testWidgets('the zones are on the board and open', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // One pile each side for the deck, drop and soul.
       expect(find.text('Deck'), findsNWidgets(2));
@@ -714,8 +655,7 @@ void main() {
     testWidgets('the damage zone opens with its costs', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       expect(find.text('No damage'), findsNWidgets(2));
       await tapOnBoard(tester, find.text('No damage').last);
@@ -728,8 +668,7 @@ void main() {
     testWidgets('the deck can be searched', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // The deck opens on what can be done to it, without showing itself.
       await tapOnBoard(tester, find.text('Deck').last);
@@ -746,8 +685,7 @@ void main() {
     testWidgets('a card can be drawn without reading the deck', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       expect(find.textContaining('Hand '), findsWidgets);
 
       await tapOnBoard(tester, find.text('Deck').last);
@@ -764,8 +702,7 @@ void main() {
     testWidgets('a stride deck shows a G zone', (tester) async {
       final (store, deck) = await buildStrideDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       expect(find.text('G'), findsNWidgets(2));
       await tapOnBoard(tester, find.text('G').last);
@@ -777,8 +714,7 @@ void main() {
     testWidgets('a G zone card can be turned face up and back', (tester) async {
       final (store, deck) = await buildStrideDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(tester, find.text('G').last);
       expect(find.textContaining('0 face up'), findsOneWidget);
@@ -803,8 +739,7 @@ void main() {
     ) async {
       final (store, deck) = await buildEnergyDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       expect(find.text('Crest'), findsNWidgets(2));
       await tapOnBoard(tester, find.text('Crest').last);
@@ -822,8 +757,7 @@ void main() {
     ) async {
       final (store, deck) = await buildEnergyDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(tester, find.text('Crest').last);
       expect(find.textContaining('of 10 energy'), findsOneWidget);
@@ -853,8 +787,7 @@ void main() {
     testWidgets('riding charges the crest into play', (tester) async {
       final (store, deck) = await buildEnergyDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
@@ -872,14 +805,17 @@ void main() {
     /// A card in hand of a grade low enough to call under a grade 1
     /// vanguard. Hand tiles label themselves with their grade, which is the
     /// only handle a widget test has on which card is which.
-    /// Plays the CPU's first turn out, so the board is on your turn two.
+    /// Passes turn one, so the board is on turn two.
     ///
     /// Nobody attacks on turn one -- whoever goes first does not -- so a test
-    /// about attacking starts by handing that turn to the CPU and stepping
-    /// through it.
+    /// about attacking gives that turn to Player 2 and taps through it.
     Future<void> pastTheFirstTurn(WidgetTester tester) async {
-      for (var i = 0; i < 30; i += 1) {
-        final step = find.text('Continue');
+      for (var i = 0; i < 8; i += 1) {
+        if (find.textContaining('Turn 2').evaluate().isNotEmpty) break;
+        // The bar says "End turn" in the battle phase and "Next" before it.
+        final step = find.text('End turn').evaluate().isNotEmpty
+            ? find.text('End turn')
+            : find.text('Next');
         if (step.evaluate().isEmpty) break;
         await tester.tap(step);
         await tester.pumpAndSettle();
@@ -900,8 +836,7 @@ void main() {
       // hold one to set.
       final (store, deck) = await buildSetOrderDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       expect(find.text('Orders'), findsNothing, reason: 'nothing set yet');
 
@@ -930,8 +865,7 @@ void main() {
     testWidgets('a rear-guard offers to move up its column', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // Ride into grade 1 so there is something to call under, then move on
       // to the main phase.
@@ -951,14 +885,14 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
 
       // Tapping it now offers the move up, because the front of its column
       // is empty.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
       expect(find.textContaining('Move to front left'), findsOneWidget);
       await tester.tap(find.textContaining('Move to front left'));
@@ -967,7 +901,7 @@ void main() {
       // It is in the front row now, and the offer has flipped the other way.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
       expect(find.textContaining('Move to back left'), findsOneWidget);
     });
@@ -975,8 +909,7 @@ void main() {
     testWidgets('a rear-guard swaps with any other rear-guard', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       await tester.tap(find.text('Next'));
       await tester.pump();
 
@@ -985,10 +918,11 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
 
-      Finder circle(String name) => find.byKey(ValueKey('circle-You-$name'));
+      Finder circle(String name) =>
+          find.byKey(ValueKey('circle-Player 1-$name'));
       expect(
         find.descendant(of: circle('backRight'), matching: find.text('—')),
         findsOneWidget,
@@ -1032,12 +966,11 @@ void main() {
     testWidgets('the vanguard is offered no swap', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       expect(find.text('Swap with another rear-guard'), findsNothing);
     });
@@ -1045,14 +978,13 @@ void main() {
     testWidgets('the vanguard is never offered a move', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       await tester.tap(find.text('Next'));
       await tester.pump();
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       // Nothing moves onto or off the vanguard circle.
       expect(find.textContaining('Move to'), findsNothing);
@@ -1062,12 +994,11 @@ void main() {
     testWidgets('a unit can be given critical by hand', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       expect(find.text('+1 critical'), findsOneWidget);
       expect(find.text('-1 critical'), findsOneWidget);
@@ -1089,12 +1020,11 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
 
       // The field opens on the commonest amount, and the old fixed buttons
@@ -1130,12 +1060,11 @@ void main() {
     testWidgets('an empty power field does nothing', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       await tester.enterText(find.byType(TextField), '');
       await tester.pumpAndSettle();
@@ -1153,14 +1082,13 @@ void main() {
       final (store, deck) = await buildDeck();
       // The drive check is only reached by attacking, and nobody attacks on
       // turn one, so the CPU takes it.
-      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck, turnOrder: TurnOrder.playerTwoFirst);
+      await keepBothHands(tester, settle: true);
       await pastTheFirstTurn(tester);
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       expect(find.text('+1 drive'), findsOneWidget);
       // The heading counts the checks it will make.
@@ -1178,12 +1106,15 @@ void main() {
       await tester.pump();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
+      // The defender is asked to guard first, both hands being yours.
+      await tester.tap(find.text('Done guarding'));
+      await tester.pumpAndSettle();
       // Two checks to make, and the button says how many are left rather
       // than flipping them together.
       expect(find.text('Drive check (2 left)'), findsOneWidget);
@@ -1206,9 +1137,8 @@ void main() {
       // control is on every circle and the battle owes the check.
       final (store, deck) = await buildDeck();
       // Nobody attacks on turn one, so the CPU takes it.
-      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck, turnOrder: TurnOrder.playerTwoFirst);
+      await keepBothHands(tester, settle: true);
       await pastTheFirstTurn(tester);
       // Into the main phase, which is where a unit is called.
       await tester.tap(find.text('Next'));
@@ -1219,12 +1149,12 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
       // Nought drive is not shown on a rear-guard, since that is simply what
       // a rear-guard is.
@@ -1241,12 +1171,15 @@ void main() {
       // It attacks, and the board owes it the check its ability bought.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
+      // The defender is asked to guard first, both hands being yours.
+      await tester.tap(find.text('Done guarding'));
+      await tester.pumpAndSettle();
       expect(find.text('Drive check'), findsOneWidget);
       await tester.tap(find.text('Drive check'));
       await tester.pumpAndSettle();
@@ -1257,9 +1190,8 @@ void main() {
       tester,
     ) async {
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck, turnOrder: TurnOrder.playerTwoFirst);
+      await keepBothHands(tester, settle: true);
       await pastTheFirstTurn(tester);
       await tester.tap(find.text('Next'));
       await tester.pump();
@@ -1269,19 +1201,22 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
       await tester.tap(find.text('Next'));
       await tester.pump();
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
+      // The defender is asked to guard first, both hands being yours.
+      await tester.tap(find.text('Done guarding'));
+      await tester.pumpAndSettle();
       expect(find.text('Drive check'), findsNothing);
       expect(find.text('Resolve'), findsOneWidget);
     });
@@ -1291,9 +1226,8 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       // The CPU takes turn one, which is the turn nobody attacks on.
-      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck, turnOrder: TurnOrder.playerTwoFirst);
+      await keepBothHands(tester, settle: true);
       await pastTheFirstTurn(tester);
 
       // Nothing to show before a battle starts.
@@ -1306,12 +1240,15 @@ void main() {
       await tester.pump();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
+      // The defender is asked to guard first, both hands being yours.
+      await tester.tap(find.text('Done guarding'));
+      await tester.pumpAndSettle();
 
       // The guardian circle appears with the attack, empty until something
       // is called to it.
@@ -1338,9 +1275,8 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       // Nobody attacks on turn one, so the CPU takes it.
-      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck, turnOrder: TurnOrder.playerTwoFirst);
+      await keepBothHands(tester, settle: true);
       await pastTheFirstTurn(tester);
 
       final game = Provider.of<PlaytestController>(
@@ -1355,7 +1291,7 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
       await tester.tap(find.text('Next'));
       await tester.pump();
@@ -1368,12 +1304,15 @@ void main() {
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
+      // The defender is asked to guard first, both hands being yours.
+      await tester.tap(find.text('Done guarding'));
+      await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
           of: find.byType(FilledButton),
@@ -1427,9 +1366,8 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       // The CPU takes turn one, which is the turn nobody attacks on.
-      await pump(tester, store, deck, turnOrder: TurnOrder.cpuFirst);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck, turnOrder: TurnOrder.playerTwoFirst);
+      await keepBothHands(tester, settle: true);
       await pastTheFirstTurn(tester);
       await tester.tap(find.text('Next'));
       await tester.pump();
@@ -1438,12 +1376,15 @@ void main() {
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
+      // The defender is asked to guard first, both hands being yours.
+      await tester.tap(find.text('Done guarding'));
+      await tester.pumpAndSettle();
       // The bar says "Drive check to see what you turn up." as well, so the
       // button is picked out rather than the words.
       await tester.tap(
@@ -1466,8 +1407,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // Ride to grade 1 so something in the deck is callable, then go all
       // the way to the battle phase, which is when these abilities fire.
@@ -1502,7 +1442,7 @@ void main() {
       expect(find.textContaining('Tap a circle to call'), findsOneWidget);
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
 
       // And the called unit is standing on the field. A tap in the battle
@@ -1510,14 +1450,14 @@ void main() {
       // press instead.
       expect(
         find.descendant(
-          of: find.byKey(const ValueKey('circle-You-frontLeft')),
+          of: find.byKey(const ValueKey('circle-Player 1-frontLeft')),
           matching: find.text('—'),
         ),
         findsNothing,
         reason: 'the circle is filled',
       );
       await tester.longPress(
-        find.byKey(const ValueKey('circle-You-frontLeft')),
+        find.byKey(const ValueKey('circle-Player 1-frontLeft')),
       );
       await tester.pumpAndSettle();
       expect(find.text('+1 critical'), findsOneWidget, reason: 'a unit here');
@@ -1526,8 +1466,7 @@ void main() {
     testWidgets('the drop zone offers a call too', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
@@ -1553,8 +1492,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // The board's own controller, so an order can be put in the drop the
       // way a game would put one there without playing a whole turn for it.
@@ -1599,8 +1537,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // Discard a unit, which is what a drop zone is usually full of.
       await tapOnBoard(tester, callableHandCard().first);
@@ -1623,8 +1560,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1649,8 +1585,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1689,8 +1624,7 @@ void main() {
       // heading claims.
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1730,8 +1664,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1758,8 +1691,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1798,8 +1730,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1820,8 +1751,7 @@ void main() {
     testWidgets('a card in hand goes into the soul', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1850,8 +1780,7 @@ void main() {
     testWidgets('a card in hand goes under the deck', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(tester, find.text('Deck').last);
       final before = find.textContaining(RegExp(r'^Deck \(\d+\)$'));
@@ -1880,8 +1809,7 @@ void main() {
     testWidgets('a rear-guard goes under the deck', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
@@ -1897,12 +1825,12 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
       await tester.tap(find.text('To bottom of deck'));
       await tester.pumpAndSettle();
@@ -1912,7 +1840,7 @@ void main() {
       // from a retire.
       expect(
         find.descendant(
-          of: find.byKey(const ValueKey('circle-You-backLeft')),
+          of: find.byKey(const ValueKey('circle-Player 1-backLeft')),
           matching: find.text('—'),
         ),
         findsOneWidget,
@@ -1927,12 +1855,11 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       expect(find.text('To bottom of deck'), findsNothing);
       expect(find.text('Retire'), findsNothing, reason: 'nor a retire');
@@ -1944,8 +1871,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -1967,13 +1893,13 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
       final called = game.you.field[Circle.backLeft]!.card;
 
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
       await scrollSheetTo(tester, find.text('To soul'));
       await tester.tap(find.text('To soul'));
@@ -1991,8 +1917,7 @@ void main() {
     testWidgets('the drop zone sends a card under the deck', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(tester, callableHandCard().first);
       await tester.tap(find.text('Discard'));
@@ -2007,40 +1932,10 @@ void main() {
       expect(find.textContaining('Drop zone (0)'), findsOneWidget);
     });
 
-    testWidgets('the CPU main phase is stepped from the board', (tester) async {
-      final (store, deck) = await buildDeck();
-      await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
-      await tester.tap(find.text('Next'));
-      await tester.pump();
-      await tester.tap(find.text('Next'));
-      await tester.pump();
-      // Battle to the end phase, and the end phase hands the turn over.
-      await tester.tap(find.text('End turn'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Next'));
-      await tester.pumpAndSettle();
-
-      // The board hands over to the CPU and waits, rather than showing a
-      // finished board with no account of how it got there.
-      expect(find.text('The CPU takes its turn.'), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
-
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining('rides'),
-        findsOneWidget,
-        reason: 'it says what it just did',
-      );
-    });
-
     testWidgets('a rear-guard can be locked and unlocked', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
@@ -2056,13 +1951,13 @@ void main() {
       await tester.pumpAndSettle();
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
 
       // Lock it, and the circle turns face down.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
       expect(find.text('Lock'), findsOneWidget);
       await tester.tap(find.text('Lock'));
@@ -2072,7 +1967,7 @@ void main() {
       // Its sheet offers nothing but turning it back over.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-backLeft')),
+        find.byKey(const ValueKey('circle-Player 1-backLeft')),
       );
       expect(find.text('Unlock'), findsOneWidget);
       expect(find.text('Retire'), findsNothing, reason: 'it is not a unit');
@@ -2083,16 +1978,15 @@ void main() {
       expect(find.text('LOCKED'), findsNothing);
     });
 
-    testWidgets('the CPU\'s units can be locked too', (tester) async {
+    testWidgets('the far side\'s units can be locked too', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // Its starting vanguard is all it has, and a vanguard is never locked.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-CPU-vanguard')),
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
       );
       expect(find.text('Lock'), findsNothing);
     });
@@ -2112,8 +2006,7 @@ void main() {
         },
       );
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // The crest zone is on the board even with nothing in it.
       expect(find.text('Crest'), findsNWidgets(2));
@@ -2158,8 +2051,7 @@ void main() {
         },
       );
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tapOnBoard(tester, find.text('Crest').last);
       await scrollSheetTo(tester, find.text('Play'));
@@ -2188,8 +2080,7 @@ void main() {
         },
       );
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Ride deck · grade 1'));
@@ -2230,8 +2121,7 @@ void main() {
     testWidgets('the ride deck asks which card pays for it', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       await tester.tap(find.widgetWithText(TextButton, 'Ride'));
       await tester.pumpAndSettle();
@@ -2264,8 +2154,7 @@ void main() {
     testWidgets('turn one says why you cannot attack', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
       await tester.tap(find.text('Next'));
       await tester.pump();
       await tester.tap(find.text('Next'));
@@ -2281,7 +2170,7 @@ void main() {
       // And tapping a unit does not start an attack.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       expect(
         find.textContaining('Drive check ×'),
@@ -2313,15 +2202,14 @@ void main() {
       );
       store.addToDeck(deck.id, over.id, zoneMain, quantity: 50);
       await pump(tester, store, store.decks.firstWhere((d) => d.id == deck.id));
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       expect(find.text('Removed'), findsNothing, reason: 'nothing gone yet');
 
       // Take a damage by hand, which checks the top card.
       await tapOnBoard(
         tester,
-        find.byKey(const ValueKey('circle-You-vanguard')),
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
       );
       await tester.tap(find.text('Take damage'));
       await tester.pumpAndSettle();
@@ -2339,7 +2227,7 @@ void main() {
 
     testWidgets('both sides are played from one board', (tester) async {
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
+      await pump(tester, store, deck);
 
       // Both openings are yours, one after the other.
       expect(find.textContaining('Player 1'), findsWidgets);
@@ -2383,8 +2271,7 @@ void main() {
     ) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       // The system back press, as a phone sends it.
       await tester.binding.handlePopRoute();
@@ -2407,16 +2294,15 @@ void main() {
     testWidgets('a game that is over does not ask', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
         listen: false,
       );
       // Six damage ends it, and a finished board has nothing left to lose.
-      while (game.cpu.damageCount < 6) {
-        game.dealDamage(game.cpu);
+      while (game.opponent.damageCount < 6) {
+        game.dealDamage(game.opponent);
       }
       await tester.pumpAndSettle();
 
@@ -2431,11 +2317,8 @@ void main() {
       final (store, deck) = await buildDeck();
       // Both hands are yours, so the attack and the guard can both be made
       // here without waiting on the CPU.
-      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck);
+      await keepBothHands(tester, settle: true);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -2488,11 +2371,8 @@ void main() {
       tester,
     ) async {
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck);
+      await keepBothHands(tester, settle: true);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -2546,8 +2426,7 @@ void main() {
         },
       );
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       final game = Provider.of<PlaytestController>(
         tester.element(find.byType(Scaffold)),
@@ -2556,7 +2435,8 @@ void main() {
       final hand = game.you.hand.length;
       final deckSize = game.you.deck.length;
 
-      await tapOnBoard(tester, find.text('Tickets'));
+      // Both rails carry a Tickets pile; Player 1's board is the lower one.
+      await tapOnBoard(tester, find.text('Tickets').last);
       expect(find.text('Persona Shield'), findsOneWidget);
       expect(find.textContaining('DZ-BT15/T01EN'), findsOneWidget);
 
@@ -2581,8 +2461,7 @@ void main() {
     testWidgets('the phase bar lights the phase being played', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await keepBothHands(tester, settle: true);
 
       // Every phase of the turn is on the bar, so the lit one reads as a
       // place in the turn rather than a word on its own.
@@ -2623,11 +2502,8 @@ void main() {
       tester,
     ) async {
       final (store, deck) = await buildDeck();
-      await pump(tester, store, deck, mode: PlaytestMode.bothSides);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pumpAndSettle();
+      await pump(tester, store, deck);
+      await keepBothHands(tester, settle: true);
 
       // Player 1 has the turn, in the ride phase: their half carries that
       // phase's colour, and the far half is left as a plain edge.
@@ -2680,8 +2556,7 @@ void main() {
     testWidgets('the ride phase offers a ride', (tester) async {
       final (store, deck) = await buildDeck();
       await pump(tester, store, deck);
-      await tester.tap(find.text('Keep this hand'));
-      await tester.pump();
+      await keepBothHands(tester);
 
       expect(find.widgetWithText(TextButton, 'Ride'), findsOneWidget);
       await tester.tap(find.widgetWithText(TextButton, 'Ride'));

@@ -5,16 +5,17 @@ import 'package:tcg_decks/games/card_catalog.dart';
 import 'package:tcg_decks/games/vanguard/vanguard_game.dart';
 import 'package:tcg_decks/playtest/ability_reader.dart';
 
-/// The reader is only worth having if it refuses more than it accepts, so
-/// most of what is below is about what it will *not* play.
+/// The reader holds the half of an ability the board can usefully know: when
+/// it fires and what it costs. What it does is left as printed, so most of
+/// what is below is about timings, costs and the few things still refused.
 void main() {
   group('reading one ability', () {
-    Ability? only(String text) {
+    PromptedAbility? only(String text) {
       final read = readAbilities(text);
-      return read.playable.isEmpty ? null : read.playable.first;
+      return read.prompted.isEmpty ? null : read.prompted.first;
     }
 
-    test('an on-attack pump is read whole', () {
+    test('an on-attack ability is timed to the attack', () {
       final ability = only(
         '[AUTO](VC):When this unit attacks a vanguard, this unit gets '
         '[Power]+5000 until end of that battle.',
@@ -22,363 +23,145 @@ void main() {
       expect(ability, isNotNull);
       expect(ability!.timing, AbilityTiming.onAttack);
       expect(ability.zones, {'VC'});
-      expect(ability.effect.selfPower, 5000);
-      expect(ability.effect.untilEndOfBattle, isTrue);
       expect(ability.cost.isFree, isTrue);
+      expect(ability.oncePerTurn, isFalse);
     });
 
-    test('a continuous bonus is read', () {
-      final ability = only(
-        '[CONT](RC):During your turn, this unit gets [Power]+3000.',
-      );
-      expect(ability!.timing, AbilityTiming.continuous);
-      expect(ability.effect.selfPower, 3000);
-    });
-
-    test('the draw on being ridden over is read', () {
-      final ability = only('[AUTO]:When rode upon, draw a card.');
-      expect(ability!.timing, AbilityTiming.onRodeUpon);
-      expect(ability.effect.draw, 1);
-      expect(ability.zones, isEmpty);
-    });
-
-    test('a cost is read along with what it buys', () {
-      final ability = only(
-        '[AUTO](VC)[1/Turn]:When placed, [COST][Counter-Blast 1], '
-        'this unit gets [Power]+10000 until end of turn.',
-      );
-      expect(ability!.cost.counterBlast, 1);
-      expect(ability.oncePerTurn, isTrue);
-      expect(ability.effect.selfPower, 10000);
-      expect(ability.timing, AbilityTiming.onRide, reason: '(VC) placement');
-    });
-
-    test('the spacing the database actually uses is read', () {
-      // The real text is "[Power] +5000", not "[Power]+5000".
-      final ability = only(
-        '[AUTO](RC):When this unit boosts, this unit gets [Power] +4000 '
-        'until end of that battle.',
-      );
-      expect(ability!.effect.selfPower, 4000);
-      expect(ability.timing, AbilityTiming.onBoost);
-    });
-
-    test('reminder text does not confuse it', () {
-      final ability = only(
-        '[AUTO](VC):When this unit attacks, this unit gets [Power]+2000 '
-        'until end of that battle. (This is a note for the player that runs '
-        'on for a while and means nothing mechanically)',
-      );
-      expect(ability!.effect.selfPower, 2000);
-    });
-
-    test('a condition about the crest is read, not refused', () {
-      final ability = only(
-        '[AUTO](RC):When this unit attacks, if you have a "Vampire Princess '
-        'of Night Fog, Nightrose" crest, this unit gets [Power]+5000 until '
-        'end of that battle.',
-      );
-      expect(ability, isNotNull);
+    test('a placement on one circle can only have meant that circle', () {
       expect(
-        ability!.condition.crestNamed,
-        'vampire princess of night fog, nightrose',
-        reason: 'names are folded; the board matches without case',
+        only('[AUTO](RC):When placed, draw a card.')!.timing,
+        AbilityTiming.onCall,
       );
-      expect(ability.effect.selfPower, 5000);
+      expect(
+        only('[AUTO](VC):When placed, draw a card.')!.timing,
+        AbilityTiming.onRide,
+      );
     });
 
-    test('a Generation Break in the header is a condition', () {
+    test('a placement on either stays undecided until it happens', () {
       final ability = only(
-        '[CONT](RC)[Generation Break 2]:During your turn, if this unit is '
-        'hollowed, this unit gets [Power]+10000.',
+        '[AUTO](VC/RC):When this unit is placed on (VC) or (RC), draw a card.',
       );
-      expect(ability!.condition.generationBreak, 2);
-      expect(ability.condition.hollowed, isTrue);
-      expect(ability.timing, AbilityTiming.continuous);
+      expect(ability!.timing, AbilityTiming.onPlaced);
+      expect(ability.zones, {'VC', 'RC'});
     });
 
-    test('the Hollow keyword is an ability of its own', () {
+    test('a [1/Turn] is marked as spent by being used', () {
       final ability = only(
-        '[AUTO]:Hollow (When placed on (RC), you may have it become '
-        'hollowed. If you do, retire it at the end of turn)',
+        '[ACT](VC)[1/Turn]:[COST][Counter-Blast 1], choose one of your '
+        'rear-guards, and [Stand] it.',
+      );
+      expect(ability!.oncePerTurn, isTrue);
+      expect(ability.timing, AbilityTiming.activated);
+    });
+
+    test('the costs the board can spend are read', () {
+      expect(
+        only('[ACT](VC):[COST][Counter-Blast 2], choose a card, and bind it.')!
+            .cost
+            .counterBlast,
+        2,
+      );
+      expect(
+        only('[ACT](VC):[COST][Soul-Blast 3], choose a card, and bind it.')!
+            .cost
+            .soulBlast,
+        3,
+      );
+      expect(
+        only(
+          '[AUTO](VC):When this unit attacks, [COST][Discard a card from '
+          'hand], choose one of your units.',
+        )!.cost.discard,
+        1,
+      );
+    });
+
+    test('two costs in one bracket are both read', () {
+      final cost = only(
+        '[ACT](VC):[COST][Counter-Blast 1 & Soul-Blast 1], choose one of your '
+        'rear-guards.',
+      )!.cost;
+      expect(cost.counterBlast, 1);
+      expect(cost.soulBlast, 1);
+    });
+
+    test('a condition written into the header is kept', () {
+      expect(
+        only(
+          '[AUTO](VC)[Limit-Break 4]:When this unit attacks, choose one of '
+          'your opponent\'s rear-guards.',
+        )!.condition.damageAtLeast,
+        4,
+      );
+      expect(
+        only(
+          '[AUTO](VC)[Generation Break 2]:When this unit attacks, choose one '
+          'of your rear-guards.',
+        )!.condition.generationBreak,
+        2,
+      );
+    });
+
+    test('the Hollow keyword is offered on a call', () {
+      final ability = only(
+        '[AUTO]:Hollow (When placed on (RC), you may have it become hollowed. '
+        'If you do, retire it at the end of turn)',
       );
       expect(ability!.timing, AbilityTiming.onCall);
-      expect(ability.effect.becomeHollowed, isTrue);
       expect(ability.zones, {'RC'});
     });
 
-    test('power for each face up card in the G zone scales', () {
-      final ability = only(
-        '[CONT]:During your turn, if you have a grade 3 or greater vanguard '
-        'with "Nightrose" in its card name, all of your front row units get '
-        '[Power] +5000 for each face up card in your G zone.',
+    test('a card discarded for a stride fires on its way to the drop', () {
+      expect(
+        only(
+          '[AUTO]:When this card is discarded from hand while paying the cost '
+          'for [Stride], draw a card.',
+        )!.timing,
+        AbilityTiming.onDiscardedForStride,
       );
-      expect(ability!.effect.frontRowPower, 5000);
-      expect(ability.effect.perFaceUpG, isTrue);
-      expect(ability.condition.vanguardGrade, 3);
-      expect(ability.condition.vanguardNamed, 'nightrose');
     });
 
-    test('the stride discard is a timing', () {
-      final ability = only(
-        '[AUTO]:When this card is discarded from hand while paying the cost '
-        'for [Stride], draw a card.',
+    test('two clauses on one card are read separately', () {
+      final read = readAbilities(
+        '[AUTO](RC):When this unit is placed on (RC), draw a card.\n'
+        '[AUTO](VC):When this unit attacks, choose one of your rear-guards.',
       );
-      expect(ability!.timing, AbilityTiming.onDiscardedForStride);
-      expect(ability.effect.draw, 1);
+      expect(read.prompted, hasLength(2));
+      expect(read.prompted.first.timing, AbilityTiming.onCall);
+      expect(read.prompted.last.timing, AbilityTiming.onAttack);
     });
 
-    test('a drop count is read where the card spells the number', () {
-      final ability = only(
-        '[AUTO](RC):When this unit attacks, if your drop has ten or more '
-        'cards, this unit gets [Power]+10000 until end of that battle.',
-      );
-      expect(ability!.condition.dropAtLeast, 10);
-    });
-
-    group('refuses what it cannot follow', () {
+    group('what it still refuses', () {
       const refused = <String, String>{
-        'a choice of target':
-            '[AUTO](VC):When this unit attacks, choose one of your '
-            'rear-guards, and it gets [Power]+5000 until end of turn.',
-        'a search':
-            '[ACT](VC):[COST][Counter-Blast 1], look at seven cards from the '
-            'top of your deck, search for one card, and call it to (RC).',
-        'a retire':
-            '[AUTO](VC):When this unit is placed, choose one of your '
-            "opponent's rear-guards, and retire it.",
-        'an optional cost':
-            '[AUTO](VC):When this unit attacks, you may pay the cost. If you '
-            'do, draw a card.',
-        'a condition it cannot check':
+        'a line with no header at all': '[AUTO]:Forerunner',
+        'a continuous ability, which has no moment':
             '[CONT](VC):If the number of <Dark Irregulars> in your soul is '
             'six or more, this unit gets [Power]+5000.',
-        'a condition about a zone it does not count':
-            '[CONT](RC):If your order zone has three or more set orders, '
-            'this unit gets [Power]+5000.',
-        'a cost it cannot pay':
+        'a cost it cannot read, since it could not pay it':
             '[ACT](VC):[COST][Put a card from your hand into your soul], '
             'this unit gets [Power]+5000 until end of turn.',
-        'an effect with no timing': '[AUTO]:Forerunner',
-        'a zone it does not play from':
-            '[CONT](Hand):While you are paying the cost for [Stride], this '
-            'card gets grade +1.',
+        'a cost that spends the unit itself':
+            '[AUTO](RC):When this unit attacks, [COST][Retire this unit], '
+            'draw a card.',
+        'a timing it has not been taught':
+            '[AUTO](VC):At the beginning of your battle phase, draw a card.',
       };
 
       refused.forEach((description, text) {
         test(description, () {
           final read = readAbilities(text);
-          expect(read.playable, isEmpty);
+          expect(read.prompted, isEmpty);
           expect(read.unread, hasLength(1), reason: 'handed back, not lost');
         });
       });
-    });
 
-    group('the shapes the reader has since learned', () {
-      test("the opponent's vanguard grade is a condition it can check", () {
-        final ability = only(
-          "[CONT](VC):If your opponent's vanguard is grade 3 or greater, "
-          'this unit gets [Power]+5000.',
-        );
-        expect(ability!.condition.foeVanguardGrade, 3);
-      });
-
-      test('a limit break is four damage and nothing more', () {
-        final ability = only(
-          '[AUTO](VC)[Limit-Break 4](this ability is active if you have four '
-          'or more damage):When this unit attacks a vanguard, this unit gets '
-          '[Power]+5000 until end of that battle.',
-        );
-        expect(ability!.condition.damageAtLeast, 4);
-        expect(ability.timing, AbilityTiming.onAttack);
-      });
-
-      test('the board sizes it can count are read', () {
+      test('and it says which part stopped it', () {
         expect(
-          only(
-            '[CONT](VC):If your hand has three or more cards, this unit gets '
-            '[Power]+2000.',
-          )!.condition.handAtLeast,
-          3,
-        );
-        expect(
-          only(
-            '[CONT](VC):If your damage zone has four or more cards, this '
-            'unit gets [Power]+2000.',
-          )!.condition.damageAtLeast,
-          4,
-        );
-        expect(
-          only(
-            '[CONT](VC):If you have three or more rear-guards, this unit '
-            'gets [Power]+2000.',
-          )!.condition.rearGuardsAtLeast,
-          3,
+          refusedPart('[CONT](VC):Your opponent cannot call units to (GC).'),
+          contains('continuous'),
         );
       });
-
-      test('two costs in one bracket are both paid', () {
-        final ability = only(
-          '[AUTO](VC):When this unit attacks, [COST][Counter-Blast 1 & '
-          'Soul-Blast 1], draw a card.',
-        );
-        expect(ability!.cost.counterBlast, 1);
-        expect(ability.cost.soulBlast, 1);
-        expect(ability.effect.draw, 1);
-      });
-
-      test('the costs that spend the unit itself are read', () {
-        expect(
-          only('[ACT](RC):[COST][[Rest] this unit], draw a card.')!
-              .cost
-              .restSelf,
-          isTrue,
-        );
-        expect(
-          only('[ACT](RC):[COST][put this unit into soul], draw a card.')!
-              .cost
-              .selfToSoul,
-          isTrue,
-        );
-        expect(
-          only(
-            '[AUTO](RC):When this unit attacks, [COST][retire this unit], '
-            'draw a card.',
-          )!.cost.retireSelf,
-          isTrue,
-        );
-      });
-
-      test('a unit is never retired to give itself power', () {
-        // Half-reading this would leave the bonus on a unit that is not
-        // there any more, so the whole clause is refused instead.
-        expect(
-          only(
-            '[AUTO](RC):When this unit attacks, [COST][retire this unit], '
-            'this unit gets [Power]+5000 until end of turn.',
-          ),
-          isNull,
-        );
-      });
-
-      test('the deck and the G zone can be paid out of', () {
-        expect(
-          only(
-            '[ACT](VC):[COST][discard the top three cards of the deck], '
-            'draw a card.',
-          )!.cost.mill,
-          3,
-        );
-        expect(
-          only(
-            '[ACT](VC)[1/Turn]:[COST][Turn a card from G zone face up], '
-            'draw a card.',
-          )!.cost.flipG,
-          1,
-        );
-      });
-
-      test('a cost whose number it cannot read is refused, not made free', () {
-        expect(
-          only(
-            '[ACT](VC):[COST][choose several cards from hand, and discard '
-            'them], draw a card.',
-          ),
-          isNull,
-        );
-      });
-
-      test('the crest an ability hands you is read by name', () {
-        final ability = only(
-          '[AUTO]:When this unit is placed on (VC), draw a card, and you get '
-          'a "Vampire Princess of Night Fog, Nightrose" crest.',
-        );
-        expect(
-          ability!.effect.crestNamed,
-          'vampire princess of night fog, nightrose',
-        );
-        expect(ability.effect.draw, 1);
-      });
-
-      test('the timings it has learned fire on the right thing', () {
-        expect(
-          only(
-            "[AUTO](VC):When this unit's attack hits a vanguard, "
-            '[COST][Counter-Blast 1], draw a card.',
-          )!.timing,
-          AbilityTiming.onHit,
-        );
-        expect(
-          only('[AUTO](RC):At the end of your turn, [Counter-Charge 1].')!
-              .timing,
-          AbilityTiming.endOfTurn,
-        );
-        expect(
-          only(
-            '[AUTO](RC):When your G unit [Stride] during your turn, this '
-            'unit gets [Power]+5000 until end of turn.',
-          )!.timing,
-          AbilityTiming.onStride,
-        );
-        expect(
-          only(
-            '[AUTO]:When this unit is placed on (RC) from hand, draw a card.',
-          )!.timing,
-          AbilityTiming.onCall,
-        );
-        expect(
-          only('[AUTO]:When this unit is placed on (VC) or (RC), draw a card.')!
-              .timing,
-          AbilityTiming.onPlaced,
-        );
-      });
-
-      test('power and critical given together are both read', () {
-        final ability = only(
-          '[AUTO](VC):When this unit attacks a vanguard, this unit gets '
-          '[Power]+10000/[Critical]+1 until end of that battle.',
-        );
-        expect(ability!.effect.selfPower, 10000);
-        expect(ability.effect.critical, 1);
-        expect(ability.effect.untilEndOfBattle, isTrue);
-      });
-
-      test('two cards drawn are two, not one', () {
-        expect(
-          only('[AUTO]:When rode upon, draw three cards.')!.effect.draw,
-          3,
-        );
-      });
-
-      test('a misprinted bracket is straightened out rather than refused', () {
-        // The card mirror prints "[Counter-Blast]1]" on a few hundred cards.
-        final ability = only(
-          '[AUTO](VC):When this unit attacks, [COST][Counter-Blast]1], '
-          'draw a card.',
-        );
-        expect(ability!.cost.counterBlast, 1);
-      });
-
-      test('the refused part says which phrase to teach it next', () {
-        expect(
-          refusedPart(
-            '[AUTO](VC):When this unit attacks, choose one of your '
-            'rear-guards, and it gets [Power]+5000 until end of turn.',
-          ),
-          'choose one of your rear-guards',
-        );
-      });
-    });
-
-    test('a card with two abilities can have one of each', () {
-      final read = readAbilities(
-        '[AUTO](VC):When this unit attacks a vanguard, this unit gets '
-        '[Power]+5000 until end of that battle.\n'
-        '[ACT](VC):[COST][Counter-Blast 1], choose one of your opponent\'s '
-        'rear-guards, and retire it.',
-      );
-      expect(read.playable, hasLength(1));
-      expect(read.unread, hasLength(1));
     });
   });
 
@@ -390,40 +173,43 @@ void main() {
       cards = parseCatalog(File(game.catalogAsset!).readAsStringSync());
     });
 
-    test('it reads a useful slice and refuses the rest', () {
+    test('it reaches a useful slice and hands back the rest', () {
       var withAbility = 0;
-      var readable = 0;
+      var offered = 0;
       for (final card in cards) {
         final text = card.attributes['effect'] ?? '';
         if (text.trim().isEmpty) continue;
         withAbility += 1;
-        if (readAbilities(text).playable.isNotEmpty) readable += 1;
+        if (readAbilities(text).prompted.isNotEmpty) offered += 1;
       }
 
-      // The point of the number is that it is small and known rather than
-      // imagined: this is a reader for the simple shapes, and a card outside
-      // them is left to the player.
+      // The point of the number is that it is known rather than imagined. It
+      // is the timing vocabulary that decides it, so it moves when that is
+      // widened and these bounds are deliberately loose.
       expect(withAbility, greaterThan(9000));
-      expect(readable, greaterThan(150), reason: 'it does reach real cards');
+      expect(offered, greaterThan(2000), reason: 'it reaches real cards');
       expect(
-        readable,
-        lessThan(withAbility ~/ 10),
-        reason: 'and it is nowhere near all of them',
+        offered,
+        lessThan(withAbility),
+        reason: 'and nowhere near all of them',
       );
     });
 
-    test('nothing it accepts is wildly out of range', () {
+    test('nothing it offers costs more than the game allows', () {
       for (final card in cards) {
         for (final ability in readAbilities(
           card.attributes['effect'] ?? '',
-        ).playable) {
-          final effect = ability.effect;
-          expect(effect.selfPower, lessThanOrEqualTo(30000));
-          expect(effect.allPower, lessThanOrEqualTo(30000));
-          expect(effect.frontRowPower, lessThanOrEqualTo(30000));
-          expect(effect.critical, lessThanOrEqualTo(2));
-          expect(effect.draw, lessThanOrEqualTo(2));
-          expect(ability.cost.counterBlast, lessThanOrEqualTo(3));
+        ).prompted) {
+          // The real maxima in the pool are 4, 15 and 1; these are a little
+          // above that, to catch a number read out of the wrong place rather
+          // than to pin the card pool down.
+          expect(ability.cost.counterBlast, lessThanOrEqualTo(5));
+          expect(ability.cost.soulBlast, lessThanOrEqualTo(15));
+          expect(ability.cost.discard, lessThanOrEqualTo(3));
+          // Never offered: the board pays on accept and the player applies
+          // the effect afterwards.
+          expect(ability.cost.retireSelf, isFalse);
+          expect(ability.cost.selfToSoul, isFalse);
         }
       }
     });

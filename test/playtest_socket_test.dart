@@ -94,8 +94,7 @@ void main() {
     final host = HostSession(
       gameId: 'vanguard',
       deck: WireDeck.of(store.viewOf(myDeck)),
-      crests: store.cards,
-      turnOrder: TurnOrder.youFirst,
+      turnOrder: TurnOrder.playerOneFirst,
       random: Random(7),
     );
     await host.open(port: 0);
@@ -238,8 +237,7 @@ void main() {
     final host = HostSession(
       gameId: 'vanguard',
       deck: WireDeck.of(store.viewOf(myDeck)),
-      crests: store.cards,
-      turnOrder: TurnOrder.youFirst,
+      turnOrder: TurnOrder.playerOneFirst,
       random: Random(7),
     );
     final opened = host.open(port: 0);

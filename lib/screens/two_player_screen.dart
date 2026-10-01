@@ -54,7 +54,6 @@ class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
       final session = HostSession(
         gameId: widget.deck.gameId,
         deck: deck,
-        crests: store.cards,
         turnOrder: widget.turnOrder ?? TurnOrder.random,
       );
       _host = session..addListener(_refresh);

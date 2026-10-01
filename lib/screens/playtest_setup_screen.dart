@@ -26,18 +26,14 @@ class PlaytestSetupScreen extends StatefulWidget {
 
 /// Who is on the other side of the table.
 ///
-/// Two of these are modes of the local game; the third is another phone, and
-/// is not a mode of anything -- it is a different game entirely, played
-/// against somebody who is not in this app.
-enum _Across { cpu, bothSides, twoDevices }
+/// One board on this device with both hands yours, or another phone -- which
+/// is not a mode of the same game at all, but a different one played against
+/// somebody who is not in this app.
+enum _Across { bothSides, twoDevices }
 
 class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
-  TurnOrder _turnOrder = TurnOrder.youFirst;
-  _Across _across = _Across.cpu;
-
-  PlaytestMode get _mode => _across == _Across.bothSides
-      ? PlaytestMode.bothSides
-      : PlaytestMode.vsCpu;
+  TurnOrder _turnOrder = TurnOrder.playerOneFirst;
+  _Across _across = _Across.bothSides;
 
   bool get _bothSides => _across == _Across.bothSides;
 
@@ -86,7 +82,8 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                         _bothSides
                             ? 'This is Player 1\u2019s deck. Pick the deck '
                                   'to play it against; both hands are yours.'
-                            : 'You play this deck. Pick who to play against.',
+                            : 'You play this deck. The other player brings '
+                                  'their own.',
                         style: const TextStyle(color: AppColors.textMuted),
                       ),
                     ],
@@ -94,22 +91,16 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                 ),
                 const SizedBox(height: 20),
                 const SectionHeader(
-                  title: 'Who plays the other side',
+                  title: 'Where the other side is played',
                   caption:
-                      'The CPU plays what the board can read. Taking both '
-                      'sides yourself plays everything, which is what a card '
-                      'the reader cannot follow needs.',
+                      'Both hands on this board, or another person on another '
+                      'phone with their own.',
                 ),
                 const SizedBox(height: 4),
                 SizedBox(
                   width: double.infinity,
                   child: SegmentedButton<_Across>(
                     segments: const [
-                      ButtonSegment(
-                        value: _Across.cpu,
-                        label: Text('The CPU'),
-                        icon: Icon(Icons.smart_toy_outlined, size: 18),
-                      ),
                       ButtonSegment(
                         value: _Across.bothSides,
                         label: Text('Both sides'),
@@ -134,13 +125,10 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                             'Wi-Fi. One of you hosts and the other joins; '
                             'each plays their own deck off their own phone, '
                             'and neither holds the other\'s hand.'
-                      : _bothSides
-                      ? 'Nothing moves unless you move it: both openings, '
+                      : 'Nothing moves unless you move it: both openings, '
                             'both boards, both guards. Every ability is '
-                            'played by hand, so nothing is skipped because '
-                            'the reader could not follow the text.'
-                      : 'The CPU rides, calls, attacks, guards and plays the '
-                            'abilities the board can read.',
+                            'applied by hand, and the board offers each one '
+                            'at the moment it fires.',
                   style: const TextStyle(
                     color: AppColors.textFaint,
                     fontSize: 12,
@@ -159,12 +147,12 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                   child: SegmentedButton<TurnOrder>(
                     segments: [
                       ButtonSegment(
-                        value: TurnOrder.youFirst,
-                        label: Text(_bothSides ? 'Player 1' : 'You'),
+                        value: TurnOrder.playerOneFirst,
+                        label: Text('Player 1'),
                       ),
-                      ButtonSegment(
-                        value: TurnOrder.cpuFirst,
-                        label: Text(_bothSides ? 'Player 2' : 'CPU'),
+                      const ButtonSegment(
+                        value: TurnOrder.playerTwoFirst,
+                        label: Text('Player 2'),
                       ),
                       const ButtonSegment(
                         value: TurnOrder.random,
@@ -181,8 +169,6 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                 Text(
                   _turnOrder == TurnOrder.random
                       ? 'Rolled again every time you restart the board.'
-                      : _bothSides
-                      ? _turnOrder.soloLabel
                       : _turnOrder.label,
                   style: const TextStyle(
                     color: AppColors.textFaint,
@@ -229,15 +215,11 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
                     style: TextStyle(color: AppColors.textFaint, fontSize: 12),
                   ),
                 ] else ...[
-                  SectionHeader(
-                    title: _bothSides ? 'The other deck' : 'Opponent',
-                  ),
+                  SectionHeader(title: 'The other deck'),
                   const SizedBox(height: 8),
                   _OpponentTile(
                     title: 'Mirror match',
-                    subtitle: _bothSides
-                        ? 'The same deck on both sides.'
-                        : 'The CPU plays the same deck.',
+                    subtitle: 'The same deck on both sides.',
                     icon: Icons.flip_camera_android_outlined,
                     onTap: () => _start(context, deck, deck),
                   ),
@@ -319,7 +301,6 @@ class _PlaytestSetupScreenState extends State<PlaytestSetupScreen> {
           yourDeck: yours,
           opponentDeck: theirs,
           turnOrder: _turnOrder,
-          mode: _mode,
         ),
       ),
     );

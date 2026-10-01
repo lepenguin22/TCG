@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tcg_decks/games/vanguard/vanguard_data.dart';
 import 'package:tcg_decks/models/card_definition.dart';
 import 'package:tcg_decks/models/deck.dart';
-import 'package:tcg_decks/playtest/playtest_ai.dart';
 import 'package:tcg_decks/playtest/playtest_engine.dart';
 import 'package:tcg_decks/playtest/playtest_state.dart';
 import 'package:tcg_decks/store/deck_store.dart';
@@ -2317,31 +2316,13 @@ void main() {
       expect(engine.state.opponent.goesFirst, isFalse);
       expect(engine.state.yourTurn, isTrue);
     });
-
-    test('the CPU can be given the first turn instead', () async {
-      final (store, deck) = await buildEnergyDeck();
-      final engine = PlaytestEngine.start(
-        store: store,
-        yourDeck: deck,
-        opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
-        random: Random(7),
-      );
-      engine.beginPlay();
-
-      expect(engine.state.opponent.goesFirst, isTrue);
-      expect(engine.state.you.goesFirst, isFalse);
-      expect(engine.state.yourTurn, isFalse, reason: 'turn one is the CPU\'s');
-      expect(engine.state.turn, 1);
-    });
-
     test('the energy follows whoever actually went second', () async {
       final (store, deck) = await buildEnergyDeck();
       final engine = PlaytestEngine.start(
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
+        turnOrder: TurnOrder.playerTwoFirst,
         random: Random(7),
       );
       engine.beginPlay();
@@ -2406,7 +2387,7 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
+        turnOrder: TurnOrder.playerTwoFirst,
         random: Random(7),
       );
       engine.beginPlay();
@@ -2430,25 +2411,6 @@ void main() {
       engine.endTurn(); // back to you, turn three
       engine.state.phase = PlaytestPhase.battle;
       expect(engine.canAttack(you), isTrue);
-    });
-
-    test('the CPU going first does not attack either', () async {
-      final (store, deck) = await buildDeck();
-      final engine = PlaytestEngine.start(
-        store: store,
-        yourDeck: deck,
-        opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
-        random: Random(4),
-      );
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-      expect(cpu.goesFirst, isTrue);
-
-      ai.takeTurn();
-      expect(engine.state.phase, PlaytestPhase.battle, reason: 'it got there');
-      expect(ai.nextAttack(), isNull, reason: 'and swings at nothing');
     });
   });
 
@@ -2529,21 +2491,6 @@ void main() {
         reason: 'the perfect guard is not spent on a ride',
       );
     });
-
-    test('the CPU pays for its own rides', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      engine.endTurn();
-      final cpu = engine.state.opponent;
-      final hand = cpu.hand.length;
-
-      ai.takeStep(); // the ride
-      expect(cpu.vanguard!.card.grade, 1);
-      expect(cpu.hand.length, hand - 1);
-      expect(cpu.drop, hasLength(1));
-    });
   });
 
   group('playing a crest by hand', () {
@@ -2591,7 +2538,7 @@ void main() {
         store: store,
         yourDeck: deck,
         opponentDeck: deck,
-        turnOrder: TurnOrder.cpuFirst,
+        turnOrder: TurnOrder.playerTwoFirst,
         random: Random(7),
       );
       engine.beginPlay();
@@ -3206,31 +3153,6 @@ void main() {
 
       expect(engine.canStride(you), isFalse, reason: 'only a grade 1 so far');
     });
-
-    test('the CPU strides once a turn, not until its hand is gone', () async {
-      final (store, deck) = await buildStrideDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine, engine.state.you);
-      engine.beginPlay();
-      final you = engine.state.you;
-      for (var i = 0; i < 3; i += 1) {
-        engine.ride(you, engine.rideDeckOption(you)!, fromRideDeck: true);
-      }
-      you.hand.clear();
-      while (you.hand.length < 10) {
-        final card = you.deck.lastWhere((c) => c.grade >= 2);
-        you.deck.remove(card);
-        you.hand.add(card);
-      }
-
-      ai.takeTurn();
-      expect(you.isStriding, isTrue, reason: 'it did stride');
-      expect(
-        you.gZone.length,
-        greaterThanOrEqualTo(6),
-        reason: 'and only the once',
-      );
-    });
   });
 
   group('locking', () {
@@ -3456,491 +3378,6 @@ void main() {
 
       engine.lock(you, Circle.vanguard);
       expect(you.vanguard!.locked, isFalse);
-    });
-  });
-
-  group('the CPU', () {
-    test('rides up its ride deck on its own turn', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      engine.endTurn();
-
-      expect(engine.state.yourTurn, isFalse);
-      final cpu = engine.state.opponent;
-      expect(cpu.vanguard!.card.grade, 0);
-      ai.takeTurn();
-      expect(cpu.vanguard!.card.grade, 1, reason: 'it climbed a grade');
-    });
-
-    test('it calls units but keeps cards to guard with', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      engine.endTurn();
-      ai.takeTurn();
-
-      final cpu = engine.state.opponent;
-      expect(
-        cpu.hand.length,
-        greaterThan(1),
-        reason: 'it did not dump its hand',
-      );
-    });
-
-    test('it attacks the vanguard once it has a board', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      engine.endTurn();
-      ai.takeTurn();
-
-      final attack = ai.nextAttack();
-      expect(attack, isNotNull);
-      expect(attack!.to, Circle.vanguard);
-    });
-
-    test('it guards to stay alive when the hit would be lethal', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      // Five damage in, so the next hit ends it.
-      for (var i = 0; i < 5; i += 1) {
-        engine.dealDamage(cpu);
-      }
-      final sentinel = GameCard(
-        996,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Perfect Guard',
-          attributes: {'grade': '1', 'cardType': 'sentinel', 'shield': '0'},
-        ),
-      );
-      cpu.hand.add(sentinel);
-
-      engine.state.phase = PlaytestPhase.battle;
-      final pending = engine.declareAttack(
-        from: Circle.vanguard,
-        to: Circle.vanguard,
-      );
-      engine.addPower(engine.state.you, Circle.vanguard, 50000);
-      ai.guard(pending);
-
-      expect(pending.perfectGuarded, isTrue, reason: 'it saved itself');
-    });
-  });
-
-  group('the CPU repositions', () {
-    test('it moves a stranded booster up to attack', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      // A unit in the back row with nothing in front of it is boosting
-      // nobody, so it may as well be an attacker.
-      final unit = GameCard(
-        910,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Stranded',
-          attributes: {'grade': '1', 'cardType': 'normal', 'power': '9000'},
-        ),
-      );
-      cpu.field[Circle.backLeft] = FieldUnit(unit);
-      expect(cpu.field[Circle.frontLeft], isNull);
-
-      engine.endTurn();
-      // With nothing to call, moving is the only way the front row fills --
-      // given cards it would rather call a bigger unit in front and leave
-      // this one boosting it.
-      cpu.hand.clear();
-      ai.takeTurn();
-
-      expect(cpu.field[Circle.frontLeft], isNotNull);
-      expect(cpu.field[Circle.frontLeft]!.card, unit);
-    });
-
-    test('it leaves a booster alone when it has something to boost', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      final booster = GameCard(
-        911,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Booster',
-          attributes: {'grade': '1', 'cardType': 'normal', 'power': '8000'},
-        ),
-      );
-      final attacker = GameCard(
-        912,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Attacker',
-          attributes: {'grade': '2', 'cardType': 'normal', 'power': '13000'},
-        ),
-      );
-      cpu.field[Circle.backLeft] = FieldUnit(booster);
-      cpu.field[Circle.frontLeft] = FieldUnit(attacker);
-
-      engine.endTurn();
-      ai.takeTurn();
-
-      expect(cpu.field[Circle.backLeft]!.card, booster, reason: 'left be');
-      expect(cpu.field[Circle.frontLeft]!.card, attacker);
-    });
-  });
-
-  group('the CPU thinks about its attacks', () {
-    test('it does not make an attack that cannot connect', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-      final you = engine.state.you;
-
-      // A tiny rear-guard against a vanguard far above it. Swinging achieves
-      // nothing: the defender simply declines to guard.
-      final weak = GameCard(
-        900,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Tiny',
-          attributes: {'grade': '1', 'cardType': 'normal', 'power': '5000'},
-        ),
-      );
-      cpu.field[Circle.frontLeft] = FieldUnit(weak);
-      cpu.field.remove(Circle.vanguard);
-      engine.addPower(you, Circle.vanguard, 20000);
-      engine.state.phase = PlaytestPhase.battle;
-
-      expect(ai.nextAttack(), isNull, reason: 'no attack was worth making');
-    });
-
-    test('it does attack when the swing can actually land', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      final big = GameCard(
-        901,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Big',
-          attributes: {'grade': '2', 'cardType': 'normal', 'power': '25000'},
-        ),
-      );
-      cpu.field[Circle.frontLeft] = FieldUnit(big);
-      engine.state.phase = PlaytestPhase.battle;
-
-      final attack = ai.nextAttack();
-      expect(attack, isNotNull);
-      expect(attack!.to, Circle.vanguard);
-    });
-
-    test('it kills a rear-guard worth killing', () async {
-      final (store, deck) = await buildDeck();
-      final (engine, ai) = (() {
-        final e = engineFor(store, deck);
-        return (e, PlaytestAi(e));
-      })();
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-      final you = engine.state.you;
-
-      final attacker = GameCard(
-        902,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Hunter',
-          attributes: {'grade': '2', 'cardType': 'normal', 'power': '20000'},
-        ),
-      );
-      cpu.field[Circle.frontLeft] = FieldUnit(attacker);
-
-      // A real threat on their front row, and a vanguard out of reach.
-      final threat = GameCard(
-        903,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Threat',
-          attributes: {'grade': '2', 'cardType': 'normal', 'power': '15000'},
-        ),
-      );
-      you.field[Circle.frontLeft] = FieldUnit(threat);
-      engine.state.phase = PlaytestPhase.battle;
-
-      final attack = ai.nextAttack();
-      expect(attack, isNotNull);
-      expect(attack!.from, Circle.frontLeft);
-      expect(attack.to, Circle.frontLeft, reason: 'the threat is the target');
-    });
-
-    test('it ignores a rear-guard too small to be worth the attack', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-      final you = engine.state.you;
-
-      cpu.field[Circle.frontLeft] = FieldUnit(
-        GameCard(
-          904,
-          store.saveCard(
-            gameId: 'vanguard',
-            name: 'Hunter',
-            attributes: {'grade': '2', 'cardType': 'normal', 'power': '20000'},
-          ),
-        ),
-      );
-      // A 5000 body is not worth diverting an attack away from the vanguard.
-      you.field[Circle.frontLeft] = FieldUnit(
-        GameCard(
-          905,
-          store.saveCard(
-            gameId: 'vanguard',
-            name: 'Chaff',
-            attributes: {'grade': '0', 'cardType': 'normal', 'power': '5000'},
-          ),
-        ),
-      );
-      engine.state.phase = PlaytestPhase.battle;
-
-      final attack = ai.nextAttack();
-      expect(attack!.to, Circle.vanguard);
-    });
-  });
-
-  group('the CPU thinks about guarding', () {
-    /// An attack of [power] against the CPU's vanguard.
-    PendingAttack swing(
-      PlaytestEngine engine,
-      DeckStore store,
-      int power, {
-      int critical = 1,
-    }) {
-      final you = engine.state.you;
-      engine.state.phase = PlaytestPhase.battle;
-      final attack = engine.declareAttack(
-        from: Circle.vanguard,
-        to: Circle.vanguard,
-      );
-      final gap = power - attack.attackPower;
-      if (gap != 0) engine.addPower(you, Circle.vanguard, gap);
-      you.vanguard!.criticalBonus = critical - 1;
-      return attack;
-    }
-
-    test(
-      'it takes an expensive early hit rather than spending its hand',
-      () async {
-        final (store, deck) = await buildDeck();
-        final engine = engineFor(store, deck);
-        final ai = PlaytestAi(engine);
-        engine.beginPlay();
-        final cpu = engine.state.opponent;
-        final before = cpu.hand.length;
-
-        // Undamaged, and the attack needs more than one card to answer.
-        final attack = swing(engine, store, cpu.vanguard!.power + 25000);
-        ai.guard(attack);
-
-        expect(cpu.hand.length, before, reason: 'it kept its cards');
-        expect(attack.connects, isTrue, reason: 'and took the damage');
-      },
-    );
-
-    test('it answers a cheap attack once the damage matters', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      // Undamaged this same attack goes through -- the damage is worth more
-      // than the card. Three damage in, the trade turns over.
-      cpu.damage.addAll(cpu.deck.sublist(0, 3));
-      cpu.deck.removeRange(0, 3);
-
-      final attack = swing(engine, store, cpu.vanguard!.power + 4000);
-      ai.guard(attack);
-
-      expect(attack.connects, isFalse);
-      expect(attack.guardians.length, 1, reason: 'and no more than needed');
-    });
-
-    test('deep in damage it spends more to stay alive', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      // The same attack it would have taken at zero damage.
-      cpu.damage.addAll(cpu.deck.sublist(0, 4));
-      cpu.deck.removeRange(0, 4);
-      final attack = swing(engine, store, cpu.vanguard!.power + 25000);
-      ai.guard(attack);
-
-      expect(attack.connects, isFalse, reason: 'four damage is not five');
-    });
-
-    test('a small early attack is taken, not guarded away', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-      final before = cpu.hand.length;
-
-      // The reported case: a turn one attack from a grade 0 vanguard, and a
-      // hand holding fifteen thousand shield triggers. Answering it costs a
-      // card and buys nothing, so it goes through.
-      engine.state.phase = PlaytestPhase.battle;
-      final attack = engine.declareAttack(
-        from: Circle.vanguard,
-        to: Circle.vanguard,
-      );
-      expect(cpu.damageCount, 0);
-      ai.guard(attack);
-
-      expect(attack.guardians, isEmpty, reason: 'nothing spent on it');
-      expect(cpu.hand.length, before);
-      expect(attack.connects, isTrue, reason: 'so the damage lands');
-    });
-
-    test('the same attack is answered at four damage', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      cpu.damage.addAll(cpu.deck.sublist(0, 4));
-      cpu.deck.removeRange(0, 4);
-
-      engine.state.phase = PlaytestPhase.battle;
-      final attack = engine.declareAttack(
-        from: Circle.vanguard,
-        to: Circle.vanguard,
-      );
-      ai.guard(attack);
-
-      expect(attack.guardians, isNotEmpty, reason: 'four damage is different');
-      expect(attack.connects, isFalse);
-    });
-
-    test('it saves the perfect guard for the hit that would kill it', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-
-      final sentinel = GameCard(
-        906,
-        store.saveCard(
-          gameId: 'vanguard',
-          name: 'Perfect Guard',
-          attributes: {'grade': '1', 'cardType': 'sentinel', 'shield': '0'},
-        ),
-      );
-      cpu.hand.add(sentinel);
-
-      // A big attack, but not a lethal one: the sentinel stays in hand.
-      final attack = swing(engine, store, cpu.vanguard!.power + 40000);
-      ai.guard(attack);
-      expect(cpu.hand, contains(sentinel));
-      expect(attack.perfectGuarded, isFalse);
-    });
-
-    test('it lets a rear-guard die rather than guard for it', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-      final cpu = engine.state.opponent;
-      final you = engine.state.you;
-      final before = cpu.hand.length;
-
-      cpu.field[Circle.frontLeft] = FieldUnit(
-        GameCard(
-          907,
-          store.saveCard(
-            gameId: 'vanguard',
-            name: 'Body',
-            attributes: {'grade': '1', 'cardType': 'normal', 'power': '8000'},
-          ),
-        ),
-      );
-      engine.state.phase = PlaytestPhase.battle;
-      final attack = engine.declareAttack(
-        from: Circle.vanguard,
-        to: Circle.frontLeft,
-      );
-      engine.addPower(you, Circle.vanguard, 10000);
-      ai.guard(attack);
-
-      expect(cpu.hand.length, before, reason: 'a body is not worth cards');
-    });
-  });
-
-  group('a whole game', () {
-    test('two CPUs can play one out to a winner', () async {
-      final (store, deck) = await buildDeck();
-      final engine = engineFor(store, deck, seed: 3);
-      final ai = PlaytestAi(engine);
-      engine.beginPlay();
-
-      // Drive both sides with the same policy until somebody wins. The point
-      // is that the rules never deadlock and the game does end.
-      var guard = 0;
-      while (!engine.state.isOver && guard++ < 400) {
-        final side = engine.state.active;
-        if (engine.canRide(side)) {
-          final option = engine.rideDeckOption(side);
-          if (option != null) {
-            engine.ride(side, option, fromRideDeck: true);
-          }
-        }
-        for (final circle in [Circle.frontLeft, Circle.backCenter]) {
-          final callable = side.hand
-              .where((c) => engine.canCall(side, c, circle))
-              .toList();
-          if (callable.isNotEmpty && side.field[circle] == null) {
-            engine.call(side, callable.first, circle);
-          }
-        }
-        engine.state.phase = PlaytestPhase.battle;
-        for (final from in engine.attackers(side).toList()) {
-          if (engine.state.isOver) break;
-          if (side.field[from] == null) continue;
-          engine.declareAttack(from: from, to: Circle.vanguard);
-          engine.driveCheck();
-          engine.resolveAttack();
-        }
-        if (engine.state.isOver) break;
-        engine.endTurn();
-      }
-
-      expect(engine.state.isOver, isTrue, reason: 'the game reached an end');
-      expect(engine.state.winner, isNotNull);
-      expect(ai.state.log, isNotEmpty);
     });
   });
 

@@ -3,7 +3,6 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import '../../models/card_definition.dart';
 import '../playtest_engine.dart';
 import '../playtest_state.dart';
 import 'playtest_host.dart';
@@ -40,7 +39,6 @@ class HostSession extends ChangeNotifier {
   HostSession({
     required this.gameId,
     required this.deck,
-    this.crests = const [],
     this.turnOrder = TurnOrder.random,
     this.random,
   });
@@ -52,7 +50,6 @@ class HostSession extends ChangeNotifier {
 
   final String gameId;
   final WireDeck deck;
-  final Iterable<CardDefinition> crests;
   final TurnOrder turnOrder;
 
   /// A fixed shuffle, for a test that wants the same game twice.
@@ -153,7 +150,6 @@ class HostSession extends ChangeNotifier {
       opponentItems: theirDeck.toItems(gameId),
       yourName: hostName,
       opponentName: guestName,
-      crests: crests,
       turnOrder: turnOrder,
       random: random,
     );

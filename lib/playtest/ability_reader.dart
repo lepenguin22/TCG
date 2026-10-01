@@ -2,33 +2,32 @@
 ///
 /// Abilities in the database are prose written for a person -- "[AUTO](VC):When
 /// this unit attacks a vanguard, this unit gets [Power]+5000 until end of that
-/// battle." -- and nothing in the app encodes what they do. The board has
-/// always left them to the player for that reason, but it left the CPU with
-/// nothing at all: a deck built around its abilities played, against the CPU,
-/// as a deck of vanilla bodies.
+/// battle." -- and nothing in the app encodes what they do. The board used to
+/// leave them entirely to the player, which meant remembering, every turn, both
+/// what each unit could do and when each of them could do it.
 ///
-/// This reads the shapes that are unambiguous enough to execute and refuses
-/// everything else. The refusal is the important half: a clause is played only
-/// when every part of it -- the timing, the cost, and each effect -- is one of
-/// the forms below, so a half-understood ability is never guessed at. What it
-/// cannot read it hands back as text, to be applied by hand or not at all.
+/// This reads the half of that the board can usefully hold: **when a clause
+/// fires, and what it costs**. The effect is left as printed, because the
+/// person holding the cards already has it in front of them and is a far
+/// better judge of it than any pattern over English would be. So the board
+/// raises the clause at its moment, pays for it when it is accepted, and stops
+/// there. See [PromptedAbility].
 ///
-/// The reach is small and worth stating plainly: about 580 cards of the 15,000
-/// in the database have an ability this can play. It covers the common simple
-/// shapes -- an on-attack pump, a draw on being ridden over, a continuous
-/// bonus, a charge, the hollow keyword -- and the conditions the board can
-/// actually answer: a named crest in the crest zone, a named vanguard of a
-/// grade, a Generation Break, a drop that deep, whether the unit is hollowed,
-/// whether its controller went second.
+/// Two things are refused outright rather than guessed at. A cost it cannot
+/// read, since paying the cost is the whole of what accepting does. And a
+/// clause naming two different moments, since one raised at the wrong moment
+/// is worse than none.
 ///
-/// It still refuses everything that chooses a target, searches a deck, calls
-/// a unit or asks the board something it cannot count.
+/// Conditions are the other way round: the ones it can follow gate the offer,
+/// and the ones it cannot are passed over rather than assumed false. An offer
+/// on a board that does not quite meet the clause costs a tap to decline,
+/// which is the right price for reaching several thousand more cards.
 ///
-/// There is a second, wider tier beside it. [PromptedAbility] is the same
-/// text read only as far as a *player* needs it -- when it fires and what it
-/// costs, with the effect left as printed -- because the person holding the
-/// cards can carry out the half the board cannot. That reaches several
-/// thousand more clauses, and nothing in it is written per card.
+/// The ceiling is the timing vocabulary in [_timingForms] -- about
+/// twenty-five phrasings against a pool that uses hundreds. Every one taught
+/// is more of the pool offered, with nothing new in the interface:
+/// `tool/ability_coverage.dart` ranks them by what they would buy.
+///
 library;
 
 /// When an ability fires.
@@ -220,135 +219,8 @@ class AbilityCost {
       !selfToSoul;
 }
 
-/// What an ability does, in the terms the engine can carry out.
-class AbilityEffect {
-  const AbilityEffect({
-    this.selfPower = 0,
-    this.allPower = 0,
-    this.frontRowPower = 0,
-    this.critical = 0,
-    this.draw = 0,
-    this.soulCharge = 0,
-    this.counterCharge = 0,
-    this.energyCharge = 0,
-    this.untilEndOfBattle = false,
-    this.becomeHollowed = false,
-    this.perFaceUpG = false,
-    this.grantsBoost = false,
-    this.energyCapBonus = 0,
-    this.crestNamed,
-  });
-
-  /// Power to the unit whose ability this is.
-  final int selfPower;
-
-  /// Power to every unit its controller has.
-  final int allPower;
-
-  /// Power to the front row alone.
-  final int frontRowPower;
-
-  final int critical;
-  final int draw;
-  final int soulCharge;
-  final int counterCharge;
-  final int energyCharge;
-
-  /// Whether the power wears off at the end of the battle rather than the
-  /// turn, which for an attacker is very nearly the same thing and for a
-  /// booster is not.
-  final bool untilEndOfBattle;
-
-  /// Whether the unit becomes hollowed: it fights this turn and is retired at
-  /// the end of it. A Nightrose deck is built on the trade.
-  final bool becomeHollowed;
-
-  /// Whether the power is paid "for each face up card in your G zone", which
-  /// multiplies it rather than adding it once.
-  final bool perFaceUpG;
-
-  /// Whether the unit is given [Boost] for the turn. Only grades 0 and 1
-  /// have it printed, so a card saying a grade 2 gets it is the only way one
-  /// ever boosts.
-  final bool grantsBoost;
-
-  /// How much more energy this player may hold. Ten is what the Energy
-  /// Generator allows; a card raising the maximum by five is playing to
-  /// fifteen, and the raise lasts as long as the card is standing there.
-  final int energyCapBonus;
-
-  /// A crest this puts into the crest zone, by name. A deck whose every other
-  /// ability asks `if you have a "..." crest` does nothing at all until the
-  /// one card that says `you get a "..." crest` is played.
-  final String? crestNamed;
-
-  bool get isNothing =>
-      selfPower == 0 &&
-      allPower == 0 &&
-      frontRowPower == 0 &&
-      critical == 0 &&
-      draw == 0 &&
-      soulCharge == 0 &&
-      counterCharge == 0 &&
-      energyCharge == 0 &&
-      !becomeHollowed &&
-      !grantsBoost &&
-      energyCapBonus == 0 &&
-      crestNamed == null;
-
-  AbilityEffect merge(AbilityEffect other) => AbilityEffect(
-    selfPower: selfPower + other.selfPower,
-    allPower: allPower + other.allPower,
-    frontRowPower: frontRowPower + other.frontRowPower,
-    critical: critical + other.critical,
-    draw: draw + other.draw,
-    soulCharge: soulCharge + other.soulCharge,
-    counterCharge: counterCharge + other.counterCharge,
-    energyCharge: energyCharge + other.energyCharge,
-    untilEndOfBattle: untilEndOfBattle || other.untilEndOfBattle,
-    becomeHollowed: becomeHollowed || other.becomeHollowed,
-    perFaceUpG: perFaceUpG || other.perFaceUpG,
-    grantsBoost: grantsBoost || other.grantsBoost,
-    energyCapBonus: energyCapBonus + other.energyCapBonus,
-    crestNamed: other.crestNamed ?? crestNamed,
-  );
-}
-
-/// One ability the reader was able to follow all the way through.
-class Ability {
-  const Ability({
-    required this.timing,
-    required this.zones,
-    required this.oncePerTurn,
-    required this.cost,
-    required this.effect,
-    required this.text,
-    this.condition = const AbilityCondition(),
-  });
-
-  final AbilityTiming timing;
-
-  /// The circles it works from: 'VC', 'RC', 'GC'. Empty means the card did not
-  /// say, which for these shapes means anywhere it can be.
-  final Set<String> zones;
-
-  final bool oncePerTurn;
-  final AbilityCost cost;
-  final AbilityEffect effect;
-
-  /// What has to be true for it to happen at all.
-  final AbilityCondition condition;
-
-  /// The clause as printed, for the log and for the once-a-turn bookkeeping.
-  final String text;
-
-  bool worksOn({required bool vanguard}) =>
-      zones.isEmpty || zones.contains(vanguard ? 'VC' : 'RC');
-}
-
-/// A clause the reader could time and price, but not carry out.
 ///
-/// [Ability] is all-or-nothing on purpose: the CPU has nobody to ask, so a
+/// Carrying an ability out is all-or-nothing, which a reader over English
 /// clause it only half-follows is refused rather than guessed at. A player
 /// needs much less than that. What they are missing is never the meaning of
 /// the ability -- that is printed on the card in front of them -- but the two
@@ -403,27 +275,17 @@ class PromptedAbility {
 /// Everything the reader made of one card: what it can play, and what it
 /// could not follow.
 class CardAbilities {
-  const CardAbilities({
-    required this.playable,
-    required this.unread,
-    this.prompted = const [],
-  });
+  const CardAbilities({required this.prompted, required this.unread});
 
-  final List<Ability> playable;
-
-  /// Clauses the reader refused, as printed. Worth showing rather than
-  /// swallowing: they are the reason a CPU board is doing less than the deck
-  /// really does.
-  final List<String> unread;
-
-  /// Clauses it could time and price but not carry out, which the board
-  /// offers to the player at the moment they apply. Every one of these is
-  /// also in [unread]: the two lists answer different questions -- what the
-  /// CPU is missing, and what the player can be prompted for -- and a clause
-  /// belongs to both.
+  /// The clauses the board can raise at the moment they apply.
   final List<PromptedAbility> prompted;
 
-  static const CardAbilities none = CardAbilities(playable: [], unread: []);
+  /// The clauses it could make nothing of, as printed. Worth keeping rather
+  /// than dropping: they are the difference between what the deck does and
+  /// what the board can help with, and the coverage tool ranks them.
+  final List<String> unread;
+
+  static const CardAbilities none = CardAbilities(prompted: [], unread: []);
 }
 
 final _reminder = RegExp(r'\([^)]{9,}\)');
@@ -515,63 +377,6 @@ final _costForms = <RegExp, AbilityCost Function(Match)>{
   RegExp(r'^\[put this unit into (?:your )?soul\]$'): (m) =>
       const AbilityCost(selfToSoul: true),
   RegExp(r'^\[retire this unit\]$'): (m) => const AbilityCost(retireSelf: true),
-};
-
-final _effectForms = <RegExp, AbilityEffect Function(Match)>{
-  RegExp(
-    r'^(?:during your turn, )?this unit gets \[power\]\+(\d+)'
-    r'(?: until end of (turn|that battle))?$',
-  ): (m) => AbilityEffect(
-    selfPower: int.parse(m.group(1)!),
-    untilEndOfBattle: m.group(2) == 'that battle',
-  ),
-  RegExp(
-    r'^(?:during your turn, )?this unit gets \[power\]\+(\d+)/'
-    r'\[critical\]\+(\d+)(?: until end of (turn|that battle))?$',
-  ): (m) => AbilityEffect(
-    selfPower: int.parse(m.group(1)!),
-    critical: int.parse(m.group(2)!),
-    untilEndOfBattle: m.group(3) == 'that battle',
-  ),
-  RegExp(r'^this unit gets \[critical\]\+(\d+)(?: until end of turn)?$'): (m) =>
-      AbilityEffect(critical: int.parse(m.group(1)!)),
-  RegExp(
-    r'^(?:during your turn, )?all of your units get \[power\]\+(\d+)'
-    r'(?: until end of turn)?$',
-  ): (m) =>
-      AbilityEffect(allPower: int.parse(m.group(1)!)),
-  RegExp(
-    r'^(?:during your turn, )?all of your front row units get \[power\]\+(\d+)'
-    r'(?: until end of turn)?$',
-  ): (m) =>
-      AbilityEffect(frontRowPower: int.parse(m.group(1)!)),
-  RegExp(
-    r'^(?:during your turn, )?all of your front row units get \[power\]'
-    r'\+(\d+) for each face up card in your g zone$',
-  ): (m) =>
-      AbilityEffect(frontRowPower: int.parse(m.group(1)!), perFaceUpG: true),
-  // Only grades 0 and 1 boost, so a card handing the keyword out is doing
-  // something the board has to be told about.
-  RegExp(
-    r'^this unit gets "boost(?: \(\[boost\]\))?"(?: until end of turn)?$',
-  ): (m) =>
-      const AbilityEffect(grantsBoost: true),
-  // "The maximum energy you may have in the [CONT] ability of the "Energy
-  // Generator" in your crest zone gets +5" -- a mouthful for "you play to
-  // fifteen", and the only shape the game states it in.
-  RegExp(r'^the maximum energy you may have[^+]*gets \+(\d+)$'): (m) =>
-      AbilityEffect(energyCapBonus: int.parse(m.group(1)!)),
-  RegExp(r'^draw a card$'): (m) => const AbilityEffect(draw: 1),
-  RegExp(r'^draw (\w+) cards$'): (m) =>
-      AbilityEffect(draw: _numberWords[m.group(1)] ?? 0),
-  RegExp(r'^you get an? "([^"]+)" crest$'): (m) =>
-      AbilityEffect(crestNamed: m.group(1)),
-  RegExp(r'^\[soul-charge (\d+)\]$'): (m) =>
-      AbilityEffect(soulCharge: int.parse(m.group(1)!)),
-  RegExp(r'^\[counter-charge (\d+)\]$'): (m) =>
-      AbilityEffect(counterCharge: int.parse(m.group(1)!)),
-  RegExp(r'^\[energy-charge (\d+)\]$'): (m) =>
-      AbilityEffect(energyCharge: int.parse(m.group(1)!)),
 };
 
 /// The conditions the board can answer. Anything else is refused.
@@ -681,27 +486,33 @@ CardAbilities readAbilities(String effect) {
   final text = effect.trim();
   if (text.isEmpty) return CardAbilities.none;
 
-  final playable = <Ability>[];
-  final unread = <String>[];
   final prompted = <PromptedAbility>[];
+  final unread = <String>[];
 
   for (final printed in text.split('\n')) {
     final clause = printed.trim();
     if (clause.isEmpty || clause == '-') continue;
     if (_playedElsewhere.any((known) => known.hasMatch(clause))) continue;
-    final ability = _readClause(clause);
-    if (ability == null) {
+    final prompt = _readPrompt(clause);
+    if (prompt == null) {
       unread.add(clause);
-      // What the CPU cannot play, the player still can. Reading it a second
-      // time for the timing alone is what turns most of a real deck from
-      // text into something the board can raise at the right moment.
-      final prompt = _readPrompt(clause);
-      if (prompt != null) prompted.add(prompt);
     } else {
-      playable.add(ability);
+      prompted.add(prompt);
     }
   }
-  return CardAbilities(playable: playable, unread: unread, prompted: prompted);
+  return CardAbilities(prompted: prompted, unread: unread);
+}
+
+/// Why the reader made nothing of one clause: the first part of it that was
+/// not a known form, or a word for the shape of the refusal.
+///
+/// This is what says which phrase to teach it next -- the coverage tool ranks
+/// these -- so it is the reader's own answer rather than a guess made from
+/// keywords after the fact.
+String? refusedPart(String clause) {
+  String? refusal;
+  _readPrompt(clause, onRefusal: (part) => refusal ??= part);
+  return refusal;
 }
 
 /// Lines that are not an ability the reader has failed to follow.
@@ -721,157 +532,6 @@ final _playedElsewhere = [
 /// and a reminder: "[AUTO]:Hollow (When placed on (RC), you may have it become
 /// hollowed. If you do, retire it at the end of turn)".
 final _hollowKeyword = RegExp(r'^\[auto\]:hollow\b', caseSensitive: false);
-
-/// Why the reader refused one clause: the first part of it that was not a
-/// known form, or a word for the shape of the refusal.
-///
-/// This is what says which phrase to teach the reader next -- the coverage
-/// tool ranks these -- so it is a real return value rather than a guess made
-/// from keywords after the fact.
-String? refusedPart(String clause) {
-  String? refusal;
-  _readClause(clause, onRefusal: (part) => refusal ??= part);
-  return refusal;
-}
-
-/// One clause, or null where any part of it was not one of the known forms.
-Ability? _readClause(String printed, {void Function(String)? onRefusal}) {
-  if (_hollowKeyword.hasMatch(printed.trim())) {
-    return Ability(
-      timing: AbilityTiming.onCall,
-      zones: const {'RC'},
-      oncePerTurn: false,
-      cost: const AbilityCost(),
-      effect: const AbilityEffect(becomeHollowed: true),
-      text: printed.trim(),
-    );
-  }
-
-  final line = _normalise(printed);
-
-  final header = _header.firstMatch(line);
-  if (header == null) {
-    onRefusal?.call('(no [AUTO]/[ACT]/[CONT] header)');
-    return null;
-  }
-  final kind = header.group(1)!;
-  final zones = _zonesOf(header.group(3));
-  final markers = header.group(4) ?? '';
-  final oncePerTurn = markers.contains('[1/turn]');
-  // "[Generation Break 2]" is a condition written into the header: it works
-  // once that many cards in the G zone are face up.
-  final generationBreak = RegExp(r'\[generation break (\d+)\]')
-      .firstMatch(markers);
-  // "[Limit-Break 4]" is a condition written into the header too, and it
-  // says nothing more than four damage.
-  final limitBreak = RegExp(r'\[limit[- ]break (\d+)\]').firstMatch(markers);
-  var condition = AbilityCondition(
-    generationBreak: generationBreak == null
-        ? null
-        : int.parse(generationBreak.group(1)!),
-    damageAtLeast: limitBreak == null ? null : int.parse(limitBreak.group(1)!),
-  );
-  var body = header.group(5)!;
-
-  // The cost comes out first: it is bracketed, so it does not survive being
-  // split on commas along with everything else.
-  var cost = const AbilityCost();
-  final costs = _costSpan(body);
-  if (costs != null) {
-    for (final part in _costParts(costs.costs)) {
-      final paid = _readCost(part);
-      if (paid == null) {
-        onRefusal?.call(part);
-        return null;
-      }
-      cost = AbilityCost(
-        counterBlast: cost.counterBlast + paid.counterBlast,
-        soulBlast: cost.soulBlast + paid.soulBlast,
-        energy: cost.energy + paid.energy,
-        discard: cost.discard + paid.discard,
-        mill: cost.mill + paid.mill,
-        flipG: cost.flipG + paid.flipG,
-        restSelf: cost.restSelf || paid.restSelf,
-        retireSelf: cost.retireSelf || paid.retireSelf,
-        selfToSoul: cost.selfToSoul || paid.selfToSoul,
-      );
-    }
-    body = body.replaceRange(costs.start, costs.end, '');
-  }
-
-  var timing = switch (kind) {
-    'act' => AbilityTiming.activated,
-    'cont' => AbilityTiming.continuous,
-    _ => null,
-  };
-  var effect = const AbilityEffect();
-
-  for (final part in _parts(body.trim().replaceAll(RegExp(r'\.$'), ''))) {
-    final read = _readEffect(part);
-    if (read != null) {
-      effect = effect.merge(read);
-      continue;
-    }
-    final asked = _readCondition(part);
-    if (asked != null) {
-      condition = condition.merge(asked);
-      continue;
-    }
-    final fires = _readTiming(part);
-    if (fires != null) {
-      // A [CONT] whose "during your turn" is the whole condition stays
-      // continuous; anything else naming two timings is beyond this reader.
-      if (timing != null && timing != AbilityTiming.continuous) {
-        onRefusal?.call('(two timings: $part)');
-        return null;
-      }
-      timing = fires == AbilityTiming.continuous && kind == 'cont'
-          ? AbilityTiming.continuous
-          : fires;
-      continue;
-    }
-    onRefusal?.call(part); // A part of the clause the reader cannot follow.
-    return null;
-  }
-
-  if (timing == null) {
-    onRefusal?.call('(nothing says when it fires)');
-    return null;
-  }
-  if (effect.isNothing) {
-    onRefusal?.call('(nothing it does can be carried out)');
-    return null;
-  }
-  // Retiring the unit is a real cost, but it takes the unit away: a clause
-  // that pays it and then gives that same unit power or a critical is one
-  // the reader has misread, so it is refused rather than half-played.
-  if ((cost.retireSelf || cost.selfToSoul) &&
-      (effect.selfPower != 0 ||
-          effect.critical != 0 ||
-          effect.becomeHollowed)) {
-    onRefusal?.call('(retires the unit it then gives something to)');
-    return null;
-  }
-  // "When placed" on a card that only works from one circle can only have
-  // meant that circle.
-  if (timing == AbilityTiming.onPlaced && zones.length == 1) {
-    timing = zones.first == 'VC' ? AbilityTiming.onRide : AbilityTiming.onCall;
-  }
-  // An [AUTO] with no timing of its own has nothing to fire on.
-  if (kind == 'auto' && timing == AbilityTiming.continuous) {
-    onRefusal?.call('(nothing says when it fires)');
-    return null;
-  }
-  return Ability(
-    timing: timing,
-    zones: zones,
-    oncePerTurn: oncePerTurn,
-    cost: cost,
-    effect: effect,
-    condition: condition,
-    text: printed.trim(),
-  );
-}
 
 /// A clause as the readers want it: no reminder text, lower case, and the
 /// printing's own typos straightened out.
@@ -899,10 +559,30 @@ String _normalise(String printed) => printed
 /// since paying the cost is the whole of what accepting a prompt does, and a
 /// clause naming two different moments, since a prompt raised at the wrong
 /// one is worse than no prompt at all.
-PromptedAbility? _readPrompt(String printed) {
+PromptedAbility? _readPrompt(
+  String printed, {
+  void Function(String)? onRefusal,
+}) {
+  // The Hollow keyword is a clause with nothing in it but its own name and a
+  // reminder, so there is no timing to find in the usual way. What it does --
+  // becoming hollowed on being called -- is a board control of its own, so it
+  // is offered like anything else.
+  if (_hollowKeyword.hasMatch(printed.trim())) {
+    return PromptedAbility(
+      timing: AbilityTiming.onCall,
+      zones: const {'RC'},
+      oncePerTurn: false,
+      cost: const AbilityCost(),
+      text: printed.trim(),
+    );
+  }
+
   final line = _normalise(printed);
   final header = _header.firstMatch(line);
-  if (header == null) return null;
+  if (header == null) {
+    onRefusal?.call('(no [AUTO]/[ACT]/[CONT] header)');
+    return null;
+  }
 
   final kind = header.group(1)!;
   final zones = _zonesOf(header.group(3));
@@ -923,7 +603,10 @@ PromptedAbility? _readPrompt(String printed) {
   if (costs != null) {
     for (final part in _costParts(costs.costs)) {
       final paid = _readCost(part);
-      if (paid == null) return null;
+      if (paid == null) {
+        onRefusal?.call(part);
+        return null;
+      }
       cost = AbilityCost(
         counterBlast: cost.counterBlast + paid.counterBlast,
         soulBlast: cost.soulBlast + paid.soulBlast,
@@ -958,6 +641,7 @@ PromptedAbility? _readPrompt(String printed) {
     if (timing != null &&
         timing != AbilityTiming.continuous &&
         fires != timing) {
+      onRefusal?.call('(two timings: $part)');
       return null;
     }
     timing = fires == AbilityTiming.continuous && kind == 'cont'
@@ -970,14 +654,26 @@ PromptedAbility? _readPrompt(String printed) {
   // afterwards, so retiring the unit first would take away the thing the rest
   // of the clause is about. The executable reader refuses these for the same
   // reason, from the other end.
-  if (cost.retireSelf || cost.selfToSoul) return null;
+  if (cost.retireSelf || cost.selfToSoul) {
+    onRefusal?.call('(a cost that spends the unit itself)');
+    return null;
+  }
 
-  if (timing == null) return null;
+  if (timing == null) {
+    onRefusal?.call('(nothing says when it fires)');
+    return null;
+  }
   // An [AUTO] with no moment of its own has nothing to fire on.
-  if (kind == 'auto' && timing == AbilityTiming.continuous) return null;
+  if (kind == 'auto' && timing == AbilityTiming.continuous) {
+    onRefusal?.call('(nothing says when it fires)');
+    return null;
+  }
   // A [CONT] is simply true while the unit stands there. There is no moment
   // to raise it at, and nothing for the player to accept.
-  if (timing == AbilityTiming.continuous) return null;
+  if (timing == AbilityTiming.continuous) {
+    onRefusal?.call('(continuous: true while it stands there)');
+    return null;
+  }
   if (timing == AbilityTiming.onPlaced && zones.length == 1) {
     timing = zones.first == 'VC' ? AbilityTiming.onRide : AbilityTiming.onCall;
   }
@@ -1053,19 +749,6 @@ AbilityCost? _readCost(String part) {
       // several cards from hand, and discard them]" -- would come back as
       // nothing to pay, which would make the ability free. Refuse it.
       return read.isFree ? null : read;
-    }
-  }
-  return null;
-}
-
-AbilityEffect? _readEffect(String part) {
-  for (final entry in _effectForms.entries) {
-    final match = entry.key.firstMatch(part);
-    if (match != null) {
-      final read = entry.value(match);
-      // As with a cost: a form that matched but could not read its number
-      // gives nothing, and silently giving nothing is worse than refusing.
-      return read.isNothing ? null : read;
     }
   }
   return null;

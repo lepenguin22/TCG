@@ -10,7 +10,7 @@ import 'package:tcg_decks/screens/playtest_screen.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
 
-import 'playtest_abilities_test.dart' show deckWith, engineFor, logHas;
+import 'ability_deck.dart' show deckWith, engineFor, logHas;
 
 /// The abilities the board cannot play but can still raise.
 ///
@@ -40,7 +40,6 @@ void main() {
     test('a clause it cannot carry out is still timed and priced', () {
       final read = readAbilities(targeting);
 
-      expect(read.playable, isEmpty, reason: 'it chooses a target');
       expect(read.prompted, hasLength(1));
       final prompt = read.prompted.single;
       expect(prompt.timing, AbilityTiming.onCall);
@@ -48,13 +47,14 @@ void main() {
       expect(prompt.text, targeting, reason: 'shown to the player as printed');
     });
 
-    test('what the board plays itself is not offered as well', () {
+    test('a clause the board could once play out is offered too', () {
       final read = readAbilities(
         '[AUTO](RC):When this unit is placed on (RC), draw a card.',
       );
 
-      expect(read.playable, hasLength(1));
-      expect(read.prompted, isEmpty);
+      expect(read.prompted, hasLength(1), reason: 'offered, not played');
+      expect(read.prompted.single.timing, AbilityTiming.onCall);
+      expect(read.unread, isEmpty);
     });
 
     test('a cost it cannot read is not offered, since it could not pay it', () {
@@ -88,10 +88,13 @@ void main() {
       );
     });
 
-    test('every offer is also in the unread list', () {
-      final read = readAbilities(targeting);
+    test('a clause it made nothing of is kept as text', () {
+      final read = readAbilities(
+        '[CONT](VC):Your opponent cannot call units to (GC) from hand.',
+      );
 
-      expect(read.unread, contains(targeting));
+      expect(read.prompted, isEmpty);
+      expect(read.unread, hasLength(1));
     });
   });
 
@@ -110,16 +113,17 @@ void main() {
       expect(engine.state.prompts.single.circle, Circle.frontLeft);
     });
 
-    test('the CPU is never asked: it has nobody to ask', () async {
+    test('the far side is offered its own, both hands being yours', () async {
       final (store, deck) = await deckWith(boosterEffect: targeting);
       final engine = engineFor(store, deck);
       engine.beginPlay();
-      final cpu = engine.state.opponent;
-      engine.dealDamage(cpu);
+      final far = engine.state.opponent;
+      engine.dealDamage(far);
 
-      engine.call(cpu, spare(cpu, 'Booster'), Circle.frontLeft);
+      engine.call(far, spare(far, 'Booster'), Circle.frontLeft);
 
-      expect(engine.state.prompts, isEmpty);
+      expect(engine.state.prompts, hasLength(1));
+      expect(engine.state.prompts.single.side, far);
     });
 
     test('an offer it could not pay for is not made', () async {
@@ -251,6 +255,9 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
+      // Both openings are yours, so the hand is kept twice.
+      await tester.tap(find.text('Keep this hand'));
       await tester.pump();
       await tester.tap(find.text('Keep this hand'));
       await tester.pump();

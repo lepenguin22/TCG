@@ -29,16 +29,12 @@ class PlaytestScreen extends StatefulWidget {
     super.key,
     required this.yourDeck,
     required this.opponentDeck,
-    this.turnOrder = TurnOrder.youFirst,
-    this.mode = PlaytestMode.vsCpu,
+    this.turnOrder = TurnOrder.playerOneFirst,
     this.random,
   });
 
   final Deck yourDeck;
   final Deck opponentDeck;
-
-  /// Who plays the far side: the CPU, or you with both hands.
-  final PlaytestMode mode;
 
   /// Who takes turn one. Kept as the choice rather than the outcome, so a
   /// random order is rolled again on every restart.
@@ -64,7 +60,6 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
       yourDeck: widget.yourDeck,
       opponentDeck: widget.opponentDeck,
       turnOrder: widget.turnOrder,
-      mode: widget.mode,
       random: widget.random,
     );
   }
@@ -99,9 +94,7 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
               appBar: AppBar(
                 title: Text(
                   game.stage == PlaytestStage.mulligan
-                      ? game.bothSides
-                            ? '${game.mulliganSide.name}\u2019s opening hand'
-                            : 'Opening hand'
+                      ? '${game.mulliganSide.name}\u2019s opening hand'
                       : 'Turn ${game.state.turn} · ${game.state.active.name}',
                 ),
                 // The turn as a bar of phases, always on screen rather than
@@ -169,7 +162,6 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
         yourDeck: widget.yourDeck,
         opponentDeck: widget.opponentDeck,
         turnOrder: widget.turnOrder,
-        mode: widget.mode,
       );
     });
   }
@@ -384,14 +376,10 @@ class _Mulligan extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                game.bothSides
-                    ? side.goesFirst
-                          ? '${side.name} goes first.'
-                          : '${side.name} goes second, and is paid three '
-                                'energy for it.'
-                    : side.goesFirst
-                    ? 'You go first.'
-                    : 'The CPU goes first, so you are paid three energy.',
+                side.goesFirst
+                    ? '${side.name} goes first.'
+                    : '${side.name} goes second, and is paid three '
+                          'energy for it.',
                 style: const TextStyle(
                   color: AppColors.text,
                   fontWeight: FontWeight.w700,
@@ -677,7 +665,8 @@ class _PromptTile extends StatelessWidget {
             ),
           ),
           Text(
-            '${prompt.circle.label} · ${_costLabel(cost)}',
+            '${prompt.circle?.label ?? 'Paying for the stride'} · '
+            '${_costLabel(cost)}',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
           const SizedBox(height: 8),
@@ -821,13 +810,13 @@ class _Board extends StatelessWidget {
         children: [
           _SideFrame(
             game: game,
-            side: game.cpu,
+            side: game.opponent,
             children: [
-              _SideSummary(side: game.cpu, game: game),
+              _SideSummary(side: game.opponent, game: game),
               const SizedBox(height: 6),
-              _ZoneRail(game: game, side: game.cpu),
+              _ZoneRail(game: game, side: game.opponent),
               const SizedBox(height: 8),
-              _Field(game: game, side: game.cpu, isYours: false),
+              _Field(game: game, side: game.opponent, isYours: false),
             ],
           ),
           const SizedBox(height: 10),
@@ -884,11 +873,11 @@ class _Board extends StatelessWidget {
                     children: [
                       _SideFrame(
                         game: game,
-                        side: game.cpu,
+                        side: game.opponent,
                         children: [
                           _WideSide(
                             game: game,
-                            side: game.cpu,
+                            side: game.opponent,
                             isYours: false,
                             circle: circle,
                           ),
@@ -3237,7 +3226,7 @@ class _TriggerZone extends StatelessWidget {
 
 PlaytestSide? _sideNamed(PlaytestController game, String name) {
   if (game.you.name == name) return game.you;
-  if (game.cpu.name == name) return game.cpu;
+  if (game.opponent.name == name) return game.opponent;
   return null;
 }
 
@@ -3527,8 +3516,8 @@ class _Hand extends StatelessWidget {
     final wide = MediaQuery.sizeOf(context).width >= wideBoardWidth;
     final cardWidth = wide ? _wideCardWidth : _cardWidth;
     // The card, the padding above and below it, and the line naming whose
-    // hand this is where both of them are yours.
-    final height = cardWidth / cardAspectRatio + 16 + (game.bothSides ? 18 : 0);
+    // hand this is: both of them are yours.
+    final height = cardWidth / cardAspectRatio + 16 + 18;
 
     return Container(
       height: height,
@@ -3538,23 +3527,22 @@ class _Hand extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // With both hands yours, which one this is matters more than
+          // Both hands being yours, which one this is matters more than
           // anything else on the strip.
-          if (game.bothSides)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-              child: Text(
-                guarding
-                    ? '${side.name}\u2019s hand — guarding'
-                    : '${side.name}\u2019s hand',
-                style: const TextStyle(
-                  color: AppColors.textFaint,
-                  fontSize: 10,
-                  letterSpacing: 0.6,
-                  fontWeight: FontWeight.w700,
-                ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: Text(
+              guarding
+                  ? '${side.name}\u2019s hand — guarding'
+                  : '${side.name}\u2019s hand',
+              style: const TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 10,
+                letterSpacing: 0.6,
+                fontWeight: FontWeight.w700,
               ),
             ),
+          ),
           Expanded(
             child: hand.isEmpty
                 ? const Center(
@@ -3714,10 +3702,10 @@ class _Controls extends StatelessWidget {
     switch (game.stage) {
       case PlaytestStage.guarding:
         final attack = state.attack!;
-        // With both hands yours the defender is a player with a name, and
-        // saying which one is the difference between a guard made on purpose
-        // and one made with the wrong hand.
-        final whose = game.bothSides ? '${state.inactive.name}: ' : '';
+        // The defender is a player with a name, and saying which one is the
+        // difference between a guard made on purpose and one made with the
+        // wrong hand.
+        final whose = '${state.inactive.name}: ';
         return [
           Expanded(
             child: Text(
@@ -3730,47 +3718,8 @@ class _Controls extends StatelessWidget {
           ),
           FilledButton(
             onPressed: game.confirmGuard,
-            child: Text(game.bothSides ? 'Done guarding' : 'Take it'),
+            child: const Text('Done guarding'),
           ),
-        ];
-
-      // The CPU's main phase, a tap at a time: what it just did, and the
-      // button that lets it do the next thing.
-      case PlaytestStage.cpuTurn:
-        return [
-          Expanded(
-            child: Text(
-              game.lastCpuAction ?? 'The CPU takes its turn.',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-          ),
-          FilledButton(onPressed: game.cpuStep, child: const Text('Continue')),
-        ];
-
-      case PlaytestStage.cpuAttack:
-        // Its checks are flipped one at a time as well, so a twin drive is
-        // two things to read rather than a pair that appears together.
-        final owed = game.drivesLeft;
-        return [
-          Expanded(
-            child: Text(
-              owed > 0
-                  ? 'The CPU has $owed drive '
-                        '${owed == 1 ? 'check' : 'checks'} to make.'
-                  : 'The CPU\'s attack resolves.',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-          ),
-          if (owed > 0)
-            FilledButton(
-              onPressed: game.driveCheck,
-              child: const Text('Drive check'),
-            )
-          else
-            FilledButton(
-              onPressed: game.resolveCpuAttack,
-              child: const Text('Continue'),
-            ),
         ];
 
       case PlaytestStage.yourAttack:
@@ -3815,22 +3764,10 @@ class _Controls extends StatelessWidget {
 
   List<Widget> _yourTurnButtons(BuildContext context) {
     final state = game.state;
-    // Against the CPU there is nothing to do on its turn. With both hands
-    // yours there is no such turn: you play them both.
-    if (!state.yourTurn && !game.bothSides) {
-      return const [
-        Expanded(
-          child: Text(
-            'The CPU is playing.',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
-        ),
-      ];
-    }
-
-    // Which player the bar is talking to, said out loud where it could be
+    // Both hands are yours, so there is no turn that is not one of them.
+    // Which player the bar is talking to is said out loud, since it could be
     // either of them.
-    final whose = game.bothSides ? '${game.me.name}: ' : '';
+    final whose = '${game.me.name}: ';
 
     return [
       Expanded(

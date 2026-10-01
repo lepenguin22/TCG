@@ -28,33 +28,11 @@ import 'playtest_state.dart';
 /// drop, and one on the bottom is out of the way.
 enum DeckPick { hand, drop, soul, bottom }
 
-/// The card types that are crests: the one that comes with a ride deck, and
-/// the token a stride deck's ability puts into play.
-const _crestTypes = {'ride-deck-crest', 'crest'};
-
 class PlaytestEngine {
   PlaytestEngine(this.state, {Random? random}) : _random = random ?? Random();
 
   final PlaytestState state;
   final Random _random;
-
-  /// The crests the library knows about, for the abilities that say
-  /// `you get a "..." crest`.
-  ///
-  /// A crest is not in anybody's deck -- an ability puts it into play out of
-  /// nowhere -- so it has to come from the card library rather than from the
-  /// board, and a game built without one simply cannot play those abilities.
-  final List<CardDefinition> crestPool = [];
-
-  /// The crest card whose name carries [named], or null where the library has
-  /// no such crest.
-  CardDefinition? _crestNamed(String named) {
-    final wanted = named.toLowerCase();
-    for (final crest in crestPool) {
-      if (crest.name.toLowerCase().contains(wanted)) return crest;
-    }
-    return null;
-  }
 
   /// Every card ever dealt gets a number, so two copies of one card are
   /// separate pieces on the board.
@@ -81,29 +59,21 @@ class PlaytestEngine {
     required DeckStore store,
     required Deck yourDeck,
     required Deck opponentDeck,
-    TurnOrder turnOrder = TurnOrder.youFirst,
-    PlaytestMode mode = PlaytestMode.vsCpu,
+    TurnOrder turnOrder = TurnOrder.playerOneFirst,
     Random? random,
   }) {
     final rng = random ?? Random();
-    // With both hands yours there is no CPU to name, so the sides are told
-    // apart by number the way two players across a table would be.
-    final solo = mode == PlaytestMode.bothSides;
+    // Both hands are yours, so the sides are told apart by number the way two
+    // players across a table would be.
     final state = PlaytestState(
-      you: PlaytestSide(name: solo ? 'Player 1' : 'You', isCpu: false),
-      opponent: PlaytestSide(name: solo ? 'Player 2' : 'CPU', isCpu: !solo),
+      you: PlaytestSide(name: 'Player 1'),
+      opponent: PlaytestSide(name: 'Player 2'),
     );
     final engine = PlaytestEngine(state, random: rng);
 
-    engine.crestPool.addAll(
-      store.cards.where(
-        (card) => _crestTypes.contains(card.attributes['cardType']),
-      ),
-    );
-
     engine._deal(state.you, store.viewOf(yourDeck).items);
     engine._deal(state.opponent, store.viewOf(opponentDeck).items);
-    engine._openingDeal(turnOrder, solo: solo);
+    engine._openingDeal(turnOrder);
     return engine;
   }
 
@@ -118,33 +88,29 @@ class PlaytestEngine {
     required List<DeckItem> opponentItems,
     required String yourName,
     required String opponentName,
-    Iterable<CardDefinition> crests = const [],
-    TurnOrder turnOrder = TurnOrder.youFirst,
+    TurnOrder turnOrder = TurnOrder.playerOneFirst,
     Random? random,
   }) {
     final rng = random ?? Random();
     final state = PlaytestState(
-      you: PlaytestSide(name: yourName, isCpu: false),
-      opponent: PlaytestSide(name: opponentName, isCpu: false),
+      you: PlaytestSide(name: yourName),
+      opponent: PlaytestSide(name: opponentName),
     );
     final engine = PlaytestEngine(state, random: rng);
-    engine.crestPool.addAll(
-      crests.where((card) => _crestTypes.contains(card.attributes['cardType'])),
-    );
     engine._deal(state.you, yourItems);
     engine._deal(state.opponent, opponentItems);
-    engine._openingDeal(turnOrder, solo: true);
+    engine._openingDeal(turnOrder);
     return engine;
   }
 
   /// Everything both kinds of game do once the decks are dealt: who goes
   /// first, the opening vanguards, and five cards each.
-  void _openingDeal(TurnOrder turnOrder, {required bool solo}) {
+  void _openingDeal(TurnOrder turnOrder) {
     // Who goes first, which the crest's energy rule cares about: the player
     // going second is paid three to make up for it.
     final youFirst = switch (turnOrder) {
-      TurnOrder.youFirst => true,
-      TurnOrder.cpuFirst => false,
+      TurnOrder.playerOneFirst => true,
+      TurnOrder.playerTwoFirst => false,
       TurnOrder.random => _random.nextBool(),
     };
     state.you.goesFirst = youFirst;
@@ -160,18 +126,9 @@ class PlaytestEngine {
       _draw(state.opponent);
     }
 
-    // The CPU decides its opening at once; a hand you are playing waits for
-    // you, and with both hands yours that means both of them.
-    if (!solo) _cpuMulligan(state.opponent);
-
     state.note(
-      solo
-          ? '${state.active.name} goes first, so they charge no energy on '
-                'turn one. ${state.inactive.name} is paid three energy for '
-                'going second.'
-          : youFirst
-          ? 'You go first, so you charge no energy on turn one.'
-          : 'The CPU goes first. You are paid three energy for going second.',
+      '${state.active.name} goes first, so they charge no energy on turn one. '
+      '${state.inactive.name} is paid three energy for going second.',
     );
     state.note('Game on. Choose which cards to put back.');
   }
@@ -226,26 +183,6 @@ class PlaytestEngine {
     } else {
       state.note('${side.name} put ${chosen.length} back.', by: side);
     }
-  }
-
-  /// The CPU keeps its grade curve and pitches the rest.
-  void _cpuMulligan(PlaytestSide side) {
-    // A hand wants a grade 1 and a grade 2 to ride into; triggers and
-    // anything grade 3 or higher can wait.
-    final keep = <GameCard>[];
-    final back = <GameCard>[];
-    var ones = 0;
-    var twos = 0;
-    for (final card in side.hand) {
-      final wanted = switch (card.grade) {
-        1 => ones++ < 2,
-        2 => twos++ < 2,
-        0 => card.trigger != null,
-        _ => false,
-      };
-      (wanted ? keep : back).add(card);
-    }
-    mulligan(side, back);
   }
 
   /// Called once you have taken your own mulligan, to begin turn one.
@@ -497,7 +434,7 @@ class PlaytestEngine {
   /// and never the perfect guard.
   ///
   /// Only a suggestion. Which card to discard is a real decision, so the
-  /// board asks; this is what it opens on, and what the CPU takes.
+  /// board asks; this is what it opens on.
   GameCard? rideCostSuggestion(PlaytestSide side) {
     final spare = side.hand.where((c) => !c.isSentinel).toList()
       ..sort((a, b) => a.shield.compareTo(b.shield));
@@ -617,12 +554,9 @@ class PlaytestEngine {
       side.hand.remove(paid);
       side.drop.add(paid);
       // "When this card is discarded from hand while paying the cost for
-      // [Stride]" -- the cost itself is a timing.
-      for (final ability in abilitiesOf(paid).playable) {
-        if (ability.timing == AbilityTiming.onDiscardedForStride) {
-          playCardAbility(side, paid, ability);
-        }
-      }
+      // [Stride]" -- the cost itself is a timing, and the card fires it on its
+      // way to the drop, with no circle of its own.
+      raiseCardPrompts(side, paid, AbilityTiming.onDiscardedForStride);
     }
 
     // A G unit that was already strided goes back where it came from, face
@@ -1323,7 +1257,7 @@ class PlaytestEngine {
   }
 
   /// Flips every drive check the attack still owes, for the callers that want
-  /// the whole thing settled in one go -- the CPU's own turn, and tests.
+  /// the whole thing settled in one go, which is what the tests want.
   List<GameCard> driveCheck() {
     final pending = state.attack;
     if (pending == null) return const [];
@@ -1648,7 +1582,7 @@ class PlaytestEngine {
   /// Hollows a unit: it stays and fights, and is retired at the end of turn.
   ///
   /// A choice, not an automatic consequence -- the card says "you may" -- so
-  /// it is offered rather than taken, on the board and in the CPU alike.
+  /// it is offered rather than taken.
   void hollow(PlaytestSide side, Circle circle) {
     final unit = side.field[circle];
     if (unit == null || unit.hollowed || unit.locked) return;
@@ -1678,7 +1612,7 @@ class PlaytestEngine {
   /// them after the effect, and a prompt does not offer them at all.
   bool _payCost(
     PlaytestSide side,
-    FieldUnit unit,
+    FieldUnit? unit,
     AbilityCost cost, {
     List<GameCard> discardable = const [],
   }) {
@@ -1719,16 +1653,9 @@ class PlaytestEngine {
         flipG(side, card, faceUp: true);
       }
     }
-    if (cost.restSelf) unit.rested = true;
+    if (cost.restSelf) unit?.rested = true;
     return true;
   }
-
-  bool canPayFor(
-    PlaytestSide side,
-    FieldUnit unit,
-    Ability ability, {
-    Circle? circle,
-  }) => canPay(side, unit, ability.cost, circle: circle);
 
   /// Whether a cost can be met, asked of the cost alone.
   ///
@@ -1736,7 +1663,7 @@ class PlaytestEngine {
   /// [Ability], so the check is on what is actually being paid.
   bool canPay(
     PlaytestSide side,
-    FieldUnit unit,
+    FieldUnit? unit,
     AbilityCost cost, {
     Circle? circle,
   }) {
@@ -1746,114 +1673,12 @@ class PlaytestEngine {
     if (cost.discard > side.hand.length) return false;
     if (cost.mill > side.deck.length) return false;
     if (cost.flipG > side.gZone.length - side.generationBreak) return false;
-    if (cost.restSelf && unit.rested) return false;
-    if ((cost.retireSelf || cost.selfToSoul) && circle == Circle.vanguard) {
-      return false;
+    // A cost that spends the unit needs there to be one, standing, and not on
+    // the vanguard circle -- which cannot be emptied.
+    if (cost.restSelf && (unit == null || unit.rested)) return false;
+    if (cost.retireSelf || cost.selfToSoul) {
+      if (unit == null || circle == Circle.vanguard) return false;
     }
-    return true;
-  }
-
-  /// Plays one ability off a card: pays what it costs, does what it says.
-  ///
-  /// [discardable] is the hand the caller is willing to pay a discard out of,
-  /// most valuable last, since which card to throw away is a decision and not
-  /// the engine's to make.
-  ///
-  /// Returns false without touching anything if the cost cannot be met, so a
-  /// half-paid ability is never left on the board.
-  bool playAbility(
-    PlaytestSide side,
-    Circle circle,
-    Ability ability, {
-    List<GameCard> discardable = const [],
-  }) {
-    final unit = side.field[circle];
-    if (unit == null || !canPayFor(side, unit, ability, circle: circle)) {
-      return false;
-    }
-    // What the card asks about the board, before anything is paid for it.
-    if (!meets(side, unit, ability.condition)) return false;
-    // A crest it cannot find is an ability it cannot finish, so nothing is
-    // paid for it. The pool is whatever crests the library knows about.
-    final wantedCrest = ability.effect.crestNamed;
-    if (wantedCrest != null && _crestNamed(wantedCrest) == null) return false;
-
-    final cost = ability.cost;
-    if (!_payCost(side, unit, cost, discardable: discardable)) return false;
-
-    final effect = ability.effect;
-    // "for each face up card in your G zone" multiplies what it gives, so a
-    // crest that pays 5000 a card pays nothing until a stride has come back.
-    final times = effect.perFaceUpG ? side.generationBreak : 1;
-    if (effect.selfPower != 0) {
-      final power = effect.selfPower * times;
-      if (effect.untilEndOfBattle) {
-        unit.battleBonus += power;
-      } else {
-        unit.powerBonus += power;
-      }
-    }
-    if (effect.allPower != 0) {
-      for (final other in side.units) {
-        other.powerBonus += effect.allPower * times;
-      }
-    }
-    if (effect.frontRowPower != 0) {
-      for (final entry in side.field.entries) {
-        if (entry.key.isFrontRow && entry.value.isActive) {
-          entry.value.powerBonus += effect.frontRowPower * times;
-        }
-      }
-    }
-    if (effect.becomeHollowed) hollow(side, circle);
-    if (effect.grantsBoost) grantBoost(side, circle, granted: true);
-    // Set rather than added, so a continuous ability played again on a later
-    // turn puts the cap at the same fifteen rather than at twenty.
-    if (effect.energyCapBonus > 0) {
-      final raised = PlaytestSide.baseEnergyCap + effect.energyCapBonus;
-      if (side.energyCap < raised) setEnergyCap(side, raised);
-    }
-    if (effect.critical != 0) unit.criticalBonus += effect.critical;
-    for (var i = 0; i < effect.draw; i += 1) {
-      _draw(side);
-    }
-    if (effect.soulCharge > 0) soulCharge(side, effect.soulCharge);
-    if (effect.counterCharge > 0) counterCharge(side, effect.counterCharge);
-    if (effect.energyCharge > 0) _chargeEnergy(side, effect.energyCharge);
-    final gained = effect.crestNamed;
-    if (gained != null) {
-      final crest = _crestNamed(gained);
-      if (crest != null) playCrest(side, crest);
-    }
-
-    // The costs that spend the unit itself come last: everything above still
-    // happened, and what is left is taking the unit off its circle.
-    if (cost.retireSelf) retire(side, circle);
-    if (cost.selfToSoul) unitToSoul(side, circle);
-
-    unit.usedAbilities.add(ability.text);
-    state.note(
-      '${side.name} plays ${unit.card.name}: ${ability.text}',
-      by: side,
-    );
-    _checkForEnd();
-    return true;
-  }
-
-  /// Plays an ability off a card that is not on the field -- one discarded to
-  /// pay for a stride, say -- where only the effects that need no unit can
-  /// happen.
-  bool playCardAbility(PlaytestSide side, GameCard card, Ability ability) {
-    if (!meets(side, null, ability.condition)) return false;
-    final effect = ability.effect;
-    for (var i = 0; i < effect.draw; i += 1) {
-      _draw(side);
-    }
-    if (effect.soulCharge > 0) soulCharge(side, effect.soulCharge);
-    if (effect.counterCharge > 0) counterCharge(side, effect.counterCharge);
-    if (effect.energyCharge > 0) _chargeEnergy(side, effect.energyCharge);
-    state.note('${side.name} plays ${card.name}: ${ability.text}', by: side);
-    _checkForEnd();
     return true;
   }
 
@@ -1866,11 +1691,8 @@ class PlaytestEngine {
   /// whole of it. The player reads the clause off the card, accepts to have
   /// the cost paid, and applies the effect with the board's own controls.
   ///
-  /// Only ever raised for a human side. The CPU plays what the reader can
-  /// execute and notes the rest in the log, which is as far as it can go
-  /// without somebody to ask.
+  /// Both sides are yours, so both sides are offered their own.
   void raisePrompts(PlaytestSide side, Circle circle, AbilityTiming timing) {
-    if (side.isCpu) return;
     final unit = side.field[circle];
     if (unit == null) return;
     for (final ability in abilitiesOf(unit.card).prompted) {
@@ -1890,25 +1712,55 @@ class PlaytestEngine {
   }
 
   bool _promptFires(
-    FieldUnit unit,
-    Circle circle,
+    FieldUnit? unit,
+    Circle? circle,
     PromptedAbility ability,
     AbilityTiming timing,
   ) {
-    // "When placed" is both a call and a ride, as it is for the CPU.
+    // "When placed" is both a call and a ride.
     final fires =
         ability.timing == timing ||
         (ability.timing == AbilityTiming.onPlaced &&
             (timing == AbilityTiming.onCall || timing == AbilityTiming.onRide));
     if (!fires) return false;
-    if (!ability.worksOn(vanguard: circle == Circle.vanguard)) return false;
+    // A card off the field is on no circle, so the circles a clause names have
+    // nothing to say about it.
+    if (circle != null &&
+        !ability.worksOn(vanguard: circle == Circle.vanguard)) {
+      return false;
+    }
     // Only a [1/Turn] is spent by being used. Everything else fires as often
     // as its moment comes round, which for an on-attack ability is every
     // attack the unit makes.
-    if (ability.oncePerTurn && unit.usedAbilities.contains(ability.text)) {
+    if (ability.oncePerTurn &&
+        (unit?.usedAbilities.contains(ability.text) ?? false)) {
       return false;
     }
     return true;
+  }
+
+  /// Offers what a card fires on its way somewhere, with no circle of its own.
+  ///
+  /// One clause reaches the board this way: a card discarded to pay for a
+  /// stride. It is gone by the time the offer is answered, so nothing it could
+  /// cost needs the card still to be somewhere.
+  void raiseCardPrompts(
+    PlaytestSide side,
+    GameCard card,
+    AbilityTiming timing,
+  ) {
+    for (final ability in abilitiesOf(card).prompted) {
+      if (!_promptFires(null, null, ability, timing)) continue;
+      if (!meets(side, null, ability.condition)) continue;
+      if (!canPay(side, null, ability.cost)) continue;
+      final prompt = AbilityPrompt(
+        side: side,
+        circle: null,
+        card: card,
+        ability: ability,
+      );
+      if (!state.prompts.contains(prompt)) state.prompts.add(prompt);
+    }
   }
 
   /// The [ACT] abilities a side could use right now.
@@ -1916,7 +1768,6 @@ class PlaytestEngine {
   /// Activated abilities have no moment to be raised at -- they happen when
   /// the player decides -- so they are asked for rather than queued.
   List<AbilityPrompt> activatable(PlaytestSide side) {
-    if (side.isCpu) return const [];
     final offers = <AbilityPrompt>[];
     for (final entry in side.field.entries) {
       final unit = entry.value;
@@ -1953,15 +1804,19 @@ class PlaytestEngine {
     List<GameCard> discardable = const [],
   }) {
     final side = prompt.side;
-    final unit = side.field[prompt.circle];
-    if (unit == null || unit.card.instanceId != prompt.card.instanceId) {
+    final circle = prompt.circle;
+    final unit = circle == null ? null : side.field[circle];
+    // The unit that was offered has to still be the one standing there. A card
+    // that was never on the field is exempt: it has already gone.
+    if (circle != null &&
+        (unit == null || unit.card.instanceId != prompt.card.instanceId)) {
       state.prompts.remove(prompt);
       return false;
     }
     final cost = prompt.ability.cost;
-    if (!canPay(side, unit, cost, circle: prompt.circle)) return false;
+    if (!canPay(side, unit, cost, circle: circle)) return false;
     if (!_payCost(side, unit, cost, discardable: discardable)) return false;
-    unit.usedAbilities.add(prompt.ability.text);
+    unit?.usedAbilities.add(prompt.ability.text);
     state.note(
       '${side.name} plays ${prompt.card.name}: ${prompt.ability.text}',
       by: side,

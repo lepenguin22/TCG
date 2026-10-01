@@ -23,7 +23,6 @@ hosted() async {
     opponentItems: store.viewOf(deck).items,
     yourName: 'Player 1',
     opponentName: 'Player 2',
-    crests: store.cards,
     random: Random(7),
   );
   final host = PlaytestHost(engine);

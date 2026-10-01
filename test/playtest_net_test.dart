@@ -22,7 +22,6 @@ Future<PlaytestEngine> twoPlayerGame(
   store: store,
   yourDeck: deck,
   opponentDeck: deck,
-  mode: PlaytestMode.bothSides,
   random: Random(seed),
 );
 

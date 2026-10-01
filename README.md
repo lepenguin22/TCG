@@ -154,10 +154,10 @@ without that, nothing can dial in.
   its cards matched to the database, sorted into the right zones and ready to
   be checked against the rules. Paste several links, one per line, to import a
   whole collection at once.
-- **Playtest against a CPU.** Play a deck out against the computer — a mirror
-  match, or any other deck in the library — from the play button on the deck
-  screen. See [Playtesting](#playtesting) for what the board does and does not
-  run for you.
+- **Playtest a deck out.** Play a deck against a mirror match, or against any
+  other deck in the library, from the play button on the deck screen. Both
+  hands are yours; the board offers each ability at the moment it fires. See
+  [Playtesting](#playtesting) for what it does and does not run for you.
 - **Copy as text** to paste a list into a chat, and a JSON backup you can copy to
   the clipboard and import on another device.
 
@@ -377,79 +377,36 @@ JSON pasted into the same box — it is read the same way.
 ## Playtesting
 
 The play button on a deck screen deals the deck out. Pick a mirror match, or
-any other deck in the library to test a matchup against, choose **who plays
-the other side** — the CPU, or you — and who takes the first turn. Turn order
-is not a formality: whoever goes second is paid three energy by the crest to
-make up for being a turn behind on the board, so a deck is worth trying from
-both sides. Choosing the roll re-rolls it on every restart rather than fixing
-it once.
+any other deck in the library to test a matchup against, and who takes the
+first turn. Turn order is not a formality: whoever goes second is paid three
+energy by the crest to make up for being a turn behind on the board, so a deck
+is worth trying from both sides. Choosing the roll re-rolls it on every restart
+rather than fixing it once.
 
-### Playing both sides
+### One board, two hands
 
-The CPU only plays the abilities the reader can follow, which for a deck built
-on the ones it cannot is not a test at all — the deck comes out as a set of
-vanilla bodies and the game it really plays never happens. So the other side
-can be yours as well.
+There is no computer opponent. A program that reads card text can play the
+simple abilities and not the rest, which for a deck built on the rest is not a
+test at all -- the deck comes out as a set of vanilla bodies and the game it
+really plays never happens. So both hands are yours.
 
-Pick **You, both sides** and there is no CPU in the game: it is one board with
-two hands on it, both of them yours. Both openings are mulliganed, one after
+It is one board with two hands on it. Both openings are mulliganed, one after
 the other. The turn passes from one player to the other and stops there, and
-every control on the board goes on working for whoever's turn it is — the ride
+every control on the board goes on working for whoever's turn it is -- the ride
 sheet rides their deck, a card called comes out of their hand, the abilities
 applied by hand are applied to their units. When an attack is declared the
 board asks the *defender* to guard it, with the defender's own cards, before
 handing it back to the attacker to drive and resolve.
 
-The sides are called **Player 1** and **Player 2** rather than You and the
-CPU, and the board says which of them it is talking to at every step: the
-title bar names whose turn it is, the hand strip names whose hand it is
-showing, and the control bar prefixes what it is waiting for with the name of
-the player it wants it from. Player 1's board stays at the bottom throughout,
-the way it would if you were sitting on one side of a table and reaching
-across.
+The sides are **Player 1** and **Player 2**, and the board says which of them
+it is talking to at every step: the title bar names whose turn it is, the hand
+strip names whose hand it is showing, and the control bar prefixes what it is
+waiting for with the name of the player it wants it from. Player 1's board
+stays at the bottom throughout, so the half you are looking at does not move
+when the turn does.
 
-Nothing about the rules changes: the turn one attack ban, the energy for going
-second, boosting, triggers, the sixth damage. What changes is that nothing at
-all happens unless you do it, which is what testing a deck whose abilities no
-program can read actually requires.
-
-Leaving a game asks first. The board is not saved anywhere — the hands, the
-fields and everything applied by hand go with it — and a back press is easy to
-make by accident on a phone, so both the back button and the arrow in the
-corner ask before throwing one away. A game that has already ended leaves at
-once, having nothing left to lose.
-
-The board runs the game the way it sits on a table: your opponent's six circles
-across the top, yours below, your hand along the bottom, and a control bar that
-only ever offers the move the rules are waiting for. It plays out an opening
-mulligan, the ride deck climbed a grade at a time — each of those rides paid
-for with a card discarded from hand, which the board asks you to pick and an
-empty hand cannot afford — calling to the front and back
-rows, boosting from behind, attacks that only the front row can make or receive,
-drive checks sized to the vanguard's grade, damage checks, guarding with shields
-and perfect guards, and the sixth damage that ends it. Triggers resolve
-properly, and for **+10000 power** — the number the V-series rules revision
-moved them to, which every format the app supports is played under, whatever
-an old printing's own text says. Critical adds that power and a critical, draw
-draws, front spreads it across the front row rather than onto one unit, heal
-heals when you are not ahead on damage, stand stands a unit.
-
-A heal checked **as damage** is settled before that damage lands. The card
-being checked is still face up in front of you, not in the damage zone, when
-the trigger resolves — so it counts towards neither side of *"equal to or
-greater than your opponent's"*, and it is never the card healed away. Two
-damage against their three stays a heal that does nothing, and the card that
-goes to the drop is one of the damage already taken. A heal on what would be
-the sixth still saves the game: it heals one of the five before the sixth
-arrives. An over trigger is
-its own number, +100000, and the rest of what it does is the card's text. It is
-also **removed from the game** as it resolves: from a drive check it does not
-join the hand, and from a damage check it is not taken as damage, so a deck
-that over-triggers into its sixth damage does not lose to it. What was removed
-sits on its own pile in the zone rail, readable but out of play for good. Both
-players draw on their own first turn; nobody skips it. Nobody attacks on turn
-one either: whoever goes first is a turn ahead on the board, so they do not
-swing, and the control bar says so rather than leaving a tap unanswered.
+For a game against another person on another phone, see **two devices** on the
+setup screen: each plays their own deck off their own device.
 
 ### Lock
 
@@ -459,8 +416,8 @@ a front trigger passes it by, it does not move or swap up its column, and
 nothing can be called over it — the circle is held shut, which is the whole
 point of locking one.
 
-Lock is on any rear-guard's sheet, on your board and the CPU's, since the card
-being locked is usually the opponent's. It shows face down on the circle, art
+Lock is on any rear-guard's sheet, on either board, since the card being
+locked is usually the opponent's. It shows face down on the circle, art
 upside down under a lock, with no power on it.
 
 It unlocks on its own at the end of its owner's turn, which is the rule: a lock
@@ -487,93 +444,29 @@ the attack comes to can be read off the board before it is made.
 **Only grades 0 and 1 boost.** [Boost] is printed on those and on nothing
 else, so a grade 2 or 3 standing in the back row is a body and not a booster:
 the checkbox does not appear, and the control bar says which unit it is and
-why rather than leaving a tap unanswered. The CPU plays by the same rule, and
-now fills its back row with units that can actually push — being able to boost
-comes before power there.
+why rather than leaving a tap unanswered.
 
 Plenty of cards hand the keyword out all the same — *"this unit gets 'Boost'
 until end of turn"* — so any grade 2 or greater rear-guard's sheet offers
-**Give [Boost]**, on your board and the CPU's. A unit carrying it is marked
-**⇧** beside its power and boosts like any grade 1 until the end of the turn,
-when it wears off with everything else a turn hands out. **Take [Boost] back**
-undoes it. Where the card's text is one the reader follows, the CPU gives
-itself the keyword without being asked.
-
-### What the CPU can read
-
-A CPU that ignored every ability played a deck of vanilla bodies, which is not
-what a deck does. So the board reads the printed English of the shapes that are
-unambiguous, and refuses the rest:
-
-```
-[AUTO](VC):When this unit attacks a vanguard, this unit gets [Power]+5000
-                                              until end of that battle.   ✓ played
-[CONT](RC):During your turn, this unit gets [Power]+3000.                 ✓ played
-[AUTO]:When rode upon, draw a card.                                       ✓ played
-[AUTO](VC):When placed, [COST][Counter-Blast 1], draw a card.             ✓ played
-
-[AUTO](VC)[Limit-Break 4]:When this unit attacks, this unit gets
-                          [Power]+10000/[Critical]+1.                     ✓ played
-[AUTO](RC):When this unit attacks, [COST][retire this unit], draw a card. ✓ played
-[CONT](VC):If your opponent's vanguard is grade 3 or greater, ...         ✓ played
-
-[AUTO](VC):When this unit attacks, choose one of your rear-guards, and
-           it gets [Power]+5000.                                          ✗ refused
-[ACT](VC):[COST][Counter-Blast 1], search your deck for a card...         ✗ refused
-[AUTO]:When this unit is put on (GC), one of your units cannot be hit.    ✗ refused
-```
-
-A clause is played only when **every** part of it — the timing, each item of
-the cost, and each effect — is one of the known forms. Half an ability is never
-guessed at, so the CPU cannot invent power it does not have.
-
-The reach is still small, and worth stating rather than implying: **849 cards
-of the 15,170 that carry ability text**, about one in eighteen. It covers
-on-attack and on-boost pumps, continuous bonuses, the draw on being ridden
-over, placement abilities, the charges, the **hollow** keyword, a card
-discarded to pay for a stride, and the timings a card pays out on rather than
-fires on — **when its attack hits**, **at the end of the battle it attacked or
-boosted**, **when your G unit strides**, and **at the end of your turn**.
-
-The **costs** it can pay are the ones the board can actually spend: a
-counter-blast, a soul-blast, energy, a discard however the card words it, the
-top few cards of the deck into the drop, a G zone card turned face up, resting
-the unit, and the two that spend the unit itself — retiring it or putting it
-into the soul. Two costs written in one bracket (*"[Counter-Blast 1 &
-Soul-Blast 1]"*) are both paid. A cost whose number it cannot read is a
-refusal, never a free ability.
-
-It also reads the **conditions the board can answer** — a named crest in the
-crest zone, a named vanguard of at least a grade, a Generation Break, a Limit
-Break, a drop zone or damage zone or hand that deep, how many rear-guards are
-standing, the opponent's vanguard's grade, whether the unit is hollowed,
-whether its controller went second — and power written as *"+5000 for each
-face up card in your G zone"*, which is multiplied rather than added once. A
-condition it cannot answer is still a refusal, never an assumption that it
-holds.
-
-Two rules keep the widening honest. A clause that retires the unit and then
-gives that same unit power is refused rather than half-played, since the unit
-is gone by the time the bonus lands. And an ability that hands you a crest —
-*"you get a "Nightrose" crest"* — is not played at all unless the library
-actually holds that crest, so nothing is paid for a cost that cannot finish.
-
-What it still refuses: anything that chooses a target, searches a deck, calls
-a unit, retires somebody else's, or asks the board something it cannot count.
-Those are not lost — see below, where the board offers them to you instead.
+**Give [Boost]**, on either board. A unit carrying it is marked **⇧** beside
+its power and boosts like any grade 1 until the end of the turn, when it wears
+off with everything else a turn hands out. **Take [Boost] back** undoes it.
 
 ### Abilities the board offers you
 
-Playing an ability out itself is a high bar, and most of a real deck fails it:
-the board has to understand the timing, the cost **and** every effect, because
-a CPU has nobody to ask. A player is not in that position. You are holding the
-cards, and what you are missing is never what the ability means — it is
-printed in front of you — but the two things easy to lose track of mid-game:
-**the moment it applies**, and **what it costs**.
+Abilities in the database are prose written for a person — "[AUTO](VC):When
+this unit attacks a vanguard, this unit gets [Power]+5000 until end of that
+battle" — and nothing in the app encodes what they do. Carrying one out
+automatically is a high bar: it needs the timing, the cost **and** every
+effect, and most of a real card pool fails it.
 
-So the same text is read a second time, stopping earlier. Where the board can
-work out when a clause fires and what it takes, but not what it does, it says
-so at the moment it fires:
+But you are not in that position. You are holding the cards, and what you are
+missing is never what the ability means — it is printed in front of you — it is
+the two things easy to lose track of mid-game: **the moment it applies**, and
+**what it costs**.
+
+So that is the half the board reads. Where it can work out when a clause fires
+and what it takes, it says so at the moment it fires:
 
 ```
 Shiranui has an ability now                                        Read ›
@@ -591,60 +484,65 @@ used anyway. The board is not playing the card for you — it is knowing when to
 ask, which is the part a person actually loses track of.
 
 Nothing about this is written per card, which is the whole point. One strip
-serves the entire pool, so what the board can help with grows with the reader
-rather than with anything typed out by hand. Today that is **5,239 clauses
-offered on top of the 862 it plays itself** — seven times the reach, from one
-screen's worth of interface.
+serves the entire pool: **5,946 clauses of the 22,595 in the database**, and
+the number grows with the reader rather than with anything typed out by hand.
 
-The same two rules still hold. A cost it cannot read is not offered, since
-paying the cost is the whole of what accepting does. A cost that spends the
-unit itself is not offered either: the board pays when you accept and you
-apply the effect afterwards, so retiring the unit first would take away the
-thing the rest of the clause is about. An offer left unanswered when the turn
-ends was declined by not being answered.
+The moments it watches are the ones the board can see happen: a unit being
+**called**, a **ride**, an **attack** declared, the **boost** behind it, a
+**stride**, and a card **discarded to pay for a stride**. An [ACT] ability is
+asked for rather than raised, since it happens when its controller decides.
 
-What it cannot yet raise is a matter of vocabulary rather than design. The
-reader knows about twenty-five ways of writing a timing, and the card pool
-uses far more — *"when this unit is put on (GC)"*, *"when your vanguard
-attacks"*, *"at the beginning of your battle phase"*. Each one taught is more
-of the pool offered, with no new interface, and `tool/ability_coverage.dart`
-ranks them by what they would buy.
+Two things are refused outright rather than guessed at:
 
-A worked example, and the reason the reader grew: the Stride Deckset
--Nightrose- (`DZ-SS03`). Nothing in it could be played at all — 0 of its 36
-clauses — because every card asks a question: is its crest out, is this unit
-hollowed, how deep is the drop, how many G zone cards are face up. Teaching
-the reader those questions, the **hollow** keyword and the crest's own
-*"+5000 for each face up card"* took it to 11 of 36, including the crest that
-the whole deck is built on. `tool/ability_coverage.dart` is what measures
-that, deck by deck:
+- **A cost it cannot read**, since paying the cost is the whole of what
+  accepting does. A cost whose number it cannot make out is a refusal, never a
+  free ability.
+- **A clause naming two different moments**, since one raised at the wrong
+  moment is worse than none.
+
+A cost that spends the unit itself — retiring it, or putting it into the soul —
+is not offered either: the board pays when you accept and you apply the effect
+afterwards, so taking the unit away first would remove the thing the rest of
+the clause is about.
+
+Conditions work the other way round. The ones it can follow gate the offer: a
+named crest in the crest zone, a named vanguard of at least a grade, a
+Generation Break, a Limit Break, a drop or damage zone or hand that deep, how
+many rear-guards are standing, the opponent's vanguard's grade, whether the
+unit is hollowed, whether its controller went second. The ones it cannot are
+passed over rather than assumed false, so an offer can appear on a board that
+does not quite meet the clause. Declining costs a tap, which is the right price
+for reaching several thousand more cards.
+
+The **costs** it can pay are the ones the board can actually spend: a
+counter-blast, a soul-blast, energy, a discard however the card words it, the
+top few cards of the deck into the drop, a G zone card turned face up, and
+resting the unit. Two costs written in one bracket (*"[Counter-Blast 1 &
+Soul-Blast 1]"*) are both paid. Where a discard is the cost, which card to
+throw away is asked rather than chosen for you.
+
+An offer left unanswered when the turn ends was declined by not being
+answered, so nothing lingers into a turn it does not belong to.
+
+Lines that are not an ability it failed to follow are not counted as one: a
+reminder in brackets, `[CONT]:Sentinel` — the board plays the perfect guard off
+the card type — and the stride cost, which the board's own stride pays. A
+`[CONT]` ability is not offered at all: it is simply true while the unit stands
+there, so there is no moment to raise and nothing to accept. Those stay yours
+to keep track of.
+
+**The ceiling is vocabulary, not design.** The reader knows about twenty-five
+ways of writing a timing, and the card pool uses hundreds — *"when this unit is
+put on (GC)"*, *"when your vanguard attacks"*, *"at the beginning of your
+battle phase"*. Each one taught is more of the pool offered with no new
+interface at all, and `tool/ability_coverage.dart` ranks what is left by what
+it would buy:
 
 ```bash
 dart run tool/ability_coverage.dart DZ-SS03        # a set
 dart run tool/ability_coverage.dart --name Harri   # a card name
 ```
 
-It prints every clause marked played or not read, then ranks **the phrase
-that stopped each unread one** — the reader's own answer, not a guess from
-keywords — so the next pattern written is the one that buys the most. That
-ranking is what took the reader from 577 cards to 849: the top of it was not
-this deck's text at all but the shapes every deck shares, and teaching those
-five or six forms lifted every set at once.
-
-Lines that are not an ability it failed to follow are not counted as one: a
-reminder in brackets, `[CONT]:Sentinel` — the board plays the perfect guard
-off the card type — and the stride cost, which the board's own stride pays.
-
-What it refuses is not swallowed. When the CPU rides or calls a unit whose text
-it cannot follow, it says so in the log — "Blaster Blade has 2 abilities the
-board cannot play. Read the card if it matters." — so a test that depends on
-that card is a test you know to run by hand rather than one that quietly did
-not happen. Every hand-applied control works on the CPU's units too, so you can
-play its ability for it where the game you are testing turns on it.
-
-Your own abilities stay yours. The reader is deliberately not pointed at your
-side of the board: applying a cost you chose is part of playing the deck, and
-a program guessing at it would take the test away from you.
 
 ### Energy
 
@@ -681,8 +579,7 @@ so the cap is a number each player carries rather than a constant. The crest
 sheet sets it: **Cap 15**, **Cap 10**, and ±1 for a card that says something
 else. A raised cap is a lasting thing and stays until you change it back;
 lowering it below the energy already held spills the difference, since a cap
-is a maximum and not a promise. The reader follows that printed wording too,
-so the CPU plays to fifteen without being told.
+is a maximum and not a promise.
 
 ### The battle, as its zones
 
@@ -813,18 +710,18 @@ afterwards, the way looking through it always does.
 
 ### What it will not do for you
 
-It will not play your cards' abilities, and the CPU plays only the few it can
-actually read — which is the reason **You, both sides** exists: play the other
-side yourself and every ability on both boards gets played, because you are
-the one playing them.
+It will not carry your cards' abilities out. It raises them at the moment they
+fire and pays what they cost — see
+[Abilities the board offers you](#abilities-the-board-offers-you) — and what the
+clause then does is yours.
 
 Abilities are English prose in the card database — "[AUTO]:When this unit is
 placed on (VC), [COST][Counter-Blast 1], choose one of your opponent's
 rear-guards, and retire it" — and there is no encoding of them for a program to
 follow. Rather than pretend otherwise, the board runs everything around them and
-leaves the abilities to you: tap any unit to read its text and apply what it
-says, with controls there for power, critical, drive, standing and resting,
-retiring, drawing, energy and damage, and every zone above open for the costs.
+leaves the effect to you: tap any unit to read its text and apply what it says,
+with controls there for power, critical, drive, standing and resting, retiring,
+drawing, energy and damage, and every zone above open for the costs.
 Power is typed in rather than picked from a list: cards give 2000 and 4000 as
 readily as 5000, so the unit sheet has a field — opening on 5000, the commonest
 — with buttons to add or take away exactly that much, and a Clear that puts the
@@ -836,85 +733,21 @@ so on the board, and the drive check button names how many checks are left.
 table, not a pair of cards that appear together: what the first turns up — the
 power a critical trigger hands the attack, a heal, a stand — is read and
 applied before the second is flipped. So the button checks once and then says
-how many are still owed, on your attacks and on the CPU's alike, and the
-trigger zone fills a card at a time.
+how many are still owed, on either player's attacks, and the trigger zone fills
+a card at a time.
 
 Drive is offered on the vanguard alone, since nothing else drive checks, and
 it is cleared each turn like the rest. That is the safer way round for a
 continuous drive+1, which has to be re-applied: forgetting to add it shows up
 as a missing check, where forgetting to take a temporary one away would
-quietly hand out cards. It is a patient
-paper opponent, not a rules engine.
+quietly hand out cards.
+
+It is a patient paper table, not a rules engine: it keeps the board, the zones
+and the checks straight, and tells you when an ability is due.
 
 That still answers the questions a deck list cannot. Does it ride through grade
 3 reliably? Does the mulligan leave a workable hand? Are sixteen triggers enough
 to keep up in the damage race? How much shield is left in hand by turn four?
-
-### Watching the CPU play
-
-Its main phase happens one action at a time. It used to run the whole thing on
-the tap that ended your turn, which meant looking up from your own board to
-find a finished one and no account of how it got there — six cards played, a
-ride, and whatever abilities went with them, all in a single frame.
-
-Now the control bar hands over and waits: **Continue** plays the CPU's next
-single action and says what it was — the ride, one call, a move up a column,
-one ability — so its turn can be read as it happens rather than reconstructed
-from the log afterwards. A call and the ability that call sets off are one
-action, since that is one decision.
-
-Nothing about what it decides changed, only when you see it: stepping through
-to the end leaves exactly the board that playing it out in one go would have,
-which is what a test checks.
-
-### How the CPU decides
-
-Everything it does comes from what the engine can see — power, shield,
-critical, grade, the damage on each side, the cards in each hand — so its
-reasoning can be argued with rather than being buried in a magic number.
-
-- **It only makes attacks that achieve something.** An attack short of its
-  target's power is simply waved through, so it is not made. Over a run of
-  self-play games the previous version would have thrown 638 such swings; this
-  one makes none.
-- **It guards by what the trade is worth**, and what that is depends on which
-  damage this would be. The first few are not a loss: each is a damage check,
-  which is a free look at a trigger, and the counter-blast an ability will
-  want later — so it takes them rather than spending a card. By four damage
-  the next hit is the one that matters, and it answers. Measured over
-  self-play it guards under a third of the answerable attacks while on nought
-  to two damage, and over three fifths of them from four.
-- **It spends the fewest cards that do the job**, taking the biggest shields
-  first. Filling from the smallest up, as it used to, cost 2.19 cards a guard
-  against 1.12 now.
-- **It keeps the perfect guard** for the hit that would actually end the game,
-  rather than spending it on the first big attack.
-- **It picks rear-guard targets worth killing** — a real attacker, or the boost
-  under one — and otherwise keeps the pressure on the vanguard. A 5000 power
-  body is not worth diverting an attack for.
-- **It holds cards back**, three or four depending on damage, instead of
-  emptying its hand onto the board and then having nothing to guard with.
-- **It never calls a grade 0.** A trigger put on a circle is a 5000 power body
-  traded for a 15000 shield, and calling them out was most of what made the
-  CPU look like it was dumping its hand for nothing: it kept no guard and
-  gained almost no board. Over a run of self-play games the previous version
-  called 148 of them; this one calls none, and its triggers stay in hand to
-  guard with.
-- **It moves a stranded rear-guard up** when nothing is in front of it to
-  boost, turning a unit that was doing nothing into another attack. It does
-  this after calling rather than before, because given a card for that circle
-  the better board is the bigger unit in front with this one boosting it.
-- **It strides** where the deck has a G zone, paying with the fewest cards and
-  never with the perfect guard.
-- **It weighs the costs that spend a unit.** Retiring the unit whose ability it
-  is, or putting it into the soul, is paid for a card drawn or a crest gained
-  and refused for power on somebody else — the body lost is worth more than
-  that. Milling is refused outright when the deck is thin enough that decking
-  out is the likelier end.
-
-The same policy can be pointed at both seats, so it plays itself and the
-results are measured rather than assumed: every game finishes, none stalls, and
-the numbers above come out of that run.
 
 ## Checks
 
@@ -962,8 +795,7 @@ lib/
   playtest/
     playtest_state.dart          the board: sides, circles, units, the attack
     playtest_engine.dart         the rules, and everything they can adjudicate
-    ability_reader.dart          the printed abilities it can and cannot read
-    playtest_ai.dart             the CPU's decisions, ability play included
+    ability_reader.dart          the printed abilities it can and cannot time
     playtest_controller.dart     what the screen asks the game to do
   screens/                       deck list, deck, add cards, card editor,
                                  breakdown, trigger icons, deck settings,
@@ -995,8 +827,8 @@ test/
   playtest_engine_test.dart      the rules, one at a time
   ability_reader_test.dart       what it reads, what it refuses, over the
                                  whole card database
-  playtest_abilities_test.dart   the CPU actually playing them
-  playtest_ai_test.dart          the CPU's decisions, measured in self-play
+  playtest_prompts_test.dart     the abilities it offers, and the strip
+  ability_deck.dart              decks built around one ability, for those two
   playtest_flow_test.dart        the board, driven end to end
   playtest_layout_test.dart      the board at four screen sizes
   desktop_layout_test.dart       and what a desktop window does to it
