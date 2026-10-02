@@ -5,7 +5,6 @@ import '../games/vanguard/vanguard_data.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../store/deck_store.dart';
-import 'ability_reader.dart';
 import 'playtest_state.dart';
 
 /// The rules of a game of Vanguard, as far as they can be played without
@@ -357,9 +356,6 @@ class PlaytestEngine {
       unit.clearTurnEffects();
     }
     state.attack = null;
-    // Offers belong to the moment that raised them. One left unanswered when
-    // the turn ends was declined by not being answered.
-    clearPrompts();
     state.yourTurn = !state.yourTurn;
     _beginTurn();
   }
@@ -478,7 +474,6 @@ class PlaytestEngine {
       by: side,
     );
     _placeCrest(side);
-    raisePrompts(side, Circle.vanguard, AbilityTiming.onRide);
   }
 
   /// "[AUTO]Ride Deck:When you ride, put this card into the crest zone, and
@@ -553,10 +548,6 @@ class PlaytestEngine {
     for (final paid in cost) {
       side.hand.remove(paid);
       side.drop.add(paid);
-      // "When this card is discarded from hand while paying the cost for
-      // [Stride]" -- the cost itself is a timing, and the card fires it on its
-      // way to the drop, with no circle of its own.
-      raiseCardPrompts(side, paid, AbilityTiming.onDiscardedForStride);
     }
 
     // A G unit that was already strided goes back where it came from, face
@@ -577,11 +568,6 @@ class PlaytestEngine {
       'discarding ${cost.length} to pay for it.',
       by: side,
     );
-    // A stride is the whole board's moment, not the strider's: in Premium it
-    // is what a deck's worth of rear-guard abilities are waiting for.
-    for (final circle in side.occupied.map((e) => e.key).toList()) {
-      raisePrompts(side, circle, AbilityTiming.onStride);
-    }
   }
 
   /// Turns a G zone card face up, for the abilities that ask for one, and
@@ -814,7 +800,6 @@ class PlaytestEngine {
       by: side,
     );
     if (from == 'deck') side.deck.shuffle(_random);
-    raisePrompts(side, circle, AbilityTiming.onCall);
   }
 
   /// Takes [card] out of the zone holding it, naming that zone. Null when the
@@ -1168,10 +1153,6 @@ class PlaytestEngine {
       '(${pending.attackPower} power).',
       by: side,
     );
-    raisePrompts(side, from, AbilityTiming.onAttack);
-    if (booster != null && boosterCircle != null) {
-      raisePrompts(side, boosterCircle, AbilityTiming.onBoost);
-    }
     return pending;
   }
 
@@ -1487,79 +1468,7 @@ class PlaytestEngine {
     }
   }
 
-  // ------------------------------------------------------ abilities off the card
-
-  /// The abilities the reader could make out on this card, cached: the same
-  /// card text is read for every copy on the board, every turn.
-  ///
-  /// Keyed by the text rather than the card, since the text is what is read
-  /// -- two cards printing the same ability share the answer, and a card that
-  /// is renamed or reprinted does not carry a stale one.
-  CardAbilities abilitiesOf(GameCard card) =>
-      _abilityCache[card.effect] ??= readAbilities(card.effect);
-
-  static final Map<String, CardAbilities> _abilityCache = {};
-
-  /// Whether the board answers an ability's condition.
-  ///
-  /// Only the conditions the reader admits to understanding reach here, so a
-  /// false answer means the card said something checkable and the board does
-  /// not meet it -- never that the condition was too hard to read.
-  bool meets(PlaytestSide side, FieldUnit? unit, AbilityCondition condition) {
-    if (condition.isAlways) return true;
-
-    final crest = condition.crestNamed;
-    if (crest != null &&
-        !side.crestZone.any(
-          (c) => c.name.toLowerCase().contains(crest.toLowerCase()),
-        )) {
-      return false;
-    }
-
-    final named = condition.vanguardNamed;
-    final vanguard = side.vanguard;
-    if (named != null) {
-      if (vanguard == null) return false;
-      if (!vanguard.card.name.toLowerCase().contains(named.toLowerCase())) {
-        return false;
-      }
-    }
-    final grade = condition.vanguardGrade;
-    if (grade != null && (vanguard?.card.grade ?? -1) < grade) return false;
-
-    if (condition.hollowed && !(unit?.hollowed ?? false)) return false;
-    if (condition.wentSecond && side.goesFirst) return false;
-
-    final drop = condition.dropAtLeast;
-    if (drop != null && side.drop.length < drop) return false;
-
-    final faceUp = condition.generationBreak;
-    if (faceUp != null && side.generationBreak < faceUp) return false;
-
-    // A Limit Break is this and nothing else: damage taken, counted face up
-    // or face down alike.
-    final damage = condition.damageAtLeast;
-    if (damage != null && side.damageCount < damage) return false;
-
-    final hand = condition.handAtLeast;
-    if (hand != null && side.hand.length < hand) return false;
-
-    final rearGuards = condition.rearGuardsAtLeast;
-    if (rearGuards != null) {
-      final standing = side.field.entries
-          .where((e) => e.key != Circle.vanguard && e.value.isActive)
-          .length;
-      if (standing < rearGuards) return false;
-    }
-
-    final foeGrade = condition.foeVanguardGrade;
-    if (foeGrade != null) {
-      final foe = side == state.you ? state.opponent : state.you;
-      if ((foe.vanguard?.card.grade ?? -1) < foeGrade) return false;
-    }
-
-    return true;
-  }
+  // ------------------------------------------------------- applied by the user
 
   /// Gives a unit [Boost] for the turn, or takes it back.
   ///
@@ -1593,247 +1502,6 @@ class PlaytestEngine {
       by: side,
     );
   }
-
-  /// Whether [side] can pay for [ability] right now.
-  ///
-  /// [circle] matters for the costs that spend the unit itself: a vanguard
-  /// cannot be retired or put into the soul to pay for its own ability, so an
-  /// ability asking for that is unplayable from the vanguard circle.
-  /// Pays what a clause costs.
-  ///
-  /// Shared by the abilities the board plays itself and the ones it offers to
-  /// the player, so a cost is spent the same way whichever half it came from.
-  /// Everything it spends is already known to be there -- [canPayFor] is the
-  /// caller's job -- except the discard, which is checked here because which
-  /// card to throw away is the caller's decision and it may hand over fewer
-  /// than the cost needs. Nothing is spent when that happens.
-  ///
-  /// The costs that spend the unit itself are not paid here: the board plays
-  /// them after the effect, and a prompt does not offer them at all.
-  bool _payCost(
-    PlaytestSide side,
-    FieldUnit? unit,
-    AbilityCost cost, {
-    List<GameCard> discardable = const [],
-  }) {
-    if (cost.discard > 0) {
-      final pay = [
-        ...discardable.where(side.hand.contains),
-        ...side.hand,
-      ].take(cost.discard).toList();
-      if (pay.length < cost.discard) return false;
-      for (final card in pay) {
-        discard(side, card);
-      }
-    }
-    if (cost.counterBlast > 0) counterBlast(side, cost.counterBlast);
-    if (cost.soulBlast > 0) {
-      for (final card in side.soul.take(cost.soulBlast).toList()) {
-        soulBlast(side, card);
-      }
-    }
-    if (cost.energy > 0) {
-      side.energy = (side.energy - cost.energy).clamp(0, side.energyCap);
-    }
-    if (cost.mill > 0) {
-      for (var i = 0; i < cost.mill && side.deck.isNotEmpty; i += 1) {
-        side.drop.add(side.deck.removeLast());
-      }
-      state.note(
-        '${side.name} puts the top ${cost.mill} of the deck into the drop.',
-        by: side,
-      );
-    }
-    if (cost.flipG > 0) {
-      final faceDown = side.gZone
-          .where((c) => !side.faceUpG.contains(c.instanceId))
-          .take(cost.flipG)
-          .toList();
-      for (final card in faceDown) {
-        flipG(side, card, faceUp: true);
-      }
-    }
-    if (cost.restSelf) unit?.rested = true;
-    return true;
-  }
-
-  /// Whether a cost can be met, asked of the cost alone.
-  ///
-  /// Both tiers of the reader produce costs and only one of them produces an
-  /// [Ability], so the check is on what is actually being paid.
-  bool canPay(
-    PlaytestSide side,
-    FieldUnit? unit,
-    AbilityCost cost, {
-    Circle? circle,
-  }) {
-    if (cost.counterBlast > side.openDamage) return false;
-    if (cost.soulBlast > side.soul.length) return false;
-    if (cost.energy > side.energy) return false;
-    if (cost.discard > side.hand.length) return false;
-    if (cost.mill > side.deck.length) return false;
-    if (cost.flipG > side.gZone.length - side.generationBreak) return false;
-    // A cost that spends the unit needs there to be one, standing, and not on
-    // the vanguard circle -- which cannot be emptied.
-    if (cost.restSelf && (unit == null || unit.rested)) return false;
-    if (cost.retireSelf || cost.selfToSoul) {
-      if (unit == null || circle == Circle.vanguard) return false;
-    }
-    return true;
-  }
-
-  // --------------------------------------------- abilities offered to the player
-
-  /// Offers every ability on this unit that fires now and that the board
-  /// cannot carry out itself.
-  ///
-  /// Called at each moment the game reaches, beside nothing: the offer is the
-  /// whole of it. The player reads the clause off the card, accepts to have
-  /// the cost paid, and applies the effect with the board's own controls.
-  ///
-  /// Both sides are yours, so both sides are offered their own.
-  void raisePrompts(PlaytestSide side, Circle circle, AbilityTiming timing) {
-    final unit = side.field[circle];
-    if (unit == null) return;
-    for (final ability in abilitiesOf(unit.card).prompted) {
-      if (!_promptFires(unit, circle, ability, timing)) continue;
-      if (!meets(side, unit, ability.condition)) continue;
-      if (!canPay(side, unit, ability.cost, circle: circle)) continue;
-      final prompt = AbilityPrompt(
-        side: side,
-        circle: circle,
-        card: unit.card,
-        ability: ability,
-      );
-      // The same clause can be reached twice in one moment -- a unit placed
-      // by a ride is placed and ridden onto both -- and that is one offer.
-      if (!state.prompts.contains(prompt)) state.prompts.add(prompt);
-    }
-  }
-
-  bool _promptFires(
-    FieldUnit? unit,
-    Circle? circle,
-    PromptedAbility ability,
-    AbilityTiming timing,
-  ) {
-    // "When placed" is both a call and a ride.
-    final fires =
-        ability.timing == timing ||
-        (ability.timing == AbilityTiming.onPlaced &&
-            (timing == AbilityTiming.onCall || timing == AbilityTiming.onRide));
-    if (!fires) return false;
-    // A card off the field is on no circle, so the circles a clause names have
-    // nothing to say about it.
-    if (circle != null &&
-        !ability.worksOn(vanguard: circle == Circle.vanguard)) {
-      return false;
-    }
-    // Only a [1/Turn] is spent by being used. Everything else fires as often
-    // as its moment comes round, which for an on-attack ability is every
-    // attack the unit makes.
-    if (ability.oncePerTurn &&
-        (unit?.usedAbilities.contains(ability.text) ?? false)) {
-      return false;
-    }
-    return true;
-  }
-
-  /// Offers what a card fires on its way somewhere, with no circle of its own.
-  ///
-  /// One clause reaches the board this way: a card discarded to pay for a
-  /// stride. It is gone by the time the offer is answered, so nothing it could
-  /// cost needs the card still to be somewhere.
-  void raiseCardPrompts(
-    PlaytestSide side,
-    GameCard card,
-    AbilityTiming timing,
-  ) {
-    for (final ability in abilitiesOf(card).prompted) {
-      if (!_promptFires(null, null, ability, timing)) continue;
-      if (!meets(side, null, ability.condition)) continue;
-      if (!canPay(side, null, ability.cost)) continue;
-      final prompt = AbilityPrompt(
-        side: side,
-        circle: null,
-        card: card,
-        ability: ability,
-      );
-      if (!state.prompts.contains(prompt)) state.prompts.add(prompt);
-    }
-  }
-
-  /// The [ACT] abilities a side could use right now.
-  ///
-  /// Activated abilities have no moment to be raised at -- they happen when
-  /// the player decides -- so they are asked for rather than queued.
-  List<AbilityPrompt> activatable(PlaytestSide side) {
-    final offers = <AbilityPrompt>[];
-    for (final entry in side.field.entries) {
-      final unit = entry.value;
-      for (final ability in abilitiesOf(unit.card).prompted) {
-        if (ability.timing != AbilityTiming.activated) continue;
-        if (!_promptFires(unit, entry.key, ability, AbilityTiming.activated)) {
-          continue;
-        }
-        if (!meets(side, unit, ability.condition)) continue;
-        if (!canPay(side, unit, ability.cost, circle: entry.key)) continue;
-        offers.add(
-          AbilityPrompt(
-            side: side,
-            circle: entry.key,
-            card: unit.card,
-            ability: ability,
-          ),
-        );
-      }
-    }
-    return offers;
-  }
-
-  /// Accepts an offer: pays the cost and writes the clause into the log.
-  ///
-  /// What the clause then does is the player's to apply. The log line is the
-  /// record that it happened, so the board does not have to pretend it
-  /// understood more than it did.
-  ///
-  /// Returns false and spends nothing where the cost can no longer be met --
-  /// the board moved on between the offer and the answer.
-  bool takePrompt(
-    AbilityPrompt prompt, {
-    List<GameCard> discardable = const [],
-  }) {
-    final side = prompt.side;
-    final circle = prompt.circle;
-    final unit = circle == null ? null : side.field[circle];
-    // The unit that was offered has to still be the one standing there. A card
-    // that was never on the field is exempt: it has already gone.
-    if (circle != null &&
-        (unit == null || unit.card.instanceId != prompt.card.instanceId)) {
-      state.prompts.remove(prompt);
-      return false;
-    }
-    final cost = prompt.ability.cost;
-    if (!canPay(side, unit, cost, circle: circle)) return false;
-    if (!_payCost(side, unit, cost, discardable: discardable)) return false;
-    unit?.usedAbilities.add(prompt.ability.text);
-    state.note(
-      '${side.name} plays ${prompt.card.name}: ${prompt.ability.text}',
-      by: side,
-    );
-    state.prompts.remove(prompt);
-    _checkForEnd();
-    return true;
-  }
-
-  /// Turns an offer down. Nothing is paid and nothing is logged: an ability
-  /// the player chose not to use did not happen.
-  void dismissPrompt(AbilityPrompt prompt) => state.prompts.remove(prompt);
-
-  /// Drops every offer still waiting, for a moment that has passed.
-  void clearPrompts() => state.prompts.clear();
-
-  // ------------------------------------------------------- applied by the user
 
   /// Gives a unit power, for an ability the player is applying by hand.
   void addPower(PlaytestSide side, Circle circle, int amount) {

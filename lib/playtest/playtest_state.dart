@@ -1,6 +1,5 @@
 import '../games/vanguard/vanguard_rules.dart';
 import '../models/card_definition.dart';
-import 'ability_reader.dart';
 
 /// A place on the field a unit can stand.
 ///
@@ -155,10 +154,6 @@ class FieldUnit {
   /// for the rest of the turn.
   int battleBonus = 0;
 
-  /// Abilities already used this turn, by their printed text. What a
-  /// [1/Turn] is counted with.
-  final Set<String> usedAbilities = {};
-
   int get power => card.power + powerBonus + battleBonus;
 
   int get critical => 1 + criticalBonus;
@@ -173,7 +168,6 @@ class FieldUnit {
     driveBonus = 0;
     battleBonus = 0;
     grantedBoost = false;
-    usedAbilities.clear();
   }
 }
 
@@ -489,53 +483,6 @@ class LogEntry {
   final String? bySide;
 }
 
-/// An ability the board is offering, at the moment it applies.
-///
-/// The board cannot carry these out -- the reader could time and price them
-/// and no more -- so what is offered is the moment and the cost. Accepting
-/// pays the cost and writes the clause into the log; the effect itself is the
-/// player's, applied with the same controls they would have used anyway.
-///
-/// The point is that nothing here is per-card. One offer serves every card in
-/// the pool, so the board's reach grows with the reader rather than with
-/// anything written by hand.
-class AbilityPrompt {
-  AbilityPrompt({
-    required this.side,
-    required this.circle,
-    required this.card,
-    required this.ability,
-  });
-
-  final PlaytestSide side;
-
-  /// The circle the unit is standing on, which is what a cost that spends the
-  /// unit is paid from.
-  ///
-  /// Null where the card is not on the field at all. One clause reaches the
-  /// board that way -- "when this card is discarded from hand while paying the
-  /// cost for [Stride]" -- and it fires on its way to the drop, with no circle
-  /// to hang on. Costs that need a unit cannot be paid for those, so they are
-  /// never offered.
-  final Circle? circle;
-
-  final GameCard card;
-  final PromptedAbility ability;
-
-  /// Prompts are compared by what they are rather than by identity, so the
-  /// same clause raised twice for the same unit in one moment is one offer.
-  @override
-  bool operator ==(Object other) =>
-      other is AbilityPrompt &&
-      other.side == side &&
-      other.circle == circle &&
-      other.card.instanceId == card.instanceId &&
-      other.ability.text == ability.text;
-
-  @override
-  int get hashCode => Object.hash(side, circle, card.instanceId, ability.text);
-}
-
 /// The whole game.
 class PlaytestState {
   PlaytestState({required this.you, required this.opponent});
@@ -558,13 +505,6 @@ class PlaytestState {
   final List<CheckedCard> triggerZone = [];
 
   final List<LogEntry> log = [];
-
-  /// Abilities waiting on the player, oldest first.
-  ///
-  /// Raised by the engine as the game reaches each moment and cleared as they
-  /// are taken or dismissed. Both sides are yours, so both sides' offers
-  /// land here and each is shown against the player it belongs to.
-  final List<AbilityPrompt> prompts = [];
 
   PlaytestSide get active => yourTurn ? you : opponent;
 

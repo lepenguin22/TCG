@@ -137,30 +137,6 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
-  // ------------------------------------------------ abilities offered to you
-
-  /// The offers waiting on whoever is playing this board.
-  ///
-  /// Both sides are yours, so both sides' offers are shown.
-  List<AbilityPrompt> get prompts =>
-      state.prompts.where((p) => controls(p.side)).toList();
-
-  /// Accepts an offer. [discardable] is the hand the player picked to pay a
-  /// discard out of, in the order they chose it.
-  bool takePrompt(
-    AbilityPrompt prompt, {
-    List<GameCard> discardable = const [],
-  }) {
-    final taken = engine.takePrompt(prompt, discardable: discardable);
-    _sync();
-    return taken;
-  }
-
-  void dismissPrompt(AbilityPrompt prompt) {
-    engine.dismissPrompt(prompt);
-    _sync();
-  }
-
   // ---------------------------------------------------------------- your turn
 
   void ride(GameCard card, {required bool fromRideDeck, GameCard? discard}) {
