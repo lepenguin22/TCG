@@ -71,16 +71,26 @@ ABILITY_WORDS = ("Boost", "Intercept", "Twin Drive", "Triple Drive", "Sentinel")
 # by: a card from a set is under a "[VGE-...]" product line, but a promo is
 # under "PR cards", and anchoring on the product meant every promo page read
 # as an unparseable one.
+#
+# "Trigger Order" is the Buddyfight title booster's orders that carry a
+# trigger icon. "Others" is what the site files tokens, markers and a stride
+# deck's crest under -- it has no "Token" type at all. Leaving those two out
+# made every one of them unparseable, 69 cards, and that many failures stops
+# the whole refresh.
 CARD_TYPES = {
     "Normal Unit",
     "Trigger Unit",
     "G Unit",
     "Normal Order",
     "Blitz Order",
+    "Trigger Order",
     "Set Order",
     "Ride Deck Crest",
-    "Token",
+    "Others",
 }
+
+# A product line: a set's own, or the one every promo sits under.
+PRODUCT_LINE = re.compile(r"\[VGE-.*|PR cards")
 
 
 def card_url(number: str) -> str:
@@ -257,10 +267,23 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
     # above that. Read backwards from the end so the navigation above the
     # card cannot be mistaken for it, and matched whole so a card type named
     # inside a rules line is not mistaken for the card's own.
+    #
+    # The search stops at the card's product line. Above it is the site's
+    # menu, which has an "Others" link of its own, and a card with no type
+    # line would otherwise find that one.
+    #
+    # A few tokens and markers print no card type, only a dash. A dash cannot
+    # join the types: a token's nation line is a dash too, and searching up
+    # from the bottom would take that for its type. So it is accepted only
+    # where a card type stands -- two lines under the product, below the name.
     type_at = -1
     for index in range(ends_at - 1, 1, -1):
         if lines[index] in CARD_TYPES:
             type_at = index
+            break
+        if PRODUCT_LINE.fullmatch(lines[index]):
+            if index + 2 < ends_at and lines[index + 2] == "-":
+                type_at = index + 2
             break
     if type_at < 2:
         return {}
