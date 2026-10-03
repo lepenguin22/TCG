@@ -61,6 +61,10 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    # A full read takes about half an hour. The scraper waits out a slow
+    # spell on the site before giving up on a page, so a site that is down
+    # outright would otherwise hold the runner for GitHub's six hours.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 

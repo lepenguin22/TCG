@@ -103,13 +103,27 @@ def card_url(number: str) -> str:
     return f"{SITE}/cardlist/?cardno={quoted}&view=text"
 
 
-def fetch(url: str, attempts: int = 3, missing_ok: bool = False) -> str | None:
+# How long to wait before each retry of a page the site did not serve. The
+# site has slow spells of a few minutes: three tries two and four seconds
+# apart all landed inside one, and a set's listing page that timed out three
+# times threw away a full refresh half an hour in. These ride out about five
+# minutes of trouble before giving up on a page.
+RETRY_WAITS = (5, 15, 30, 60, 120)
+
+# A 404 asked for with [missing_ok] is usually an answer -- the end of a set
+# -- so it is retried briefly rather than waited out like a fault. Every set
+# ends on one, and the long waits would add minutes to each.
+MISSING_ATTEMPTS = 3
+
+
+def fetch(url: str, missing_ok: bool = False) -> str | None:
     """Fetches a page, retrying: a dropped request must not lose a whole set.
 
     With [missing_ok], a 404 comes back as None rather than an error. Asking
     for a page past the last one is how the end of a set is found, and that is
     an answer rather than a failure.
     """
+    attempts = len(RETRY_WAITS) + 1
     for attempt in range(attempts):
         try:
             request = urllib.request.Request(url, headers=HEADERS)
@@ -124,18 +138,22 @@ def fetch(url: str, attempts: int = 3, missing_ok: bool = False) -> str | None:
                 # for a page it serves happily on the next try, which is why
                 # a card read by number could come back "no such card" while
                 # the same number read through its set was fine. Only a 404
-                # that survives every attempt is taken as one.
-                if attempt == attempts - 1:
+                # that survives a few attempts is taken as one.
+                if attempt >= MISSING_ATTEMPTS - 1:
                     return None
                 time.sleep(2 * (attempt + 1))
                 continue
-            if attempt == attempts - 1:
-                raise RuntimeError(f"could not read {url}: {error}") from error
-            time.sleep(2 * (attempt + 1))
+            failure: Exception = error
         except (urllib.error.URLError, OSError) as error:
-            if attempt == attempts - 1:
-                raise RuntimeError(f"could not read {url}: {error}") from error
-            time.sleep(2 * (attempt + 1))
+            failure = error
+        if attempt == attempts - 1:
+            raise RuntimeError(f"could not read {url}: {failure}") from failure
+        reason = str(failure) or type(failure).__name__
+        print(
+            f"    {url}: {reason}; trying again in {RETRY_WAITS[attempt]}s",
+            flush=True,
+        )
+        time.sleep(RETRY_WAITS[attempt])
     raise AssertionError("unreachable")
 
 
