@@ -556,6 +556,7 @@ class _Board extends StatelessWidget {
               const SizedBox(height: 6),
               _ZoneRail(game: game, side: game.opponent),
               const SizedBox(height: 8),
+              _OrderStrip(game: game, side: game.opponent),
               _Field(game: game, side: game.opponent, isYours: false),
             ],
           ),
@@ -567,6 +568,7 @@ class _Board extends StatelessWidget {
             side: game.you,
             children: [
               _Field(game: game, side: game.you, isYours: true),
+              _OrderStrip(game: game, side: game.you, below: true),
               const SizedBox(height: 8),
               _ZoneRail(game: game, side: game.you),
               const SizedBox(height: 6),
@@ -803,9 +805,9 @@ class _WideSide extends StatelessWidget {
 ///
 /// A set order is face up and doing what it says for as long as it is there,
 /// so the player wants to read it the way they read a unit, without opening
-/// anything. A phone has no room beside its field and keeps the pile on the
-/// rail; so does a desktop window too narrow to fit a readable card, since
-/// the pile is still there to open either way.
+/// anything. A phone has no room beside its field and draws them in a strip
+/// below it instead ([_OrderStrip]). A desktop window too narrow to fit a
+/// readable card draws none, and leaves the pile on the rail to open.
 ///
 /// The cards fill the room the centred field leaves to its left: a column
 /// beside the field, then more columns outward as the window allows. Past
@@ -940,6 +942,84 @@ class _OrderTable extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// A phone's order zone: the set orders on the table as a strip of cards
+/// against the field, on the side away from the battle.
+///
+/// A phone has no room beside its field, but its board is a column that
+/// scrolls, so the room is found below the field instead -- or above it, for
+/// the far player. The strip is only there while something is set, since
+/// most decks set nothing all game and a phone has no space to keep empty.
+/// More orders than fit across scroll sideways. Tapping one opens the order
+/// zone, which is where an order is taken off the table.
+class _OrderStrip extends StatelessWidget {
+  const _OrderStrip({
+    required this.game,
+    required this.side,
+    this.below = false,
+  });
+
+  final PlaytestController game;
+  final PlaytestSide side;
+
+  /// Whether the strip is under the field rather than over it, which only
+  /// decides which side of it the gap goes.
+  final bool below;
+
+  /// About two thirds of the width of a card in hand: big enough to tell
+  /// two orders apart by their art, and small enough that four fit across
+  /// the narrowest phone.
+  static const _width = 46.0;
+  static const _gap = 6.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final orders = side.orderZone;
+    if (orders.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      key: ValueKey('order-strip-${side.name}'),
+      padding: EdgeInsets.only(top: below ? 8 : 0, bottom: below ? 0 : 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Read sideways down the strip's edge, so it costs a few pixels of
+          // width rather than a line of height.
+          RotatedBox(
+            quarterTurns: 3,
+            child: Text(
+              'ORDERS ${orders.length}',
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(width: _gap),
+          Expanded(
+            child: SizedBox(
+              height: _width / cardAspectRatio,
+              child: ListView.separated(
+                key: ValueKey('order-strip-list-${side.name}'),
+                scrollDirection: Axis.horizontal,
+                itemCount: orders.length,
+                separatorBuilder: (_, _) => const SizedBox(width: _gap),
+                itemBuilder: (context, i) => _OrderCard(
+                  key: ValueKey('order-${side.name}-$i'),
+                  card: orders[i],
+                  width: _width,
+                  onTap: () => _showOrderZoneSheet(context, game, side),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
