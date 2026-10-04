@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:tcg_decks/models/card_definition.dart';
 import 'package:tcg_decks/screens/playtest_screen.dart';
 import 'package:tcg_decks/store/deck_store.dart';
 import 'package:tcg_decks/theme.dart';
@@ -10,12 +11,32 @@ import 'package:tcg_decks/theme.dart';
 import 'package:tcg_decks/playtest/playtest_controller.dart';
 import 'package:tcg_decks/playtest/playtest_state.dart';
 
+import 'package:tcg_decks/models/deck.dart';
+import 'package:tcg_decks/games/vanguard/vanguard_data.dart';
+
 import 'playtest_engine_test.dart' show buildStrideDeck;
 
 /// The board is the densest screen in the app -- twelve circles, two damage
 /// rows, a hand and a control bar, all on a phone. It is also the screen where
 /// running off the edge would hide something the player needs to tap, so every
 /// size it might be opened at is played through here rather than eyeballed.
+/// The stride deck with four set orders in it, so a desktop board keeps the
+/// order zone's column beside each field from the start.
+Future<(DeckStore, Deck)> buildStrideDeckWithOrders() async {
+  final (store, deck) = await buildStrideDeck();
+  final product = store.saveCard(
+    gameId: 'vanguard',
+    name: 'Set Product',
+    attributes: {
+      'grade': '1',
+      'cardType': 'order-set',
+      'effect': 'Put this card into your order zone. It sits there.',
+    },
+  );
+  store.addToDeck(deck.id, product.id, zoneMain, quantity: 4);
+  return (store, store.decks.firstWhere((d) => d.id == deck.id));
+}
+
 void main() {
   const sizes = <String, Size>{
     'a small phone': Size(360, 640),
@@ -138,12 +159,16 @@ void main() {
     // app holds itself to 1100 wide, so that is as wide as this gets.
     const opening = Size(884, 921);
 
-    Future<PlaytestController> pump(WidgetTester tester, Size size) async {
+    Future<PlaytestController> pump(
+      WidgetTester tester,
+      Size size, {
+      Future<(DeckStore, Deck)> Function() build = buildStrideDeck,
+    }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final (store, deck) = await buildStrideDeck();
+      final (store, deck) = await build();
       await tester.pumpWidget(
         ChangeNotifierProvider<DeckStore>.value(
           value: store,
@@ -278,6 +303,196 @@ void main() {
 
       expect(find.text('LOG'), findsNothing);
       expect(find.byKey(const ValueKey('board-scroll')), findsNothing);
+    });
+
+    /// Sets [count] set orders for the player whose hand it is, the way the
+    /// board does when one is played from hand.
+    PlaytestSide setOrders(PlaytestController game, int count) {
+      final side = game.handSide;
+      for (var i = 0; i < count; i += 1) {
+        final card = GameCard(
+          9000 + i,
+          CardDefinition(
+            id: 'set-order-$i',
+            gameId: 'vanguard',
+            name: 'Set Order $i',
+            attributes: const {'cardType': 'order-set'},
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        );
+        side.hand.add(card);
+        game.playSetOrder(card);
+      }
+      return side;
+    }
+
+    Rect fieldOf(WidgetTester tester, String side) => Circle.values
+        .map(
+          (c) => tester.getRect(find.byKey(ValueKey('circle-$side-${c.name}'))),
+        )
+        .reduce((a, b) => a.expandToInclude(b));
+
+    testWidgets('set orders are on the table beside the field', (tester) async {
+      final game = await pump(
+        tester,
+        opening,
+        build: buildStrideDeckWithOrders,
+      );
+      final side = setOrders(game, 2);
+      await tester.pump();
+
+      final field = fieldOf(tester, side.name);
+      for (var i = 0; i < 2; i += 1) {
+        final card = tester.getRect(
+          find.byKey(ValueKey('order-${side.name}-$i')),
+        );
+        expect(card.right, lessThanOrEqualTo(field.left), reason: 'order $i');
+        expect(card.top, greaterThanOrEqualTo(field.top), reason: 'order $i');
+        expect(
+          card.bottom,
+          lessThanOrEqualTo(field.bottom),
+          reason: 'order $i',
+        );
+      }
+      expect(find.text('ORDERS 2'), findsOneWidget);
+
+      // Only one player has set anything, and the fields still line up.
+      final theirs = tester.getRect(
+        find.byKey(const ValueKey('circle-Player 2-vanguard')),
+      );
+      final yours = tester.getRect(
+        find.byKey(const ValueKey('circle-Player 1-vanguard')),
+      );
+      expect(theirs.left, yours.left);
+
+      // And nothing was pushed below the fold to make room.
+      final board = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('board-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(board.position.maxScrollExtent, 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the cards keep their size when the first order is set', (
+      tester,
+    ) async {
+      final game = await pump(
+        tester,
+        opening,
+        build: buildStrideDeckWithOrders,
+      );
+      final before = circleWidth(tester, 'circle-Player 1-vanguard');
+      setOrders(game, 1);
+      await tester.pump();
+      expect(circleWidth(tester, 'circle-Player 1-vanguard'), before);
+    });
+
+    testWidgets('a deck without set orders gives up no room for them', (
+      tester,
+    ) async {
+      // The default window, where the order column would cost the circles
+      // some width: a game that plays no orders is drawn as it always was.
+      final game = await pump(tester, opening);
+      expect(game.playsSetOrders, isFalse);
+      expect(circleWidth(tester, 'circle-Player 1-vanguard'), 132);
+    });
+
+    testWidgets('clicking a set order opens the order zone', (tester) async {
+      final game = await pump(
+        tester,
+        opening,
+        build: buildStrideDeckWithOrders,
+      );
+      final side = setOrders(game, 2);
+      await tester.pump();
+
+      await tester.tap(find.byKey(ValueKey('order-${side.name}-0')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('order zone (2)'), findsOneWidget);
+      // Where an order goes when it leaves is still offered there.
+      expect(find.text('To the drop'), findsNWidgets(2));
+    });
+
+    testWidgets('three orders are all on the table in the opening window', (
+      tester,
+    ) async {
+      // The cards are drawn smaller rather than one of them being counted
+      // away: a deck built on set orders has three or four out.
+      final game = await pump(
+        tester,
+        opening,
+        build: buildStrideDeckWithOrders,
+      );
+      final side = setOrders(game, 3);
+      await tester.pump();
+
+      for (var i = 0; i < 3; i += 1) {
+        expect(find.byKey(ValueKey('order-${side.name}-$i')), findsOneWidget);
+      }
+      expect(find.byKey(ValueKey('order-${side.name}-more')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a full order table says how many more there are', (
+      tester,
+    ) async {
+      final game = await pump(
+        tester,
+        opening,
+        build: buildStrideDeckWithOrders,
+      );
+      final side = setOrders(game, 12);
+      await tester.pump();
+
+      final more = find.byKey(ValueKey('order-${side.name}-more'));
+      expect(more, findsOneWidget);
+      var shown = 0;
+      while (find
+          .byKey(ValueKey('order-${side.name}-$shown'))
+          .evaluate()
+          .isNotEmpty) {
+        shown += 1;
+      }
+      expect(
+        find.descendant(of: more, matching: find.text('+${12 - shown}')),
+        findsOneWidget,
+        reason: 'every order is either drawn or counted',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a window too narrow for the table still plays', (
+      tester,
+    ) async {
+      final game = await pump(
+        tester,
+        const Size(wideBoardWidth, 921),
+        build: buildStrideDeckWithOrders,
+      );
+      setOrders(game, 3);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      // The pile on the rail is there either way.
+      expect(find.text('Orders'), findsWidgets);
+    });
+
+    testWidgets('a phone keeps its orders on the rail', (tester) async {
+      final game = await pump(
+        tester,
+        const Size(390, 844),
+        build: buildStrideDeckWithOrders,
+      );
+      final side = setOrders(game, 2);
+      await tester.pump();
+
+      expect(find.byKey(ValueKey('order-table-${side.name}')), findsNothing);
+      expect(find.text('Orders'), findsOneWidget);
     });
 
     testWidgets('a turn plays through at a desktop size', (tester) async {

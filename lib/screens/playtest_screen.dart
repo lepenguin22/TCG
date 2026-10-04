@@ -509,6 +509,22 @@ const _railColumn = 176.0;
 const _widestCircle = 132.0;
 const _narrowestCircle = 64.0;
 
+/// How wide a set order is drawn beside a wide board's field, as a share of
+/// a circle, and the room kept around the column of them.
+const _orderShare = 0.55;
+const _orderGutter = 12.0;
+
+/// What a board's frame takes out of its width: its padding, and its border
+/// at the heavier weight it has on the side whose turn it is. The order
+/// column's sums use the heavier one, so it fits on either board.
+const _frameWidth = 16.0 + 2 * 2;
+
+/// The column a wide board keeps beside each field for set orders, in a game
+/// where either deck plays them. Nothing at all in one where neither does,
+/// so those games keep every pixel for the units.
+double _orderColumn(double circle, {required bool reserved}) =>
+    reserved ? circle * _orderShare + _orderGutter : 0;
+
 class _Board extends StatelessWidget {
   const _Board({required this.game});
 
@@ -587,7 +603,23 @@ class _Board extends StatelessWidget {
                 final circle = circleSizeFor(
                   constraints.maxHeight,
                   constraints.maxWidth,
+                  orders: game.playsSetOrders,
                 );
+                // How far right of centre both fields sit to keep the order
+                // column clear, worked out once from the board's own width so
+                // it is the same for both. Worked out per board, the one whose
+                // turn it is -- framed a pixel heavier -- came out a pixel
+                // off, and the two fields stopped lining up.
+                final free =
+                    constraints.maxWidth -
+                    _frameWidth -
+                    _railColumn -
+                    _Field.widthFor(circle);
+                final reserved = _orderColumn(
+                  circle,
+                  reserved: game.playsSetOrders,
+                );
+                final shift = reserved > free / 2 ? reserved - free / 2 : 0.0;
                 // Scrollable only as a last resort: the size above is worked
                 // out so that everything fits, and the scroll view is there
                 // for a window too short for even the smallest cards.
@@ -604,6 +636,7 @@ class _Board extends StatelessWidget {
                             side: game.opponent,
                             isYours: false,
                             circle: circle,
+                            shift: shift,
                           ),
                         ],
                       ),
@@ -619,6 +652,7 @@ class _Board extends StatelessWidget {
                             side: game.you,
                             isYours: true,
                             circle: circle,
+                            shift: shift,
                           ),
                         ],
                       ),
@@ -644,13 +678,31 @@ class _Board extends StatelessWidget {
   /// Neither depends on anything that changes during a game, so the cards
   /// stay the size they were when an attack starts rather than resizing
   /// under the hand that is playing them.
-  static double circleSizeFor(double height, double width) {
+  ///
+  /// A game where either deck plays set orders also keeps a column beside
+  /// each field for them, which can take a little off the width the circles
+  /// get in a narrow window. That is settled as the game starts, like the
+  /// rest of this, so the cards do not shrink when the first order is set.
+  static double circleSizeFor(
+    double height,
+    double width, {
+    bool orders = false,
+  }) {
     // The gap and rule between the two boards, and each frame's padding and
     // border.
     const chrome = 21.0 + 2 * 16.0;
     final perRow = (height - chrome) / 4;
     final byHeight = (perRow - _Field.rowGap * 2) * _Field.shape;
-    final byWidth = (width - 16 - _railColumn) / 3 - _Field.columnGap;
+    // Three circles and their gaps, and the order column if there is one:
+    // 3c + 3 * gap + (share * c + gutter), solved for c.
+    final byWidth = orders
+        ? (width -
+                  _frameWidth -
+                  _railColumn -
+                  3 * _Field.columnGap -
+                  _orderGutter) /
+              (3 + _orderShare)
+        : (width - 16 - _railColumn) / 3 - _Field.columnGap;
     return (byHeight < byWidth ? byHeight : byWidth).clamp(
       _narrowestCircle,
       _widestCircle,
@@ -670,12 +722,17 @@ class _WideSide extends StatelessWidget {
     required this.side,
     required this.isYours,
     required this.circle,
+    this.shift = 0,
   });
 
   final PlaytestController game;
   final PlaytestSide side;
   final bool isYours;
   final double circle;
+
+  /// How far right of centre the field sits, to keep the order column
+  /// beside it clear. The same for both boards, so their fields line up.
+  final double shift;
 
   @override
   Widget build(BuildContext context) {
@@ -711,9 +768,277 @@ class _WideSide extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Center(child: field)),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // The field is centred, and moved right of centre by however
+              // much the order column needs. The orders take the room left
+              // of the field and nothing more. The column is kept whether or
+              // not this player has set anything, so both boards' circles
+              // stay in the same columns.
+              final free = constraints.maxWidth - _Field.widthFor(circle);
+              final wanted = free / 2 + shift;
+              final spare = wanted < free ? wanted : free;
+              return Row(
+                children: [
+                  SizedBox(
+                    width: spare > 0 ? spare : 0,
+                    height: fieldHeight,
+                    child: _OrderTable(game: game, side: side, circle: circle),
+                  ),
+                  field,
+                ],
+              );
+            },
+          ),
+        ),
         rail,
       ],
+    );
+  }
+}
+
+/// A wide board's order zone, drawn as the cards on the table beside the
+/// field rather than as a count to open.
+///
+/// A set order is face up and doing what it says for as long as it is there,
+/// so the player wants to read it the way they read a unit, without opening
+/// anything. A phone has no room beside its field and keeps the pile on the
+/// rail; so does a desktop window too narrow to fit a readable card, since
+/// the pile is still there to open either way.
+///
+/// The cards fill the room the centred field leaves to its left: a column
+/// beside the field, then more columns outward as the window allows. Past
+/// what fits, the last place says how many more there are. Clicking any of
+/// them opens the order zone, which is where an order is taken off the table.
+class _OrderTable extends StatelessWidget {
+  const _OrderTable({
+    required this.game,
+    required this.side,
+    required this.circle,
+  });
+
+  final PlaytestController game;
+  final PlaytestSide side;
+  final double circle;
+
+  /// A card narrower than this is a coloured smudge, not something to read,
+  /// so a window that cannot fit one draws none.
+  static const _narrowestCard = 40.0;
+
+  /// The room between cards, and between the cards and the field.
+  static const _gap = 6.0;
+
+  /// The height of the caption above the cards.
+  static const _caption = 16.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final orders = side.orderZone;
+    if (orders.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth - _gap;
+        // Never taller than the field beside it, whatever the window.
+        final tallest = (constraints.maxHeight - _caption) * cardAspectRatio;
+        final widest = room < tallest ? room : tallest;
+        if (widest < _narrowestCard) return const SizedBox.shrink();
+        // Room for this many cards across and down at [width].
+        (int, int) grid(double width) {
+          final height = width / cardAspectRatio;
+          final down =
+              ((constraints.maxHeight - _caption + _gap) / (height + _gap))
+                  .floor();
+          final across = ((room + _gap) / (width + _gap)).floor();
+          return (across < 1 ? 1 : across, down < 1 ? 1 : down);
+        }
+
+        // As large as a little over half a circle -- these sit beside the
+        // units rather than among them -- and smaller where that is what it
+        // takes to show every order, down to the smallest card still worth
+        // reading. A deck built on set orders has three or four out, and
+        // hiding them behind a count is the thing this is here to avoid.
+        var width = (circle * _orderShare).clamp(_narrowestCard, widest);
+        while (width > _narrowestCard) {
+          final (across, down) = grid(width);
+          if (across * down >= orders.length) break;
+          width = width - 1 < _narrowestCard ? _narrowestCard : width - 1;
+        }
+        final (columns, perColumn) = grid(width);
+        final fits = perColumn * columns;
+        // Past what fits, the last place stands for the rest rather than a
+        // card quietly going missing.
+        final shown = orders.length <= fits ? orders.length : fits - 1;
+        final hidden = orders.length - shown;
+
+        final tiles = <Widget>[
+          for (var i = 0; i < shown; i += 1)
+            _OrderCard(
+              key: ValueKey('order-${side.name}-$i'),
+              card: orders[i],
+              width: width,
+              onTap: () => _showOrderZoneSheet(context, game, side),
+            ),
+          if (hidden > 0)
+            _MoreOrders(
+              key: ValueKey('order-${side.name}-more'),
+              count: hidden,
+              width: width,
+              onTap: () => _showOrderZoneSheet(context, game, side),
+            ),
+        ];
+
+        // Filled from the column beside the field outwards, so the first
+        // order set is the one nearest the units.
+        final grouped = <List<Widget>>[
+          for (var start = 0; start < tiles.length; start += perColumn)
+            tiles.sublist(
+              start,
+              start + perColumn > tiles.length
+                  ? tiles.length
+                  : start + perColumn,
+            ),
+        ];
+
+        return Padding(
+          key: ValueKey('order-table-${side.name}'),
+          padding: const EdgeInsets.only(right: _gap),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              SizedBox(
+                height: _caption,
+                child: Text(
+                  'ORDERS ${orders.length}',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final column in grouped.reversed) ...[
+                    Column(
+                      children: [
+                        for (final tile in column) ...[
+                          tile,
+                          if (tile != column.last) const SizedBox(height: _gap),
+                        ],
+                      ],
+                    ),
+                    if (column != grouped.first) const SizedBox(width: _gap),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// One set order on a wide board's table: its art, with its name along the
+/// bottom the way a unit has its power, since the art alone is a small thing
+/// to read a name off and an offline game may have no art at all.
+class _OrderCard extends StatelessWidget {
+  const _OrderCard({
+    super.key,
+    required this.card,
+    required this.width,
+    required this.onTap,
+  });
+
+  final GameCard card;
+  final double width;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: card.name,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: width,
+          height: width / cardAspectRatio,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CardImage(url: card.imageUrl, width: width),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(4),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 1,
+                  ),
+                  child: Text(
+                    card.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 8, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The last place on a full order table, standing for the orders past it.
+class _MoreOrders extends StatelessWidget {
+  const _MoreOrders({
+    super.key,
+    required this.count,
+    required this.width,
+    required this.onTap,
+  });
+
+  final int count;
+  final double width;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: width,
+        height: width / cardAspectRatio,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.border),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '+$count',
+          style: const TextStyle(
+            color: AppColors.text,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
     );
   }
 }
