@@ -482,19 +482,6 @@ void main() {
       expect(find.text('Orders'), findsWidgets);
     });
 
-    testWidgets('a phone keeps its orders on the rail', (tester) async {
-      final game = await pump(
-        tester,
-        const Size(390, 844),
-        build: buildStrideDeckWithOrders,
-      );
-      final side = setOrders(game, 2);
-      await tester.pump();
-
-      expect(find.byKey(ValueKey('order-table-${side.name}')), findsNothing);
-      expect(find.text('Orders'), findsOneWidget);
-    });
-
     testWidgets('a turn plays through at a desktop size', (tester) async {
       await pump(tester, opening);
 
@@ -508,6 +495,177 @@ void main() {
         await tester.pump();
         expect(tester.takeException(), isNull, reason: 'after step $i');
       }
+    });
+  });
+
+  group('set orders on a phone', () {
+    Future<PlaytestController> pump(WidgetTester tester, Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final (store, deck) = await buildStrideDeckWithOrders();
+      await tester.pumpWidget(
+        ChangeNotifierProvider<DeckStore>.value(
+          value: store,
+          child: MaterialApp(
+            theme: buildTheme(),
+            home: PlaytestScreen(
+              yourDeck: deck,
+              opponentDeck: deck,
+              random: Random(7),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      for (var i = 0; i < 2; i += 1) {
+        await tester.tap(find.text('Keep this hand'));
+        await tester.pump();
+      }
+      return Provider.of<PlaytestController>(
+        tester.element(find.byType(Scaffold)),
+        listen: false,
+      );
+    }
+
+    /// Sets [count] set orders for [side], the way the board does when one
+    /// is played from hand.
+    void setOrders(PlaytestController game, PlaytestSide side, int count) {
+      for (var i = 0; i < count; i += 1) {
+        final card = GameCard(
+          9100 + i,
+          CardDefinition(
+            id: 'phone-order-$i',
+            gameId: 'vanguard',
+            name: 'Phone Order $i',
+            attributes: const {'cardType': 'order-set'},
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        );
+        side.orderZone.add(card);
+      }
+    }
+
+    Rect fieldOf(WidgetTester tester, String side) => Circle.values
+        .map(
+          (c) => tester.getRect(find.byKey(ValueKey('circle-$side-${c.name}'))),
+        )
+        .reduce((a, b) => a.expandToInclude(b));
+
+    testWidgets('no strip until something is set', (tester) async {
+      final game = await pump(tester, const Size(390, 844));
+      expect(
+        find.byKey(ValueKey('order-strip-${game.you.name}')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(ValueKey('order-strip-${game.opponent.name}')),
+        findsNothing,
+      );
+    });
+
+    sizes.forEach((description, size) {
+      testWidgets('set orders sit against the field on $description', (
+        tester,
+      ) async {
+        final game = await pump(tester, size);
+        setOrders(game, game.you, 3);
+        setOrders(game, game.opponent, 2);
+        // Played the way the board plays one, so the board redraws.
+        final played = GameCard(
+          9200,
+          CardDefinition(
+            id: 'phone-order-played',
+            gameId: 'vanguard',
+            name: 'Played Order',
+            attributes: const {'cardType': 'order-set'},
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        );
+        game.handSide.hand.add(played);
+        game.playSetOrder(played);
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+
+        // Yours under your field, theirs over theirs: each on the side of
+        // its field away from the battle.
+        final you = game.you.name;
+        final them = game.opponent.name;
+        final yourField = fieldOf(tester, you);
+        final yourCard = tester.getRect(find.byKey(ValueKey('order-$you-0')));
+        expect(yourCard.top, greaterThanOrEqualTo(yourField.bottom));
+        final theirField = fieldOf(tester, them);
+        final theirCard = tester.getRect(find.byKey(ValueKey('order-$them-0')));
+        expect(theirCard.bottom, lessThanOrEqualTo(theirField.top));
+
+        // And within the width of the board, not off its edge.
+        final width = tester.view.physicalSize.width;
+        expect(yourCard.left, greaterThanOrEqualTo(0));
+        expect(yourCard.right, lessThanOrEqualTo(width));
+      });
+    });
+
+    testWidgets('more orders than fit across scroll sideways', (tester) async {
+      final game = await pump(tester, const Size(360, 640));
+      setOrders(game, game.you, 11);
+      final played = GameCard(
+        9300,
+        CardDefinition(
+          id: 'phone-order-twelfth',
+          gameId: 'vanguard',
+          name: 'Twelfth Order',
+          attributes: const {'cardType': 'order-set'},
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      );
+      game.handSide.hand.add(played);
+      game.playSetOrder(played);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('ORDERS 12'), findsOneWidget);
+
+      final strip = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(ValueKey('order-strip-list-${game.you.name}')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(
+        strip.position.maxScrollExtent,
+        greaterThan(0),
+        reason: 'twelve do not fit across a small phone, so the rest scroll',
+      );
+    });
+
+    testWidgets('tapping a set order opens the order zone', (tester) async {
+      final game = await pump(tester, const Size(390, 844));
+      final played = GameCard(
+        9400,
+        CardDefinition(
+          id: 'phone-order-tap',
+          gameId: 'vanguard',
+          name: 'Tapped Order',
+          attributes: const {'cardType': 'order-set'},
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      );
+      final side = game.handSide;
+      side.hand.add(played);
+      game.playSetOrder(played);
+      await tester.pump();
+
+      await tester.ensureVisible(find.byKey(ValueKey('order-${side.name}-0')));
+      await tester.tap(find.byKey(ValueKey('order-${side.name}-0')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('order zone (1)'), findsOneWidget);
+      expect(find.text('To the drop'), findsOneWidget);
+      // The pile on the rail is still there as well.
+      expect(find.text('Orders'), findsWidgets);
     });
   });
 }
