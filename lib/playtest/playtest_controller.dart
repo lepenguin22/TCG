@@ -50,7 +50,23 @@ class PlaytestController extends ChangeNotifier {
     );
     gameId = yourDeck.gameId;
     mulliganSide = state.you;
+    playsSetOrders = [state.you, state.opponent].any(
+      (side) => [
+        ...side.deck,
+        ...side.hand,
+        ...side.rideDeck,
+      ].any((card) => card.isSetOrder),
+    );
   }
+
+  /// Whether either deck has a set order in it, which a desktop board makes
+  /// room for beside the field.
+  ///
+  /// Settled once, as the game starts: the room comes out of the size the
+  /// cards are drawn at, and they should stay that size for the whole game
+  /// rather than shrinking the moment the first order is set. A deck with
+  /// none never gives up the room at all.
+  late final bool playsSetOrders;
 
   /// The game being played, for the screens that need to ask its rules or its
   /// card database something -- choosing a crest to play, among them.
