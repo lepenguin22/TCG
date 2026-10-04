@@ -57,6 +57,7 @@ class PlaytestController extends ChangeNotifier {
         ...side.rideDeck,
       ].any((card) => card.isSetOrder),
     );
+    strides = [state.you, state.opponent].any((side) => side.gZone.isNotEmpty);
   }
 
   /// Whether either deck has a set order in it, which a desktop board makes
@@ -67,6 +68,19 @@ class PlaytestController extends ChangeNotifier {
   /// rather than shrinking the moment the first order is set. A deck with
   /// none never gives up the room at all.
   late final bool playsSetOrders;
+
+  /// Whether either deck strides, which is the deck a stride crest such as
+  /// Nightrose is played for -- "You can perform [Stride]".
+  ///
+  /// A stride crest is in no deck: it is played into the crest zone from
+  /// outside the game, part way through one. So it cannot be counted as the
+  /// game starts the way a set order is, and the deck that will want one is
+  /// counted instead: a deck with a G zone.
+  late final bool strides;
+
+  /// Whether a desktop board keeps a column beside each field for the cards
+  /// that sit on the table there: set orders, and a stride deck's crest.
+  bool get keepsTableColumn => playsSetOrders || strides;
 
   /// The game being played, for the screens that need to ask its rules or its
   /// card database something -- choosing a crest to play, among them.

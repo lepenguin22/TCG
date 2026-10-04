@@ -14,7 +14,7 @@ import 'package:tcg_decks/playtest/playtest_state.dart';
 import 'package:tcg_decks/models/deck.dart';
 import 'package:tcg_decks/games/vanguard/vanguard_data.dart';
 
-import 'playtest_engine_test.dart' show buildStrideDeck;
+import 'playtest_engine_test.dart' show buildEnergyDeck, buildStrideDeck;
 
 /// The board is the densest screen in the app -- twelve circles, two damage
 /// rows, a hand and a control bar, all on a phone. It is also the screen where
@@ -36,6 +36,19 @@ Future<(DeckStore, Deck)> buildStrideDeckWithOrders() async {
   store.addToDeck(deck.id, product.id, zoneMain, quantity: 4);
   return (store, store.decks.firstWhere((d) => d.id == deck.id));
 }
+
+/// A stride deck's crest, as the card list files one: permission to stride.
+final nightrose = CardDefinition(
+  id: 'nightrose-crest',
+  gameId: 'vanguard',
+  name: 'Nightrose Crest',
+  attributes: const {
+    'cardType': 'crest',
+    'effect': '[CONT]:You can perform [Stride].',
+  },
+  createdAt: DateTime(2026),
+  updatedAt: DateTime(2026),
+);
 
 void main() {
   const sizes = <String, Size>{
@@ -393,14 +406,108 @@ void main() {
       expect(circleWidth(tester, 'circle-Player 1-vanguard'), before);
     });
 
-    testWidgets('a deck without set orders gives up no room for them', (
+    testWidgets('a deck with nothing for the table gives up no room', (
       tester,
     ) async {
-      // The default window, where the order column would cost the circles
-      // some width: a game that plays no orders is drawn as it always was.
-      final game = await pump(tester, opening);
-      expect(game.playsSetOrders, isFalse);
+      // The default window, where the column would cost the circles some
+      // width. A deck with no set orders and no G zone -- an Energy
+      // Generator deck -- is drawn as it always was.
+      final game = await pump(tester, opening, build: buildEnergyDeck);
+      expect(game.keepsTableColumn, isFalse);
       expect(circleWidth(tester, 'circle-Player 1-vanguard'), 132);
+    });
+
+    testWidgets('a stride deck keeps the column for its crest', (tester) async {
+      final game = await pump(tester, opening);
+      expect(game.strides, isTrue);
+      expect(game.keepsTableColumn, isTrue);
+      final before = circleWidth(tester, 'circle-Player 1-vanguard');
+
+      // Nightrose is played from outside the deck, part way through.
+      final side = game.handSide;
+      game.playCrest(side, nightrose);
+      await tester.pump();
+
+      final field = fieldOf(tester, side.name);
+      final crest = tester.getRect(
+        find.byKey(ValueKey('crest-${side.name}-0')),
+      );
+      expect(crest.right, lessThanOrEqualTo(field.left));
+      expect(crest.top, greaterThanOrEqualTo(field.top));
+      expect(crest.bottom, lessThanOrEqualTo(field.bottom));
+      expect(find.text('CREST'), findsOneWidget);
+      expect(
+        circleWidth(tester, 'circle-Player 1-vanguard'),
+        before,
+        reason: 'the room was kept from the start, so nothing resized',
+      );
+      expect(tester.takeException(), isNull);
+
+      // Clicking it opens the crest zone, where a crest is taken back.
+      await tester.tap(find.byKey(ValueKey('crest-${side.name}-0')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Crest zone'), findsOneWidget);
+    });
+
+    testWidgets('a crest comes before the orders, and both are counted', (
+      tester,
+    ) async {
+      final game = await pump(
+        tester,
+        opening,
+        build: buildStrideDeckWithOrders,
+      );
+      final side = game.handSide;
+      game.playCrest(side, nightrose);
+      setOrders(game, 2);
+      await tester.pump();
+
+      expect(find.text('ORDERS 2'), findsOneWidget);
+      // The crest says what it is on the card itself.
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey('crest-${side.name}-0')),
+          matching: find.text('CR'),
+        ),
+        findsOneWidget,
+      );
+      final crest = tester.getRect(
+        find.byKey(ValueKey('crest-${side.name}-0')),
+      );
+      final order = tester.getRect(
+        find.byKey(ValueKey('order-${side.name}-0')),
+      );
+      expect(
+        crest.top < order.top || crest.left > order.left,
+        isTrue,
+        reason: 'the crest is the first card on the table',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the Energy Generator is not drawn on the table', (
+      tester,
+    ) async {
+      // The widest window, where there is room beside the field whether or
+      // not a column was kept, so only the choice of what to draw is tested.
+      final game = await pump(
+        tester,
+        const Size(1100, 800),
+        build: buildEnergyDeck,
+      );
+      // The first ride from the ride deck puts the generator into play.
+      final first = game.engine.rideDeckOption(game.me);
+      expect(first, isNotNull);
+      game.ride(first!, fromRideDeck: true);
+      await tester.pump();
+      expect(
+        game.you.crestInPlay || game.opponent.crestInPlay,
+        isTrue,
+        reason: 'the generator has to be in play for this to say anything',
+      );
+      for (final side in [game.you, game.opponent]) {
+        expect(find.byKey(ValueKey('crest-${side.name}-0')), findsNothing);
+      }
     });
 
     testWidgets('clicking a set order opens the order zone', (tester) async {
@@ -639,6 +746,25 @@ void main() {
         greaterThan(0),
         reason: 'twelve do not fit across a small phone, so the rest scroll',
       );
+    });
+
+    testWidgets('a stride crest sits in the strip, ahead of the orders', (
+      tester,
+    ) async {
+      final game = await pump(tester, const Size(390, 844));
+      final side = game.handSide;
+      game.playCrest(side, nightrose);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      final crestKey = ValueKey('crest-${side.name}-0');
+      expect(find.byKey(crestKey), findsOneWidget);
+      expect(find.text('CREST'), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(crestKey));
+      await tester.tap(find.byKey(crestKey));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Crest zone'), findsOneWidget);
     });
 
     testWidgets('tapping a set order opens the order zone', (tester) async {
