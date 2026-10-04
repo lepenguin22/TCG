@@ -92,6 +92,29 @@ CARD_TYPES = {
 # A product line: a set's own, or the one every promo sits under.
 PRODUCT_LINE = re.compile(r"\[VGE-.*|PR cards")
 
+# Cards left out on purpose, each with why. These are pages the site gets
+# wrong in a way no parser fix would make right, and they used to count
+# against --max-failures on every run: one of five chances spent before a
+# real problem had a say.
+#
+# A card here is still read every run. One that still fails is reported as
+# skipped rather than failed. One that starts parsing is skipped all the
+# same and the log says so, since someone judged it unsafe to let in and
+# someone should look again before it is.
+KNOWN_UNREADABLE = {
+    # A commemorative Blaster Blade in The Legendary Vanguards. Its page
+    # prints the original 2011 rules text, "V-Premium" as its format, a
+    # D-series number, and a dash for every stat. Accepting the hyphenated
+    # format would let it parse, and the catalog builder would then fold a
+    # powerless unit into the busiest Blaster Blade -- the V-series one --
+    # and date that card D-series from this number, marking it legal in
+    # Standard. Nothing on the page says which Blaster Blade it really is.
+    "DZ-SS15/PGS01EN": (
+        "commemorative print with no stats, the original card's text and a "
+        "V-Premium format; nothing says which Blaster Blade it is"
+    ),
+}
+
 
 def card_url(number: str) -> str:
     """A card's own page.
@@ -439,6 +462,20 @@ def main() -> int:
     types: dict[str, int] = {}
     triggers: dict[str, int] = {}
     failures: list[str] = []
+    skipped: list[str] = []
+
+    def left_out(number: str, card: dict[str, object]) -> bool:
+        """Whether [number] stays out, noting why. A failure otherwise."""
+        reason = KNOWN_UNREADABLE.get(number)
+        if reason is None:
+            if not card:
+                failures.append(f"{number}: page did not parse")
+            return not card
+        if card:
+            reason += " (it parses now: check it, then take it off the list)"
+        skipped.append(f"{number}: {reason}")
+        return True
+
     for number, product in sorted(wanted.items()):
         listing = card_numbers(number)
         if not listing:
@@ -466,8 +503,7 @@ def main() -> int:
                 for line in lines[at : at + 22]:
                     print(f"      {line[:80]}")
                 args.dump_type = ""
-            if not card:
-                failures.append(f"{cardno}: page did not parse")
+            if left_out(cardno, card):
                 continue
             cards.append(card)
             types[str(card["type"])] = types.get(str(card["type"]), 0) + 1
@@ -513,6 +549,9 @@ def main() -> int:
                 print(f"    --- {number} parsed as ---")
                 print(f"      {json.dumps(parsed, ensure_ascii=False)[:700]}")
             card = parse_card(number, "", card_image(page), page)
+            if number in KNOWN_UNREADABLE:
+                left_out(number, card)
+                continue
             if not card:
                 # The page is the only thing that explains a failure here, so
                 # it is printed rather than summarised. Whether the product
@@ -562,6 +601,11 @@ def main() -> int:
         )
         if absent:
             print(f"  no trigger unit of these kinds at all: {sorted(absent)}")
+
+    if skipped:
+        print(f"\n{len(skipped)} cards left out on purpose (KNOWN_UNREADABLE):")
+        for line in skipped:
+            print(f"  {line}")
 
     if failures:
         print(f"\n{len(failures)} cards could not be read:")
