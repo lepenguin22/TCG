@@ -206,10 +206,20 @@ void main() {
     // under it too.
     await pumpBoard(tester, game.theirs);
     expect(find.text('Orders 1'), findsOneWidget);
+    // On the table against the field, too, where it can be read without
+    // opening anything; tapping it opens the pile, with nothing to move.
+    expect(find.byKey(const ValueKey('remote-order-their-0')), findsOneWidget);
+    expect(find.text('ORDERS 1'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('remote-order-their-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Player 1’s Orders (1)'), findsOneWidget);
+    expect(find.byKey(const ValueKey('move-order-900760')), findsNothing);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
 
     // And its owner can take it off the table again.
     await pumpBoard(tester, game.mine);
-    await tester.tap(find.text('Orders 1'));
+    await tester.tap(find.byKey(const ValueKey('remote-order-my-0')));
     await tester.pumpAndSettle();
     expect(find.text('Pinned Product'), findsWidgets);
 
@@ -220,5 +230,65 @@ void main() {
 
     expect(you.orderZone, isEmpty);
     expect(you.soul, contains(order));
+  });
+
+  testWidgets('a stride crest sits on the table on both boards', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final game = await hosted();
+    game.mine.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.theirs.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await tester.pump();
+
+    GameCard crest(int id, String name, String type) => GameCard(
+      id,
+      CardDefinition(
+        id: 'catalog:test-$id',
+        gameId: 'vanguard',
+        name: name,
+        attributes: {'grade': '0', 'cardType': type},
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+    final you = game.host.state.you;
+    you.crestZone
+      ..add(crest(900770, 'Energy Generator', 'ride-deck-crest'))
+      ..add(crest(900771, 'Nightrose', 'crest'));
+    game.host.broadcast();
+
+    for (final (board, whose) in [(game.theirs, 'my'), (game.mine, 'their')]) {
+      // Each board names the other's table "their", and its own "my".
+      final key = whose == 'my' ? 'their' : 'my';
+      await pumpBoard(tester, board);
+      expect(find.byKey(ValueKey('remote-crest-$key-0')), findsOneWidget);
+      // The Energy Generator stays in its pile: its energy is a number on
+      // the board already.
+      expect(find.byKey(ValueKey('remote-crest-$key-1')), findsNothing);
+      expect(find.text('CREST'), findsOneWidget);
+
+      await tester.tap(find.byKey(ValueKey('remote-crest-$key-0')));
+      await tester.pumpAndSettle();
+      expect(find.text('Player 1’s Crest (2)'), findsOneWidget);
+      expect(find.text('Energy Generator'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('a board with nothing on the table draws no strip', (
+    tester,
+  ) async {
+    final game = await hosted();
+    game.mine.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.theirs.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await pumpBoard(tester, game.mine);
+
+    expect(find.byKey(const ValueKey('remote-table-my')), findsNothing);
+    expect(find.byKey(const ValueKey('remote-table-their')), findsNothing);
   });
 }
