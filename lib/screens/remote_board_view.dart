@@ -6,6 +6,7 @@ import '../playtest/net/remote_board.dart';
 import '../playtest/playtest_state.dart';
 import '../theme.dart';
 import '../widgets/card_image.dart';
+import '../widgets/table_cards.dart';
 import 'playtest_screen.dart' show phaseColor;
 
 /// The board of a game being played on another device.
@@ -200,6 +201,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   phase: snapshot.phase,
                 ),
                 const SizedBox(height: 6),
+                _Table(side: snapshot.them, board: board, mine: false),
                 _Field(
                   side: snapshot.them,
                   board: board,
@@ -216,6 +218,13 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   mine: true,
                   selected: _attacker,
                   onTap: _tapMyCircle,
+                ),
+                _Table(
+                  side: snapshot.me,
+                  board: board,
+                  mine: true,
+                  onRemoveOrder: _removeOrder,
+                  below: true,
                 ),
                 const SizedBox(height: 6),
                 _SideStrip(
@@ -873,44 +882,15 @@ class _PileChip extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: cards.isEmpty
           ? null
-          : () => showModalBottomSheet<void>(
-              context: context,
-              backgroundColor: AppColors.surface,
-              showDragHandle: true,
-              builder: (_) => SafeArea(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                  children: [
-                    _SheetTitle('$owner’s $label (${cards.length})'),
-                    for (final id in cards.reversed)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: CardImage(
-                          url: board.cardOf(id)?.imageUrl,
-                          width: 30,
-                        ),
-                        title: Text(
-                          board.cardOf(id)?.name ?? 'A card',
-                          style: const TextStyle(
-                            color: AppColors.text,
-                            fontSize: 14,
-                          ),
-                        ),
-                        trailing: onPlay == null
-                            ? null
-                            : TextButton(
-                                key: ValueKey('$playKeyPrefix-$id'),
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                  onPlay!(id);
-                                },
-                                child: Text(playLabel),
-                              ),
-                      ),
-                  ],
-                ),
-              ),
+          : () => _showPile(
+              context,
+              label: label,
+              cards: cards,
+              board: board,
+              owner: owner,
+              onPlay: onPlay,
+              playLabel: playLabel,
+              playKeyPrefix: playKeyPrefix,
             ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -924,6 +904,130 @@ class _PileChip extends StatelessWidget {
           style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
         ),
       ),
+    );
+  }
+}
+
+/// A public pile laid out to read, each card with what it can be asked to
+/// do, where it can do anything.
+Future<void> _showPile(
+  BuildContext context, {
+  required String label,
+  required List<int> cards,
+  required RemoteBoard board,
+  required String owner,
+  void Function(int id)? onPlay,
+  String playLabel = 'Play',
+  String playKeyPrefix = 'play-from-drop',
+}) => showModalBottomSheet<void>(
+  context: context,
+  backgroundColor: AppColors.surface,
+  showDragHandle: true,
+  builder: (_) => SafeArea(
+    child: ListView(
+      shrinkWrap: true,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      children: [
+        _SheetTitle('$owner’s $label (${cards.length})'),
+        for (final id in cards.reversed)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CardImage(url: board.cardOf(id)?.imageUrl, width: 30),
+            title: Text(
+              board.cardOf(id)?.name ?? 'A card',
+              style: const TextStyle(color: AppColors.text, fontSize: 14),
+            ),
+            trailing: onPlay == null
+                ? null
+                : TextButton(
+                    key: ValueKey('$playKeyPrefix-$id'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onPlay(id);
+                    },
+                    child: Text(playLabel),
+                  ),
+          ),
+      ],
+    ),
+  ),
+);
+
+/// The cards one player has on the table against their field: a stride
+/// deck's crest, such as Nightrose, and their set orders, face up for both
+/// players to read, since both are playing under what they say.
+///
+/// Only there while there is something on the table, as on a phone's board
+/// played alone: most decks set nothing all game, and a phone has no space
+/// to keep empty. Tapping a card opens its pile, which is where its owner
+/// takes an order back off the table.
+class _Table extends StatelessWidget {
+  const _Table({
+    required this.side,
+    required this.board,
+    required this.mine,
+    this.onRemoveOrder,
+    this.below = false,
+  });
+
+  final SideSnapshot side;
+  final RemoteBoard board;
+  final bool mine;
+
+  /// Taking one of this player's own set orders off the table.
+  final void Function(int id)? onRemoveOrder;
+
+  /// Whether this is under the field rather than over it.
+  final bool below;
+
+  @override
+  Widget build(BuildContext context) {
+    final whose = mine ? 'my' : 'their';
+    final crests = tableCrests([
+      for (final id in side.crestIds) ?board.cardOf(id),
+    ]);
+    final orders = [for (final id in side.orderZoneIds) ?board.cardOf(id)];
+    if (crests.isEmpty && orders.isEmpty) return const SizedBox.shrink();
+    void openCrests() => _showPile(
+      context,
+      label: 'Crest',
+      cards: side.crestIds,
+      board: board,
+      owner: side.name,
+    );
+    void openOrders() => _showPile(
+      context,
+      label: 'Orders',
+      cards: side.orderZoneIds,
+      board: board,
+      owner: side.name,
+      onPlay: mine ? onRemoveOrder : null,
+      playLabel: 'Move',
+      playKeyPrefix: 'move-order',
+    );
+    return TableStrip(
+      key: ValueKey('remote-table-$whose'),
+      listKey: ValueKey('remote-table-list-$whose'),
+      caption: tableCaption(crests, orders),
+      below: below,
+      tiles: [
+        for (var i = 0; i < crests.length; i += 1)
+          TableCard(
+            key: ValueKey('remote-crest-$whose-$i'),
+            card: crests[i],
+            width: TableStrip.width,
+            accent: tableCrestColour,
+            badge: 'CR',
+            onTap: openCrests,
+          ),
+        for (var i = 0; i < orders.length; i += 1)
+          TableCard(
+            key: ValueKey('remote-order-$whose-$i'),
+            card: orders[i],
+            width: TableStrip.width,
+            onTap: openOrders,
+          ),
+      ],
     );
   }
 }
