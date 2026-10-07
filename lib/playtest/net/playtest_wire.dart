@@ -148,6 +148,7 @@ class SideSnapshot {
     required this.removedIds,
     required this.crestIds,
     required this.orderZoneIds,
+    this.restedOrders = const [],
     required this.energy,
     required this.energyCap,
     required this.goesFirst,
@@ -183,6 +184,9 @@ class SideSnapshot {
   /// The set orders on the table. Face up and public: a set order is text
   /// both players are playing under, so both players get to read it.
   final List<int> orderZoneIds;
+
+  /// Which of those are rested.
+  final List<int> restedOrders;
   final int energy;
   final int energyCap;
   final bool goesFirst;
@@ -208,6 +212,7 @@ class SideSnapshot {
     'removed': removedIds,
     'crest': crestIds,
     'orders': orderZoneIds,
+    'restedOrders': restedOrders,
     'energy': energy,
     'energyCap': energyCap,
     'goesFirst': goesFirst,
@@ -235,6 +240,7 @@ class SideSnapshot {
     removedIds: _ids(json['removed']),
     crestIds: _ids(json['crest']),
     orderZoneIds: _ids(json['orders']),
+    restedOrders: _ids(json['restedOrders']),
     energy: json['energy'] as int? ?? 0,
     energyCap: json['energyCap'] as int? ?? PlaytestSide.baseEnergyCap,
     goesFirst: json['goesFirst'] as bool? ?? false,
@@ -529,6 +535,7 @@ SideSnapshot _sideSnapshot(PlaytestSide side, {required bool ownedByViewer}) =>
       removedIds: [for (final card in side.removed) card.instanceId],
       crestIds: [for (final card in side.crestZone) card.instanceId],
       orderZoneIds: [for (final card in side.orderZone) card.instanceId],
+      restedOrders: side.restedOrders.toList(),
       energy: side.energy,
       energyCap: side.energyCap,
       goesFirst: side.goesFirst,

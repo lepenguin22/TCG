@@ -202,6 +202,9 @@ class PlaytestEngine {
     for (final unit in side.units) {
       unit.rested = false;
     }
+    // A rested set order stands with the units: the stand phase stands
+    // everything its player has rested.
+    side.restedOrders.clear();
     state.phase = PlaytestPhase.draw;
     state.note('--- Turn ${state.turn}: ${side.name} ---', by: side);
 
@@ -982,6 +985,8 @@ class PlaytestEngine {
     OrderExit to = OrderExit.drop,
   }) {
     if (!side.orderZone.remove(card)) return;
+    // Wherever it goes, it arrives standing.
+    side.restedOrders.remove(card.instanceId);
     switch (to) {
       case OrderExit.drop:
         side.drop.add(card);
@@ -1000,6 +1005,19 @@ class PlaytestEngine {
         OrderExit.hand => 'back to hand',
         OrderExit.removed => 'and out of the game',
       }}.',
+      by: side,
+    );
+  }
+
+  /// Rests a set order in the order zone, or stands it again, as one that
+  /// rests for its cost says to.
+  void toggleOrderRest(PlaytestSide side, GameCard card) {
+    if (!side.orderZone.contains(card)) return;
+    final id = card.instanceId;
+    final rested = side.restedOrders.add(id);
+    if (!rested) side.restedOrders.remove(id);
+    state.note(
+      '${side.name} ${rested ? 'rests' : 'stands'} ${card.name}.',
       by: side,
     );
   }

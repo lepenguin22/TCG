@@ -216,6 +216,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void toggleOrderRest(PlaytestSide side, GameCard card) {
+    engine.toggleOrderRest(side, card);
+    _sync();
+  }
+
   void playOrder(GameCard card) {
     engine.playOrder(me, card);
     holding = null;

@@ -209,6 +209,15 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.toggleOrderRest:
+        // Your own set orders only, as with taking one off the table.
+        final card = side.orderZone
+            .where((c) => c.instanceId == intent.card)
+            .firstOrNull;
+        if (card == null) {
+          return _refuse(side, 'no such card in the order zone');
+        }
+        engine.toggleOrderRest(side, card);
       case IntentKind.playBlitz:
         if (state.attack == null && state.phase != PlaytestPhase.battle) {
           return _refuse(side, 'a blitz order waits for a battle');

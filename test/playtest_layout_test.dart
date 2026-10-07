@@ -748,6 +748,45 @@ void main() {
       );
     });
 
+    testWidgets('a rested set order lies on its side, in the same place', (
+      tester,
+    ) async {
+      final game = await pump(tester, const Size(390, 844));
+      final played = GameCard(
+        9400,
+        CardDefinition(
+          id: 'phone-order-rested',
+          gameId: 'vanguard',
+          name: 'Rested Order',
+          attributes: const {'cardType': 'order-set'},
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      );
+      // Played the way the board plays one, so the board redraws.
+      game.handSide.hand.add(played);
+      game.playSetOrder(played);
+      await tester.pump();
+      final side = game.handSide;
+      final key = ValueKey('order-${side.name}-0');
+      bool onItsSide() => find
+          .descendant(of: find.byKey(key), matching: find.byType(RotatedBox))
+          .evaluate()
+          .isNotEmpty;
+      final upright = tester.getRect(find.byKey(key));
+      expect(onItsSide(), isFalse);
+
+      game.toggleOrderRest(side, played);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(onItsSide(), isTrue);
+      expect(
+        tester.getRect(find.byKey(key)),
+        upright,
+        reason: 'resting one never moves the cards beside it',
+      );
+    });
+
     testWidgets('a stride crest sits in the strip, ahead of the orders', (
       tester,
     ) async {

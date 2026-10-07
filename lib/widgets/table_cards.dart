@@ -45,6 +45,7 @@ class TableCard extends StatelessWidget {
     required this.onTap,
     this.accent,
     this.badge,
+    this.rested = false,
   });
 
   final GameCard card;
@@ -59,84 +60,96 @@ class TableCard extends StatelessWidget {
   /// as the deck builder badges one.
   final String? badge;
 
+  /// A rested set order, turned on its side as a rested unit is. It keeps
+  /// the place an upright card would take, so resting one never moves the
+  /// cards beside it.
+  final bool rested;
+
   @override
   Widget build(BuildContext context) {
+    final height = width / cardAspectRatio;
+    final face = SizedBox(width: width, height: height, child: _face());
     return Tooltip(
-      message: card.name,
+      message: rested ? '${card.name} (rested)' : card.name,
       child: GestureDetector(
         onTap: onTap,
         child: SizedBox(
           width: width,
-          height: width / cardAspectRatio,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CardImage(url: card.imageUrl, width: width),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(4),
+          height: height,
+          child: rested
+              ? Center(
+                  child: FittedBox(
+                    child: RotatedBox(
+                      quarterTurns: 1,
+                      child: Opacity(opacity: 0.75, child: face),
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 2,
-                    vertical: 1,
-                  ),
-                  child: Text(
-                    card.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 8, color: Colors.white),
-                  ),
-                ),
-              ),
-              if (badge != null)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 3,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: accent ?? Colors.black,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(4),
-                        bottomRight: Radius.circular(4),
-                      ),
-                    ),
-                    child: Text(
-                      badge!,
-                      style: const TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-              if (accent != null)
-                IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: accent!, width: 2),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+                )
+              : face,
         ),
       ),
     );
   }
+
+  Widget _face() => Stack(
+    fit: StackFit.expand,
+    children: [
+      CardImage(url: card.imageUrl, width: width),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.7),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(4),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          child: Text(
+            card.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 8, color: Colors.white),
+          ),
+        ),
+      ),
+      if (badge != null)
+        Positioned(
+          left: 0,
+          top: 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+            decoration: BoxDecoration(
+              color: accent ?? Colors.black,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                bottomRight: Radius.circular(4),
+              ),
+            ),
+            child: Text(
+              badge!,
+              style: const TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+      if (accent != null)
+        IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: accent!, width: 2),
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 /// A run of table cards in a strip against the field, with what they are

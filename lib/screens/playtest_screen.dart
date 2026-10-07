@@ -829,6 +829,7 @@ List<Widget> _tableTiles(
         key: ValueKey('order-${side.name}-$i'),
         card: orders[i],
         width: width,
+        rested: side.isRestedOrder(orders[i]),
         onTap: () => _showOrderZoneSheet(context, game, side),
       ),
   ];
@@ -2320,6 +2321,7 @@ void _showOrderZoneSheet(
                     '(${side.orderZone.length})',
                 caption:
                     'Set orders stay here face up, doing what they say. '
+                    'One rested for a cost stands in your stand phase. '
                     'Where one goes when it leaves is on the card.',
               ),
               if (side.orderZone.isEmpty)
@@ -2330,10 +2332,28 @@ void _showOrderZoneSheet(
               for (final card in side.orderZone) ...[
                 const SizedBox(height: 8),
                 _CardHeading(card: card),
+                if (side.isRestedOrder(card))
+                  const Text(
+                    'Rested',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 if (game.controls(side))
                   Wrap(
                     spacing: 4,
                     children: [
+                      // A set order that rests for its cost stands again in
+                      // its owner's stand phase, as a unit does.
+                      TextButton(
+                        key: ValueKey('order-rest-${card.instanceId}'),
+                        onPressed: () => game.toggleOrderRest(side, card),
+                        child: Text(
+                          side.isRestedOrder(card) ? 'Stand it' : 'Rest it',
+                        ),
+                      ),
                       for (final exit in [
                         (OrderExit.drop, 'To the drop'),
                         (OrderExit.soul, 'To the soul'),

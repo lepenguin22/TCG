@@ -35,6 +35,7 @@ enum IntentKind {
   addPower,
   addCritical,
   addDrive,
+  toggleOrderRest,
 }
 
 /// One request, named and with its arguments.
