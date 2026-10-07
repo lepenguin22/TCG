@@ -421,13 +421,23 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
     ]);
   }
 
-  /// Taking one of your own set orders off the table, wherever its text
-  /// says it goes.
+  /// Resting one of your own set orders, or taking it off the table,
+  /// wherever its text says it goes.
   Future<void> _removeOrder(int id) async {
     final face = board.cardOf(id);
     if (face == null) return;
+    final rested = snapshot.me.restedOrders.contains(id);
     await _sheet([
       _CardHeading(face: face),
+      // A set order that rests for its cost stands again in its owner's
+      // stand phase, as a unit does.
+      _Action(
+        key: const ValueKey('remote-order-rest'),
+        icon: rested ? Icons.arrow_upward : Icons.arrow_downward,
+        label: rested ? 'Stand it' : 'Rest it',
+        detail: rested ? null : 'It stands again in your stand phase.',
+        onTap: () => ask(PlaytestIntent(IntentKind.toggleOrderRest, card: id)),
+      ),
       for (final exit in const [
         (OrderExit.drop, 'To the drop zone', Icons.delete_outline),
         (OrderExit.soul, 'Into the soul', Icons.auto_awesome_outlined),
@@ -974,7 +984,8 @@ class _Table extends StatelessWidget {
   final RemoteBoard board;
   final bool mine;
 
-  /// Taking one of this player's own set orders off the table.
+  /// What can be done with one of this player's own set orders: resting
+  /// it, or taking it off the table.
   final void Function(int id)? onRemoveOrder;
 
   /// Whether this is under the field rather than over it.
@@ -986,7 +997,11 @@ class _Table extends StatelessWidget {
     final crests = tableCrests([
       for (final id in side.crestIds) ?board.cardOf(id),
     ]);
-    final orders = [for (final id in side.orderZoneIds) ?board.cardOf(id)];
+    final orderIds = [
+      for (final id in side.orderZoneIds)
+        if (board.cardOf(id) != null) id,
+    ];
+    final orders = [for (final id in orderIds) board.cardOf(id)!];
     if (crests.isEmpty && orders.isEmpty) return const SizedBox.shrink();
     void openCrests() => _showPile(
       context,
@@ -1025,7 +1040,12 @@ class _Table extends StatelessWidget {
             key: ValueKey('remote-order-$whose-$i'),
             card: orders[i],
             width: TableStrip.width,
-            onTap: openOrders,
+            rested: side.restedOrders.contains(orderIds[i]),
+            // Your own order opens what can be done with it; theirs, the
+            // pile to read.
+            onTap: mine && onRemoveOrder != null
+                ? () => onRemoveOrder!(orderIds[i])
+                : openOrders,
           ),
       ],
     );

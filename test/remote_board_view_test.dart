@@ -36,6 +36,15 @@ hosted() async {
   return (host: host, mine: mine, theirs: theirs);
 }
 
+/// Whether the table card under [key] is drawn on its side.
+bool rested(String key) => find
+    .descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.byType(RotatedBox),
+    )
+    .evaluate()
+    .isNotEmpty;
+
 Future<void> pumpBoard(WidgetTester tester, RemoteBoard board) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -219,10 +228,30 @@ void main() {
 
     // And its owner can take it off the table again.
     await pumpBoard(tester, game.mine);
+    // Tapping your own order opens what can be done with it: resting it
+    // first, which turns it on its side on both boards.
     await tester.tap(find.byKey(const ValueKey('remote-order-my-0')));
     await tester.pumpAndSettle();
     expect(find.text('Pinned Product'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('remote-order-rest')));
+    await tester.pumpAndSettle();
+    expect(you.isRestedOrder(order), isTrue);
+    expect(rested('remote-order-my-0'), isTrue);
+    await pumpBoard(tester, game.theirs);
+    expect(rested('remote-order-their-0'), isTrue);
 
+    await pumpBoard(tester, game.mine);
+    await tester.tap(find.byKey(const ValueKey('remote-order-my-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Stand it'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('remote-order-rest')));
+    await tester.pumpAndSettle();
+    expect(you.isRestedOrder(order), isFalse);
+    expect(rested('remote-order-my-0'), isFalse);
+
+    // The list behind the pile still moves it, too.
+    await tester.tap(find.text('Orders 1'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('move-order-900760')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('remote-order-exit-soul')));

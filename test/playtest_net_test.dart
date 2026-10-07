@@ -657,6 +657,80 @@ void main() {
       expect(idle.drop.contains(order), isFalse);
       expect(game.host.refusals.last, contains('order zone'));
     });
+
+    test('a set order rests, shows rested on both devices, and stands '
+        'again in its owner\'s stand phase', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      final order = setOrder(game.host, active);
+      mine.ask(PlaytestIntent(IntentKind.playSetOrder, card: order.instanceId));
+      await pumpEventQueue();
+
+      mine.ask(
+        PlaytestIntent(IntentKind.toggleOrderRest, card: order.instanceId),
+      );
+      await pumpEventQueue();
+
+      expect(active.isRestedOrder(order), isTrue);
+      expect(mine.snapshot!.me.restedOrders, [order.instanceId]);
+      expect(theirs.snapshot!.them.restedOrders, [order.instanceId]);
+
+      // The other player's turn leaves it rested; its owner's stands it.
+      game.host.engine.endTurn();
+      expect(active.isRestedOrder(order), isTrue);
+      game.host.engine.endTurn();
+      expect(game.host.state.active, active);
+      expect(active.isRestedOrder(order), isFalse);
+    });
+
+    test('a rested set order stands by hand, and leaves standing', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final order = setOrder(game.host, active);
+      mine.ask(PlaytestIntent(IntentKind.playSetOrder, card: order.instanceId));
+      for (var i = 0; i < 2; i += 1) {
+        mine.ask(
+          PlaytestIntent(IntentKind.toggleOrderRest, card: order.instanceId),
+        );
+      }
+      await pumpEventQueue();
+      expect(active.isRestedOrder(order), isFalse);
+
+      mine.ask(
+        PlaytestIntent(IntentKind.toggleOrderRest, card: order.instanceId),
+      );
+      mine.ask(
+        PlaytestIntent(
+          IntentKind.removeOrder,
+          card: order.instanceId,
+          exit: OrderExit.hand,
+        ),
+      );
+      await pumpEventQueue();
+      expect(active.restedOrders, isEmpty);
+    });
+
+    test('the other player cannot rest your set order', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      final order = setOrder(game.host, active);
+      mine.ask(PlaytestIntent(IntentKind.playSetOrder, card: order.instanceId));
+      await pumpEventQueue();
+
+      game.host.state.yourTurn = !game.host.state.yourTurn;
+      theirs.ask(
+        PlaytestIntent(IntentKind.toggleOrderRest, card: order.instanceId),
+      );
+      await pumpEventQueue();
+
+      expect(active.isRestedOrder(order), isFalse);
+      expect(game.host.refusals.last, contains('order zone'));
+    });
   });
 
   group('moving units and drive across two devices', () {

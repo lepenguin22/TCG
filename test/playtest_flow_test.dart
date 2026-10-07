@@ -851,6 +851,21 @@ void main() {
       expect(find.textContaining('order zone (1)'), findsOneWidget);
       expect(find.text('Set Product'), findsWidgets);
 
+      // Rested for a cost, and stood again by hand.
+      final rest = find.byWidgetPredicate(
+        (w) =>
+            w is TextButton &&
+            w.key is ValueKey<String> &&
+            (w.key! as ValueKey<String>).value.startsWith('order-rest-'),
+      );
+      await tester.tap(rest.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Rested'), findsOneWidget);
+      expect(find.text('Stand it'), findsOneWidget);
+      await tester.tap(rest.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Rested'), findsNothing);
+
       await tester.tap(find.byKey(const ValueKey('order-exit-soul')).first);
       await tester.pumpAndSettle();
       expect(find.textContaining('order zone (0)'), findsOneWidget);

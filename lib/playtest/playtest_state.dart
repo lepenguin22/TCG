@@ -206,6 +206,13 @@ class PlaytestSide {
   /// players can see them rather than swept into the drop.
   final List<GameCard> orderZone = [];
 
+  /// The set orders in the order zone that are rested, by instance.
+  ///
+  /// Some set orders rest as the cost of what they do -- "[COST] Rest this
+  /// card" -- and stand again in their owner's stand phase like a unit, so
+  /// whether one has been used this turn is part of the board.
+  final Set<int> restedOrders = {};
+
   /// The G zone cards that are face up.
   ///
   /// A G unit comes back face up when its stride ends, and abilities turn
@@ -279,6 +286,8 @@ class PlaytestSide {
   bool isSpent(GameCard card) => spentDamage.contains(card.instanceId);
 
   bool isFaceUp(GameCard card) => faceUpG.contains(card.instanceId);
+
+  bool isRestedOrder(GameCard card) => restedOrders.contains(card.instanceId);
 
   /// How many G zone cards are face up: the number a Generation Break is
   /// counted against.
