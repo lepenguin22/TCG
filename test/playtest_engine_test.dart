@@ -1918,6 +1918,93 @@ void main() {
       expect(you.drop.contains(checked), isFalse);
     });
 
+    test('a heal can be changed to another damage, which goes face down '
+        'or up as it was', () async {
+      final (store, deck) = await deckOfTriggers('heal');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      you.damage.addAll(you.deck.sublist(0, 3));
+      you.deck.removeRange(0, 3);
+      final [first, second, third] = [...you.damage];
+      you.spentDamage.add(second.instanceId);
+
+      engine.state.phase = PlaytestPhase.battle;
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheck();
+      final check = engine.state.triggerZone.last;
+
+      // The newest by default.
+      expect(check.healed, third);
+      expect(you.drop, contains(third));
+      expect(engine.healOptions(you, check), [first, second]);
+
+      // The face down one instead: it goes, the newest comes back.
+      engine.changeHeal(you, check, second);
+      expect(check.healed, second);
+      expect(you.damage, [first, third]);
+      expect(you.drop, contains(second));
+      expect(you.drop, isNot(contains(third)));
+      expect(you.isSpent(second), isFalse, reason: 'it left the damage zone');
+
+      // And changed again: the face down one goes back face down, where it
+      // lay.
+      engine.changeHeal(you, check, first);
+      expect(you.damage, [second, third]);
+      expect(you.isSpent(second), isTrue);
+      expect(you.drop, contains(first));
+      expect(you.damageCount, 2, reason: 'still one damage healed');
+    });
+
+    test('a damage check heal can be changed, but never to the card it '
+        'checked', () async {
+      final (store, deck) = await deckOfTriggers('heal');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final foe = engine.state.opponent;
+      you.damage.addAll(you.deck.sublist(0, 2));
+      you.deck.removeRange(0, 2);
+      foe.damage.addAll(foe.deck.sublist(0, 2));
+      foe.deck.removeRange(0, 2);
+      final [older, newer] = [...you.damage];
+
+      engine.dealDamage(you);
+      final check = engine.state.triggerZone.last;
+      expect(check.kind, CheckKind.damage);
+      expect(check.healed, newer);
+      expect(engine.healOptions(you, check), [older]);
+
+      engine.changeHeal(you, check, check.card);
+      expect(check.healed, newer, reason: 'the checked card is not healed');
+
+      engine.changeHeal(you, check, older);
+      expect(you.damage, containsAll([newer, check.card]));
+      expect(you.drop, contains(older));
+      expect(you.damageCount, 2);
+    });
+
+    test('a heal whose card has moved on cannot be changed', () async {
+      final (store, deck) = await deckOfTriggers('heal');
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      you.damage.addAll(you.deck.sublist(0, 2));
+      you.deck.removeRange(0, 2);
+      final older = you.damage.first;
+      engine.state.phase = PlaytestPhase.battle;
+      engine.declareAttack(from: Circle.vanguard, to: Circle.vanguard);
+      engine.driveCheck();
+      final check = engine.state.triggerZone.last;
+
+      // Something took the healed card out of the drop.
+      you.drop.remove(check.healed);
+      you.soul.add(check.healed!);
+      engine.changeHeal(you, check, older);
+
+      expect(you.damage, [older], reason: 'nothing changed');
+    });
+
     test('a heal on the last damage still saves the game', () async {
       final (store, deck) = await deckOfTriggers('heal');
       final engine = engineFor(store, deck);

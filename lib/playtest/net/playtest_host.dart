@@ -156,6 +156,8 @@ class PlaytestHost {
       // A card answering an attack out of the drop zone is the same moment
       // as a blitz order, and happens on the attacker's turn as often as not.
       IntentKind.activateFromDrop,
+      // A damage check heals the defender, on the attacker's turn.
+      IntentKind.chooseHeal,
     };
     final needsTurn = !offTurn.contains(intent.kind);
     final mulliganing = state.phase == PlaytestPhase.mulligan;
@@ -218,6 +220,23 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.toggleOrderRest(side, card);
+      case IntentKind.chooseHeal:
+        // Only your own heal, out of your own damage zone.
+        final check = state.triggerZone
+            .where(
+              (c) =>
+                  c.card.instanceId == intent.amount &&
+                  c.sideName == side.name &&
+                  c.healed != null,
+            )
+            .firstOrNull;
+        if (check == null) return _refuse(side, 'no heal of yours to change');
+        final card = engine
+            .healOptions(side, check)
+            .where((c) => c.instanceId == intent.card)
+            .firstOrNull;
+        if (card == null) return _refuse(side, 'that damage cannot be healed');
+        engine.changeHeal(side, check, card);
       case IntentKind.playBlitz:
         if (state.attack == null && state.phase != PlaytestPhase.battle) {
           return _refuse(side, 'a blitz order waits for a battle');

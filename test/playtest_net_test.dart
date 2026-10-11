@@ -733,6 +733,87 @@ void main() {
     });
   });
 
+  group('choosing what a heal heals across two devices', () {
+    GameCard heal(int id) => GameCard(
+      id,
+      CardDefinition(
+        id: 'catalog:test-heal-$id',
+        gameId: 'vanguard',
+        name: 'Heal $id',
+        attributes: const {
+          'grade': '0',
+          'cardType': 'trigger',
+          'trigger': 'heal',
+          'power': '5000',
+          'shield': '20000',
+        },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+
+    test('the defender picks the damage their heal takes', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final idle = active == game.sideOne ? game.sideTwo : game.sideOne;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      final attacker = active == game.sideOne ? game.one : game.two;
+      idle.damage.addAll(idle.deck.sublist(0, 2));
+      idle.deck.removeRange(0, 2);
+      active.damage.addAll(active.deck.sublist(0, 2));
+      active.deck.removeRange(0, 2);
+      final [older, newer] = [...idle.damage];
+      final trigger = heal(900800);
+      idle.deck.add(trigger);
+
+      game.host.engine.dealDamage(idle);
+      game.host.broadcast();
+      await pumpEventQueue();
+      final check = theirs.snapshot!.triggerZone.last;
+      expect(check.healedId, newer.instanceId);
+
+      // The attacker cannot choose it for them.
+      attacker.ask(
+        PlaytestIntent(
+          IntentKind.chooseHeal,
+          card: older.instanceId,
+          amount: trigger.instanceId,
+        ),
+      );
+      await pumpEventQueue();
+      expect(idle.drop, contains(newer));
+
+      // The defender can, on the attacker's turn.
+      theirs.ask(
+        PlaytestIntent(
+          IntentKind.chooseHeal,
+          card: older.instanceId,
+          amount: trigger.instanceId,
+        ),
+      );
+      await pumpEventQueue();
+      expect(idle.drop, contains(older));
+      expect(idle.damage, containsAll([newer, trigger]));
+      expect(
+        theirs.snapshot!.triggerZone.last.healedId,
+        older.instanceId,
+        reason: 'both boards hear which one went',
+      );
+
+      // Never the card the check turned up.
+      theirs.ask(
+        PlaytestIntent(
+          IntentKind.chooseHeal,
+          card: trigger.instanceId,
+          amount: trigger.instanceId,
+        ),
+      );
+      await pumpEventQueue();
+      expect(idle.damage, contains(trigger));
+      expect(game.host.refusals.last, contains('cannot be healed'));
+    });
+  });
+
   group('moving units and drive across two devices', () {
     /// A unit of [side]'s put straight onto [circle], the way a call would
     /// leave it.

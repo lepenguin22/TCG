@@ -387,6 +387,15 @@ class CheckedCard {
 
   /// Whether there is anything on this card to hand around.
   bool get isSplittable => powerGiven > 0 || criticalGiven > 0;
+
+  /// The damage a heal trigger sent to the drop zone, if it healed one.
+  ///
+  /// The board heals the newest damage, but which card goes is the healing
+  /// player's choice -- a face down one is usually the one worth losing -- so
+  /// it is remembered here, with whether it was spent, so a different card
+  /// can be healed instead and this one put back face down or up as it was.
+  GameCard? healed;
+  bool healedWasSpent = false;
 }
 
 /// How many drive checks a unit makes when it attacks.

@@ -1310,6 +1310,47 @@ class PlaytestEngine {
     );
   }
 
+  /// The damage a heal trigger could have healed instead of the one it did:
+  /// everything in the damage zone but the card that was itself checked,
+  /// which a heal never takes.
+  List<GameCard> healOptions(PlaytestSide side, CheckedCard checked) => [
+    for (final card in side.damage)
+      if (card != checked.card) card,
+  ];
+
+  /// Heals [instead] rather than the card the heal trigger took.
+  ///
+  /// Which damage a heal sends to the drop zone is the healing player's
+  /// choice. The board takes the newest, so this sends [instead] to the drop
+  /// zone and puts that one back in the place [instead] leaves, face up or
+  /// face down as it was.
+  void changeHeal(PlaytestSide side, CheckedCard checked, GameCard instead) {
+    final healed = checked.healed;
+    if (healed == null || instead == healed || instead == checked.card) return;
+    if (side.name != checked.sideName) return;
+    // Both have to be where the heal left them: a card that has moved on
+    // since is no longer this heal's to give back.
+    if (!side.drop.contains(healed)) return;
+    final at = side.damage.indexOf(instead);
+    if (at < 0) return;
+
+    side.damage[at] = healed;
+    final wasSpent = side.spentDamage.remove(instead.instanceId);
+    if (checked.healedWasSpent) side.spentDamage.add(healed.instanceId);
+    side.drop
+      ..remove(healed)
+      ..add(instead);
+
+    checked
+      ..healed = instead
+      ..healedWasSpent = wasSpent;
+    state.note(
+      '${side.name} heals ${instead.name} instead, and ${healed.name} goes '
+      'back to the damage zone.',
+      by: side,
+    );
+  }
+
   /// Resolves the attack: a hit on a vanguard is damage, a hit on a rear-guard
   /// retires it.
   /// Settles the attack on the table, and says whether it connected -- which
@@ -1457,7 +1498,16 @@ class PlaytestEngine {
         // counts towards neither the comparison nor what can be healed.
         final foe = side == state.you ? state.opponent : state.you;
         if (side.damageCount >= foe.damageCount && side.damage.isNotEmpty) {
-          side.drop.add(side.damage.removeLast());
+          // The newest damage by default; the player can pick another with
+          // [changeHeal] once it has resolved.
+          final healed = side.damage.removeLast();
+          final wasSpent = side.spentDamage.remove(healed.instanceId);
+          side.drop.add(healed);
+          if (checked != null && checked.card == card) {
+            checked
+              ..healed = healed
+              ..healedWasSpent = wasSpent;
+          }
           state.note(
             'Heal trigger: +$triggerPower power and a damage healed.',
             by: side,

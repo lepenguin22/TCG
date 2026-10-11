@@ -328,16 +328,21 @@ class CheckSnapshot {
     required this.cardId,
     required this.kind,
     required this.sideName,
+    this.healedId,
   });
 
   final int cardId;
   final CheckKind kind;
   final String sideName;
 
+  /// The damage this heal trigger sent to the drop zone, if it healed one.
+  final int? healedId;
+
   Map<String, Object?> toJson() => {
     'card': cardId,
     'kind': kind.name,
     'side': sideName,
+    if (healedId != null) 'healed': healedId,
   };
 
   static CheckSnapshot fromJson(Map<String, Object?> json) => CheckSnapshot(
@@ -347,6 +352,7 @@ class CheckSnapshot {
       orElse: () => CheckKind.drive,
     ),
     sideName: json['side'] as String? ?? '',
+    healedId: json['healed'] as int?,
   );
 }
 
@@ -499,6 +505,7 @@ PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
           cardId: check.card.instanceId,
           kind: check.kind,
           sideName: check.sideName,
+          healedId: check.healed?.instanceId,
         ),
     ],
     log: [

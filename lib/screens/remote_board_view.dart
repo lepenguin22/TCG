@@ -48,6 +48,66 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
 
   RemoteBoard get board => widget.board;
 
+  /// The heals already put to this player, by the heal trigger's card, so
+  /// each is asked about once.
+  final Set<int> _healsOffered = {};
+  bool _askingHeal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    board.addListener(_offerHeal);
+    // A heal that went off before this board was drawn is asked about too.
+    _offerHeal();
+  }
+
+  @override
+  void didUpdateWidget(RemoteBoardView old) {
+    super.didUpdateWidget(old);
+    if (old.board != widget.board) {
+      old.board.removeListener(_offerHeal);
+      widget.board.addListener(_offerHeal);
+    }
+  }
+
+  @override
+  void dispose() {
+    board.removeListener(_offerHeal);
+    super.dispose();
+  }
+
+  /// The damage one of this player's heals could have taken instead of the
+  /// one it did: anything in the damage zone but the checked card itself.
+  List<int> _healOptions(CheckSnapshot check) => [
+    for (final id in snapshot.me.damageIds)
+      if (id != check.cardId) id,
+  ];
+
+  /// Puts a heal of this player's that has just gone off to them: which
+  /// damage goes, where there is more than one it could be.
+  void _offerHeal() {
+    if (_askingHeal || !board.connected || board.snapshot == null) return;
+    final check = snapshot.triggerZone
+        .where(
+          (c) =>
+              c.healedId != null &&
+              c.sideName == snapshot.me.name &&
+              !_healsOffered.contains(c.cardId),
+        )
+        .firstOrNull;
+    if (check == null) return;
+    _healsOffered.add(check.cardId);
+    if (_healOptions(check).isEmpty) return;
+    _askingHeal = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _healSheet(check.cardId);
+      _askingHeal = false;
+      // A critical can deal two damage, and each can heal.
+      if (mounted) _offerHeal();
+    });
+  }
+
   PlaytestSnapshot get snapshot => board.snapshot!;
 
   void ask(PlaytestIntent intent) {
@@ -210,7 +270,17 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   onTap: _tapTheirCircle,
                 ),
                 const SizedBox(height: 10),
-                _Middle(snapshot: snapshot, board: board),
+                _Middle(
+                  snapshot: snapshot,
+                  board: board,
+                  // Your own heal can be asked again, to change what it took.
+                  onTapCheck: (check) {
+                    if (check.healedId != null &&
+                        check.sideName == snapshot.me.name) {
+                      _healSheet(check.cardId);
+                    }
+                  },
+                ),
                 const SizedBox(height: 10),
                 _Field(
                   side: snapshot.me,
@@ -454,6 +524,95 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
         ),
     ]);
   }
+
+  /// Which damage one of this player's heal triggers heals.
+  ///
+  /// The heal took the newest damage so the game never waits; picking
+  /// another here sends that one to the drop zone instead. The sheet follows
+  /// the board, so the choice shows as soon as the host has made it.
+  Future<void> _healSheet(int triggerId) => showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: ListenableBuilder(
+        listenable: board,
+        builder: (_, _) {
+          final check = board.snapshot?.triggerZone
+              .where((c) => c.cardId == triggerId)
+              .firstOrNull;
+          final healed = check?.healedId;
+          final spent = board.snapshot?.me.spentDamage ?? const <int>[];
+          Widget choice(int id, {required bool chosen}) => ListTile(
+            key: ValueKey('remote-heal-choice-$id'),
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              chosen
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 18,
+              color: chosen ? AppColors.accent : AppColors.textFaint,
+            ),
+            title: Text(
+              board.cardOf(id)?.name ?? 'A card',
+              style: const TextStyle(color: AppColors.text, fontSize: 14),
+            ),
+            subtitle: Text(
+              chosen
+                  ? 'Healed — in the drop zone'
+                  : spent.contains(id)
+                  ? 'Face down in the damage zone'
+                  : 'Face up in the damage zone',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            onTap: chosen
+                ? null
+                : () => board.ask(
+                    PlaytestIntent(
+                      IntentKind.chooseHeal,
+                      card: id,
+                      amount: triggerId,
+                    ),
+                  ),
+          );
+          return SingleChildScrollView(
+            key: const ValueKey('remote-heal-sheet'),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SheetTitle(
+                  '${board.cardOf(triggerId)?.name ?? 'The heal'} heals a damage',
+                ),
+                const Text(
+                  'It healed the newest damage. Pick another to send it to '
+                  'the drop zone instead.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                if (check != null && healed != null) ...[
+                  choice(healed, chosen: true),
+                  for (final id in _healOptions(check).reversed)
+                    choice(id, chosen: false),
+                ],
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    key: const ValueKey('remote-heal-done'),
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ),
+  );
 
   Future<void> _handSheet(int id) async {
     final face = board.cardOf(id);
@@ -1174,10 +1333,15 @@ class _UnitCell extends StatelessWidget {
 
 /// The attack on the table, and what the checks have turned up.
 class _Middle extends StatelessWidget {
-  const _Middle({required this.snapshot, required this.board});
+  const _Middle({
+    required this.snapshot,
+    required this.board,
+    required this.onTapCheck,
+  });
 
   final PlaytestSnapshot snapshot;
   final RemoteBoard board;
+  final void Function(CheckSnapshot check) onTapCheck;
 
   @override
   Widget build(BuildContext context) {
@@ -1205,7 +1369,11 @@ class _Middle extends StatelessWidget {
             spacing: 6,
             children: [
               for (final check in snapshot.triggerZone)
-                _CardTile(face: board.cardOf(check.cardId), width: 44),
+                GestureDetector(
+                  key: ValueKey('remote-check-${check.cardId}'),
+                  onTap: () => onTapCheck(check),
+                  child: _CardTile(face: board.cardOf(check.cardId), width: 44),
+                ),
             ],
           ),
         ],
