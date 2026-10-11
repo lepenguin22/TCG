@@ -36,6 +36,10 @@ enum IntentKind {
   addCritical,
   addDrive,
   toggleOrderRest,
+
+  /// Which damage a heal trigger heals: [PlaytestIntent.card] is the damage
+  /// to heal and [PlaytestIntent.amount] the heal trigger's own card.
+  chooseHeal,
 }
 
 /// One request, named and with its arguments.

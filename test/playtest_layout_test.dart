@@ -210,6 +210,62 @@ void main() {
     double circleWidth(WidgetTester tester, String key) =>
         tester.getSize(find.byKey(ValueKey(key))).width;
 
+    testWidgets('a heal asks which damage it takes', (tester) async {
+      final game = await pump(tester, opening);
+      final side = game.you;
+      final foe = game.opponent;
+      side.damage.addAll(side.deck.sublist(0, 3));
+      side.deck.removeRange(0, 3);
+      foe.damage.addAll(foe.deck.sublist(0, 3));
+      foe.deck.removeRange(0, 3);
+      final [first, second, third] = [...side.damage];
+      side.spentDamage.add(second.instanceId);
+      final heal = GameCard(
+        9500,
+        CardDefinition(
+          id: 'layout-heal',
+          gameId: 'vanguard',
+          name: 'Layout Healer',
+          attributes: const {
+            'grade': '0',
+            'cardType': 'trigger',
+            'trigger': 'heal',
+            'power': '5000',
+            'shield': '20000',
+          },
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      );
+      side.deck.add(heal);
+
+      game.dealDamage(side);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Asked at once, with the newest already healed.
+      expect(find.byKey(const ValueKey('heal-sheet')), findsOneWidget);
+      expect(side.drop, contains(third));
+      expect(find.text('Face down in the damage zone'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(ValueKey('heal-choice-${second.instanceId}')),
+      );
+      await tester.pumpAndSettle();
+      expect(side.drop, contains(second));
+      expect(side.damage, containsAll([first, third, heal]));
+      expect(side.damage, isNot(contains(second)));
+
+      await tester.tap(find.byKey(const ValueKey('heal-done')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('heal-sheet')), findsNothing);
+
+      // Asked once only; a heal with nothing else to take is not asked.
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('heal-sheet')), findsNothing);
+    });
+
     testWidgets('both players are on the screen at once, unscrolled', (
       tester,
     ) async {

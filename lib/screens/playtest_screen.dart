@@ -52,16 +52,46 @@ class PlaytestScreen extends StatefulWidget {
 class _PlaytestScreenState extends State<PlaytestScreen> {
   PlaytestController? _controller;
 
+  /// Whether a heal is being asked about, so a second waits its turn
+  /// rather than stacking a sheet on top of the first.
+  bool _askingHeal = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _controller ??= PlaytestController(
-      store: context.read<DeckStore>(),
-      yourDeck: widget.yourDeck,
-      opponentDeck: widget.opponentDeck,
-      turnOrder: widget.turnOrder,
-      random: widget.random,
-    );
+    if (_controller == null) {
+      _controller = PlaytestController(
+        store: context.read<DeckStore>(),
+        yourDeck: widget.yourDeck,
+        opponentDeck: widget.opponentDeck,
+        turnOrder: widget.turnOrder,
+        random: widget.random,
+      );
+      _controller!.addListener(_offerHeal);
+    }
+  }
+
+  /// Puts a heal that has just gone off to the player: which damage goes.
+  void _offerHeal() {
+    final game = _controller;
+    if (game == null || _askingHeal) return;
+    final check = game.takeHealToChoose();
+    if (check == null) return;
+    final side = game.sideNamed(check.sideName);
+    if (side == null) return;
+    _askingHeal = true;
+    // After the frame that drew the heal, so the sheet opens over a board
+    // that already shows it.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _controller != game) {
+        _askingHeal = false;
+        return;
+      }
+      await _showHealSheet(context, game, side, check);
+      _askingHeal = false;
+      // A critical can deal two damage, and each can heal.
+      if (mounted && _controller == game) _offerHeal();
+    });
   }
 
   @override
@@ -162,7 +192,8 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
         yourDeck: widget.yourDeck,
         opponentDeck: widget.opponentDeck,
         turnOrder: widget.turnOrder,
-      );
+      )..addListener(_offerHeal);
+      _askingHeal = false;
     });
   }
 
@@ -3294,16 +3325,20 @@ class _TriggerZone extends StatelessWidget {
             cornerColour: check.kind == CheckKind.drive
                 ? AppColors.accent
                 : AppColors.danger,
-            tooltip: check.isSplittable
+            tooltip: check.healed != null
+                ? '${check.sideName} · ${check.kind.label} — '
+                      'tap to choose who gets it and what it heals'
+                : check.isSplittable
                 ? '${check.sideName} · ${check.kind.label} — '
                       'tap to choose who gets it'
                 : '${check.sideName} · ${check.kind.label}',
             // A trigger's power and critical are the checking player's to
-            // place, and they do not have to go to the same unit.
-            onTap: !check.isSplittable
+            // place, and they do not have to go to the same unit. A heal's
+            // damage is theirs to pick, too.
+            onTap: !check.isSplittable && check.healed == null
                 ? null
                 : () {
-                    final side = _sideNamed(game, check.sideName);
+                    final side = game.sideNamed(check.sideName);
                     if (side == null || !game.controls(side)) return;
                     _showTriggerSplitSheet(context, game, side, check);
                   },
@@ -3311,12 +3346,6 @@ class _TriggerZone extends StatelessWidget {
       ],
     );
   }
-}
-
-PlaytestSide? _sideNamed(PlaytestController game, String name) {
-  if (game.you.name == name) return game.you;
-  if (game.opponent.name == name) return game.opponent;
-  return null;
 }
 
 /// Who a checked trigger's power and critical go to.
@@ -3426,6 +3455,19 @@ void _showTriggerSplitSheet(
                   ),
                   targets(power: false),
                 ],
+                if (check.healed != null) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'HEALED',
+                    style: TextStyle(
+                      color: AppColors.textFaint,
+                      fontSize: 11,
+                      letterSpacing: 0.6,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  ..._healChoices(game, side, check),
+                ],
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -3442,6 +3484,94 @@ void _showTriggerSplitSheet(
     ),
   );
 }
+
+/// The damage a heal trigger can send to the drop zone, the one it sent
+/// marked, and tapping another heals that one instead.
+List<Widget> _healChoices(
+  PlaytestController game,
+  PlaytestSide side,
+  CheckedCard check,
+) {
+  final healed = check.healed;
+  if (healed == null) return const [];
+  Widget choice(GameCard card, {required bool chosen, required bool spent}) =>
+      ListTile(
+        key: ValueKey('heal-choice-${card.instanceId}'),
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(
+          chosen ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+          size: 18,
+          color: chosen ? AppColors.accent : AppColors.textFaint,
+        ),
+        title: Text(
+          card.name,
+          style: const TextStyle(color: AppColors.text, fontSize: 14),
+        ),
+        subtitle: Text(
+          chosen
+              ? 'Healed — in the drop zone'
+              : spent
+              ? 'Face down in the damage zone'
+              : 'Face up in the damage zone',
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+        ),
+        onTap: chosen ? null : () => game.changeHeal(side, check, card),
+      );
+  return [
+    choice(healed, chosen: true, spent: check.healedWasSpent),
+    for (final card in game.engine.healOptions(side, check).reversed)
+      choice(card, chosen: false, spent: side.isSpent(card)),
+  ];
+}
+
+/// Asks which damage a heal trigger heals, as soon as one goes off.
+///
+/// The board has already healed the newest damage, so closing this without
+/// choosing keeps that. The trigger stays in the trigger zone, and tapping
+/// it asks again.
+Future<void> _showHealSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+  CheckedCard check,
+) => showModalBottomSheet<void>(
+  context: context,
+  backgroundColor: AppColors.surface,
+  showDragHandle: true,
+  isScrollControlled: true,
+  builder: (sheetContext) => SafeArea(
+    child: DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      builder: (_, scrollController) => ListenableBuilder(
+        listenable: game,
+        builder: (_, _) => ListView(
+          key: const ValueKey('heal-sheet'),
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            SectionHeader(
+              title: '${side.name} heals a damage',
+              caption:
+                  '${check.card.name} healed the newest damage. Pick another '
+                  'to send it to the drop zone instead.',
+            ),
+            ..._healChoices(game, side, check),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const ValueKey('heal-done'),
+                onPressed: () => Navigator.of(sheetContext).pop(),
+                child: const Text('Done'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ),
+);
 
 /// A labelled row of cards, scrolling sideways when there are many.
 class _ZoneStrip extends StatelessWidget {

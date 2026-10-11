@@ -374,6 +374,40 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  /// Heals [instead] rather than the damage a heal trigger took.
+  void changeHeal(PlaytestSide side, CheckedCard checked, GameCard instead) {
+    engine.changeHeal(side, checked, instead);
+    _sync();
+  }
+
+  /// The heals already put to the player, so each is asked about once.
+  final Set<CheckedCard> _healsOffered = {};
+
+  /// A heal that has just gone off with another damage it could have taken
+  /// instead, not yet put to the player. Taking it marks it asked.
+  ///
+  /// The board heals the newest damage straight away so the game never
+  /// waits, and then asks: most of the time the answer is a face down card,
+  /// which is worth more to lose than the face up one just taken.
+  CheckedCard? takeHealToChoose() {
+    for (final check in state.triggerZone) {
+      if (check.healed == null || !_healsOffered.add(check)) continue;
+      final side = sideNamed(check.sideName);
+      if (side == null || !controls(side)) continue;
+      // Nothing else it could have taken, so nothing to ask.
+      if (engine.healOptions(side, check).isEmpty) continue;
+      return check;
+    }
+    return null;
+  }
+
+  /// The side that goes by [name].
+  PlaytestSide? sideNamed(String name) {
+    if (name == you.name) return you;
+    if (name == opponent.name) return opponent;
+    return null;
+  }
+
   void grantBoost(PlaytestSide side, Circle circle, {required bool granted}) {
     engine.grantBoost(side, circle, granted: granted);
     _sync();

@@ -320,4 +320,64 @@ void main() {
     expect(find.byKey(const ValueKey('remote-table-my')), findsNothing);
     expect(find.byKey(const ValueKey('remote-table-their')), findsNothing);
   });
+
+  testWidgets('your heal asks which damage it takes', (tester) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final game = await hosted();
+    game.mine.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.theirs.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await tester.pump();
+
+    final you = game.host.state.you;
+    final foe = game.host.state.opponent;
+    you.damage.addAll(you.deck.sublist(0, 2));
+    you.deck.removeRange(0, 2);
+    foe.damage.addAll(foe.deck.sublist(0, 2));
+    foe.deck.removeRange(0, 2);
+    final older = you.damage.first;
+    final heal = GameCard(
+      900810,
+      CardDefinition(
+        id: 'catalog:test-heal',
+        gameId: 'vanguard',
+        name: 'Healer',
+        attributes: const {
+          'grade': '0',
+          'cardType': 'trigger',
+          'trigger': 'heal',
+          'power': '5000',
+          'shield': '20000',
+        },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+    you.deck.add(heal);
+    game.host.engine.dealDamage(you);
+    game.host.broadcast();
+
+    await pumpBoard(tester, game.mine);
+    expect(find.byKey(const ValueKey('remote-heal-sheet')), findsOneWidget);
+    await tester.tap(
+      find.byKey(ValueKey('remote-heal-choice-${older.instanceId}')),
+    );
+    await tester.pumpAndSettle();
+    expect(you.drop, contains(older));
+    expect(you.damage, isNot(contains(older)));
+
+    await tester.tap(find.byKey(const ValueKey('remote-heal-done')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('remote-heal-sheet')), findsNothing);
+
+    // Not asked again, but the heal in the trigger zone opens it.
+    await pumpBoard(tester, game.mine);
+    expect(find.byKey(const ValueKey('remote-heal-sheet')), findsNothing);
+
+    // And the other player is never asked about it.
+    await pumpBoard(tester, game.theirs);
+    expect(find.byKey(const ValueKey('remote-heal-sheet')), findsNothing);
+  });
 }
