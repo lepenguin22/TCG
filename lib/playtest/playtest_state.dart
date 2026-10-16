@@ -400,11 +400,11 @@ class CheckedCard {
 
 /// How many drive checks a unit makes when it attacks.
 ///
-/// A G unit triple drives and any other vanguard of grade 3 or more twin
-/// drives -- a grade 4 normal unit such as Drajeweled Ignis included;
-/// everything below checks once. A rear-guard has no drive of its own --
-/// drive is the vanguard's -- so it checks only for as much as an ability
-/// gave it, which several cards do.
+/// A grade 3 vanguard twin drives and a grade 4 triple drives -- a G unit
+/// or a grade 4 normal unit such as Drajeweled Ignis alike; everything
+/// below checks once. A rear-guard has no drive of its own -- drive is the
+/// vanguard's -- so it checks only for as much as an ability gave it, which
+/// several cards do.
 ///
 /// It lives here rather than in the engine because the attack itself is
 /// asked how many checks it owes, and a board on another device has the
@@ -412,8 +412,8 @@ class CheckedCard {
 int driveChecksOf(FieldUnit unit, {required bool asVanguard}) {
   final base = asVanguard
       ? switch (unit.card.grade) {
-          _ when unit.card.cardType == 'g-unit' => 3,
-          >= 3 => 2,
+          >= 4 => 3,
+          3 => 2,
           _ => 1,
         }
       : 0;

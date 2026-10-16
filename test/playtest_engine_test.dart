@@ -1211,7 +1211,7 @@ void main() {
       expect(engine3.driveCount(you3.vanguard!), 2, reason: 'twin drive');
     });
 
-    test('a G unit triple drives; a grade 4 normal unit twin drives', () {
+    test('a grade 4 triple drives, G unit or not', () {
       FieldUnit unit(String type) => FieldUnit(
         GameCard(
           1,
@@ -1228,8 +1228,8 @@ void main() {
       expect(driveChecksOf(unit('g-unit'), asVanguard: true), 3);
       expect(
         driveChecksOf(unit('normal'), asVanguard: true),
-        2,
-        reason: 'Drajeweled Ignis twin drives like any grade 3 or more',
+        3,
+        reason: 'Drajeweled Ignis triple drives as a G unit does',
       );
     });
 
