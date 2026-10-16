@@ -93,10 +93,15 @@ class DecklogImportResult {
 /// The zone a card belongs in by virtue of what it is, whatever section of the
 /// payload it arrived in. A G unit is only ever legal in the G zone and a ride
 /// deck crest only in the ride deck, so neither needs the payload's help.
+///
+/// A G unit is known by its card type, never its grade. Grade 4 was the G
+/// units' alone in the G era, but D-series and Divinez print grade 4 normal
+/// units for the main deck -- Drajeweled Ignis, Mahar Nirvana and a few dozen
+/// more -- and reading grade 4 as "G unit" filed every one in the G zone.
 String? _zoneFromCard(CatalogCard? match) {
   final type = match?.attributes['cardType'];
   if (type == 'ride-deck-crest') return zoneRide;
-  if (type == 'g-unit' || match?.attributes['grade'] == '4') return zoneG;
+  if (type == 'g-unit') return zoneG;
   return null;
 }
 

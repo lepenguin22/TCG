@@ -60,7 +60,7 @@ const gradeOptions = <FieldOption>[
   FieldOption('1', 'Grade 1', color: Color(0xFF5BD6A8)),
   FieldOption('2', 'Grade 2', color: Color(0xFFF5C453)),
   FieldOption('3', 'Grade 3', color: Color(0xFFF58B54)),
-  FieldOption('4', 'Grade 4 (G unit)', color: Color(0xFFC08BF5)),
+  FieldOption('4', 'Grade 4', color: Color(0xFFC08BF5)),
 ];
 
 const cardTypeOptions = <FieldOption>[

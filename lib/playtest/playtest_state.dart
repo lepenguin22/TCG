@@ -400,7 +400,8 @@ class CheckedCard {
 
 /// How many drive checks a unit makes when it attacks.
 ///
-/// A grade 3 vanguard twin drives and a grade 4 triple drives; everything
+/// A grade 3 vanguard twin drives and a grade 4 triple drives -- a G unit
+/// or a grade 4 normal unit such as Drajeweled Ignis alike; everything
 /// below checks once. A rear-guard has no drive of its own -- drive is the
 /// vanguard's -- so it checks only for as much as an ability gave it, which
 /// several cards do.
