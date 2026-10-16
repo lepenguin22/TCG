@@ -386,6 +386,24 @@ void main() {
       });
     });
 
+    test('a grade 4 normal unit is a main deck card, not a G unit', () {
+      final ignis = card('Drajeweled Ignis', {
+        'grade': '4',
+        'cardType': 'normal',
+      });
+      final inMain = legalStandardDeck()..add(Slot(ignis, zoneMain, 1));
+      expect(
+        errorsOf(viewOf(formatStandard, inMain)),
+        isNot(contains(contains('G unit'))),
+      );
+
+      final inG = legalStandardDeck()..add(Slot(ignis, zoneG, 1));
+      expect(
+        errorsOf(viewOf(formatStandard, inG)),
+        contains(contains('is not a G unit')),
+      );
+    });
+
     test('a G unit in the main deck belongs in the G zone', () {
       final slots = legalStandardDeck()
         ..add(

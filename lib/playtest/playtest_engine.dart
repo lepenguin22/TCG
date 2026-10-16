@@ -1201,8 +1201,8 @@ class PlaytestEngine {
 
   /// How many drive checks a unit's attack makes.
   ///
-  /// A grade 3 vanguard twin drives and a grade 4 triple drives; everything
-  /// below checks once. A rear-guard checks nothing of its own -- drive is
+  /// A G unit triple drives and any other grade 3 or more twin drives;
+  /// everything below checks once. A rear-guard checks nothing of its own -- drive is
   /// the vanguard's -- so [asVanguard] is false for one, and it drive checks
   /// only for as much as an ability gave it. Several cards do exactly that.
   int driveCount(FieldUnit unit, {bool asVanguard = true}) =>

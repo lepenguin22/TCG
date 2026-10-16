@@ -85,9 +85,9 @@ String _seriesSentence(String series) {
 bool _isCrest(DeckItem item) =>
     item.card.attributes['cardType'] == 'ride-deck-crest';
 
-bool _isGUnit(DeckItem item) =>
-    item.card.attributes['grade'] == '4' ||
-    item.card.attributes['cardType'] == 'g-unit';
+/// A G unit, by its card type. Not by grade: D-series and Divinez print
+/// grade 4 normal units, which are main deck cards like any other.
+bool _isGUnit(DeckItem item) => item.card.attributes['cardType'] == 'g-unit';
 
 /// The G zone rules, which Standard and Premium share: up to sixteen cards,
 /// G units only, and G units nowhere else. Having no G zone at all is fine --
@@ -356,8 +356,7 @@ List<ValidationIssue> validateVanguard(DeckView view) {
     // V Premium is the V-series format: no ride deck and no stride, so no G
     // units and no G zone either.
     for (final item in [...main, ...gZone]) {
-      if (item.card.attributes['grade'] == '4' ||
-          item.card.attributes['cardType'] == 'g-unit') {
+      if (_isGUnit(item)) {
         issues.add(
           ValidationIssue.error(
             '"${item.card.name}" is a G unit. V Premium has no stride, so G '

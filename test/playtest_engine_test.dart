@@ -1211,6 +1211,28 @@ void main() {
       expect(engine3.driveCount(you3.vanguard!), 2, reason: 'twin drive');
     });
 
+    test('a G unit triple drives; a grade 4 normal unit twin drives', () {
+      FieldUnit unit(String type) => FieldUnit(
+        GameCard(
+          1,
+          CardDefinition(
+            id: 'grade-4-$type',
+            gameId: 'vanguard',
+            name: 'Grade 4 $type',
+            attributes: {'grade': '4', 'cardType': type},
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ),
+      );
+      expect(driveChecksOf(unit('g-unit'), asVanguard: true), 3);
+      expect(
+        driveChecksOf(unit('normal'), asVanguard: true),
+        2,
+        reason: 'Drajeweled Ignis twin drives like any grade 3 or more',
+      );
+    });
+
     test('an ability can add a check', () async {
       final (store, deck) = await buildDeck();
       final (engine, you) = atGrade(store, deck, 3);

@@ -77,6 +77,16 @@ final _catalog = [
     'no': 'DZ-BT06/EX03EN',
     'sr': 'd',
   }),
+  // A grade 4 that is not a G unit: a D-series main deck card, ridden on
+  // top of a grade 3 Drajeweled.
+  _card('Demonic Jewel True Dragon, Drajeweled Ignis', {
+    'g': 4,
+    't': 'normal',
+    'na': 'dark-states',
+    'no': 'D-BT13/004EN',
+    'p': 13000,
+    'sr': 'd',
+  }),
   _card('Energy Generator', {
     't': 'ride-deck-crest',
     'no': 'DZ-TD01/005EN',
@@ -1166,6 +1176,34 @@ void main() {
       final view = store.viewOf(result.deck);
       expect(view.zoneCount(zoneG), 4);
       expect(view.zoneCount(zoneMain), 0);
+    });
+
+    test('a grade 4 normal unit stays in the main deck', () async {
+      // Grade 4 was the G units' alone in the G era. D-series and Divinez
+      // print grade 4 normal units for the main deck, and the card type --
+      // not the grade -- is what says which is which.
+      final store = await loadedStore();
+      final catalog = CardCatalog()..seed(_asset, _catalog);
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        parseDecklogPayload(
+          payload(
+            list: [
+              entry(
+                'Demonic Jewel True Dragon, Drajeweled Ignis',
+                4,
+                'D-BT13/004EN',
+              ),
+            ],
+          ),
+          code: 'X',
+        ),
+      );
+
+      final view = store.viewOf(result.deck);
+      expect(view.zoneCount(zoneMain), 4);
+      expect(view.zoneCount(zoneG), 0);
     });
 
     test('a ride deck crest lands in the ride deck', () async {
