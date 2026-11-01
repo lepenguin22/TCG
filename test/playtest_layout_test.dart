@@ -210,6 +210,43 @@ void main() {
     double circleWidth(WidgetTester tester, String key) =>
         tester.getSize(find.byKey(ValueKey(key))).width;
 
+    testWidgets('a soul card is bound, and the bind zone moves it on', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.handSide;
+      game.soulCharge(side, 1);
+      await tester.pumpAndSettle();
+      final card = side.soul.last;
+      expect(find.text('Bind'), findsNothing, reason: 'nothing bound yet');
+
+      await tester.tap(find.text('Soul').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('bind-${card.instanceId}')));
+      await tester.pumpAndSettle();
+      expect(side.bind, [card]);
+      expect(side.soul, isNot(contains(card)));
+
+      // On the table beside the field, badged, where it can be read.
+      final onTable = ValueKey('bind-${side.name}-0');
+      expect(find.byKey(onTable), findsOneWidget);
+      expect(find.text('BIND 1'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(onTable), matching: find.text('BIND')),
+        findsOneWidget,
+      );
+
+      // Clicking it opens the bind zone, as the pile does.
+      await tester.tap(find.byKey(onTable));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Bind zone (1)'), findsOneWidget);
+      await tester.tap(find.text('To hand'));
+      await tester.pumpAndSettle();
+      expect(side.bind, isEmpty);
+      expect(side.hand, contains(card));
+      expect(find.text('Bind'), findsNothing, reason: 'the pile goes again');
+    });
+
     testWidgets('a heal asks which damage it takes', (tester) async {
       final game = await pump(tester, opening);
       final side = game.you;
@@ -471,6 +508,44 @@ void main() {
       final game = await pump(tester, opening, build: buildEnergyDeck);
       expect(game.keepsTableColumn, isFalse);
       expect(circleWidth(tester, 'circle-Player 1-vanguard'), 132);
+    });
+
+    Future<(DeckStore, Deck)> buildBinderDeck(String effect) async {
+      final (store, deck) = await buildEnergyDeck();
+      final binder = store.saveCard(
+        gameId: 'vanguard',
+        name: 'Binder',
+        attributes: {'grade': '1', 'cardType': 'normal', 'effect': effect},
+      );
+      store.addToDeck(deck.id, binder.id, zoneMain);
+      return (store, store.decks.firstWhere((d) => d.id == deck.id));
+    }
+
+    testWidgets('a deck that binds keeps the column for its bound cards', (
+      tester,
+    ) async {
+      final game = await pump(
+        tester,
+        opening,
+        build: () =>
+            buildBinderDeck('[ACT](Soul):[COST][bind this card], draw a card.'),
+      );
+      expect(game.binds, isTrue);
+      expect(game.keepsTableColumn, isTrue);
+    });
+
+    testWidgets('a card named for "binding" is not a deck that binds', (
+      tester,
+    ) async {
+      final game = await pump(
+        tester,
+        opening,
+        build: () => buildBinderDeck(
+          '[CONT]:This card is regarded as "Love-binding Maiden".',
+        ),
+      );
+      expect(game.binds, isFalse);
+      expect(game.keepsTableColumn, isFalse);
     });
 
     testWidgets('a stride deck keeps the column for its crest', (tester) async {
@@ -841,6 +916,29 @@ void main() {
         upright,
         reason: 'resting one never moves the cards beside it',
       );
+    });
+
+    testWidgets('a bound card sits in the strip, after the orders', (
+      tester,
+    ) async {
+      final game = await pump(tester, const Size(390, 844));
+      final side = game.handSide;
+      setOrders(game, side, 1);
+      game.soulCharge(side, 1);
+      final card = side.soul.last;
+      game.bindCard(side, card);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      final orderKey = ValueKey('order-${side.name}-0');
+      final bindKey = ValueKey('bind-${side.name}-0');
+      expect(find.byKey(bindKey), findsOneWidget);
+      expect(
+        tester.getRect(find.byKey(bindKey)).left,
+        greaterThan(tester.getRect(find.byKey(orderKey)).left),
+        reason: 'bound cards come after the set orders',
+      );
+      expect(find.text('ORDERS 1'), findsOneWidget);
     });
 
     testWidgets('a stride crest sits in the strip, ahead of the orders', (

@@ -814,6 +814,51 @@ void main() {
     });
   });
 
+  group('the bind zone across two devices', () {
+    test('a card bound out of the soul shows on both boards', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      game.host.engine.soulCharge(active, 1);
+      final card = active.soul.last;
+
+      mine.ask(PlaytestIntent(IntentKind.bindCard, card: card.instanceId));
+      await pumpEventQueue();
+
+      expect(active.bind, [card]);
+      expect(mine.snapshot!.me.bindIds, [card.instanceId]);
+      expect(theirs.snapshot!.them.bindIds, [card.instanceId]);
+      expect(theirs.snapshot!.knows(card.instanceId), isTrue);
+
+      mine.ask(
+        PlaytestIntent(
+          IntentKind.unbindCard,
+          card: card.instanceId,
+          exit: OrderExit.hand,
+        ),
+      );
+      await pumpEventQueue();
+      expect(active.bind, isEmpty);
+      expect(active.hand, contains(card));
+    });
+
+    test('the other player cannot bind your cards', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      game.host.engine.soulCharge(active, 1);
+      final card = active.soul.last;
+
+      theirs.ask(PlaytestIntent(IntentKind.bindCard, card: card.instanceId));
+      await pumpEventQueue();
+
+      expect(active.bind, isEmpty);
+      expect(active.soul, contains(card));
+      expect(game.host.refusals.last, contains('soul or drop'));
+    });
+  });
+
   group('moving units and drive across two devices', () {
     /// A unit of [side]'s put straight onto [circle], the way a call would
     /// leave it.

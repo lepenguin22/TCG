@@ -380,4 +380,51 @@ void main() {
     await pumpBoard(tester, game.theirs);
     expect(find.byKey(const ValueKey('remote-heal-sheet')), findsNothing);
   });
+
+  testWidgets('a soul card is bound, and moved on again', (tester) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final game = await hosted();
+    game.mine.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.theirs.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await tester.pump();
+    final you = game.host.state.you;
+    game.host.engine.soulCharge(you, 1);
+    game.host.broadcast();
+    final card = you.soul.last;
+
+    await pumpBoard(tester, game.mine);
+    await tester.tap(find.text('Soul ${you.soul.length}').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('soul-card-${card.instanceId}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('remote-bind-${card.instanceId}')));
+    await tester.pumpAndSettle();
+    expect(you.bind, [card]);
+    // On the table against your field.
+    expect(find.byKey(const ValueKey('remote-bind-my-0')), findsOneWidget);
+    expect(find.text('BIND 1'), findsOneWidget);
+
+    // The other player sees it bound, on the table too, and cannot move it.
+    await pumpBoard(tester, game.theirs);
+    expect(find.byKey(const ValueKey('remote-bind-their-0')), findsOneWidget);
+    await tester.tap(find.text('Bind 1'));
+    await tester.pumpAndSettle();
+    expect(find.text(card.name), findsWidgets);
+    expect(find.byKey(ValueKey('move-bound-${card.instanceId}')), findsNothing);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    await pumpBoard(tester, game.mine);
+    await tester.tap(find.text('Bind 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('move-bound-${card.instanceId}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('remote-unbind-drop')));
+    await tester.pumpAndSettle();
+    expect(you.bind, isEmpty);
+    expect(you.drop, contains(card));
+  });
 }

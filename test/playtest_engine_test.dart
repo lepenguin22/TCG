@@ -3570,4 +3570,75 @@ void main() {
       expect(you.drop.contains(order), isFalse);
     });
   });
+
+  group('the bind zone', () {
+    test(
+      'cards are bound out of the soul and the drop, nowhere else',
+      () async {
+        final (store, deck) = await buildDeck();
+        final engine = engineFor(store, deck);
+        engine.beginPlay();
+        final you = engine.state.you;
+        engine.soulCharge(you, 1);
+        final fromSoul = you.soul.last;
+        final fromDrop = you.hand.first;
+        engine.discard(you, fromDrop);
+        final inHand = you.hand.first;
+
+        engine.bindCard(you, fromSoul);
+        engine.bindCard(you, fromDrop);
+        engine.bindCard(you, inHand);
+
+        expect(you.bind, [fromSoul, fromDrop]);
+        expect(you.soul, isNot(contains(fromSoul)));
+        expect(you.drop, isNot(contains(fromDrop)));
+        expect(you.hand, contains(inHand), reason: 'a hand card is not bound');
+      },
+    );
+
+    test('a bound card leaves by the way its ability says', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      engine.soulCharge(you, 4);
+      final [a, b, c, d] = you.soul.sublist(you.soul.length - 4);
+      for (final card in [a, b, c, d]) {
+        engine.bindCard(you, card);
+      }
+
+      engine.unbindCard(you, a);
+      engine.unbindCard(you, b, to: OrderExit.soul);
+      engine.unbindCard(you, c, to: OrderExit.hand);
+      engine.unbindCard(you, d, to: OrderExit.removed);
+
+      expect(you.bind, isEmpty);
+      expect(you.drop, contains(a));
+      expect(you.soul, contains(b));
+      expect(you.hand, contains(c));
+      expect(you.removed, contains(d));
+    });
+
+    test('a bound card can be called or put on the bottom', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.you;
+      final unit = you.hand.firstWhere(
+        (c) => c.isUnit && engine.canCall(you, c, Circle.frontLeft),
+      );
+      engine.discard(you, unit);
+      engine.bindCard(you, unit);
+      engine.call(you, unit, Circle.frontLeft);
+      expect(you.field[Circle.frontLeft]?.card, unit);
+      expect(you.bind, isEmpty);
+
+      engine.soulCharge(you, 1);
+      final other = you.soul.last;
+      engine.bindCard(you, other);
+      engine.bottomDeck(you, other);
+      expect(you.deck.first, other);
+      expect(you.bind, isEmpty);
+    });
+  });
 }

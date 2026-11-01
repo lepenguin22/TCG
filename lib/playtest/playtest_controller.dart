@@ -58,7 +58,21 @@ class PlaytestController extends ChangeNotifier {
       ].any((card) => card.isSetOrder),
     );
     strides = [state.you, state.opponent].any((side) => side.gZone.isNotEmpty);
+    binds = [state.you, state.opponent].any(
+      (side) => [
+        ...side.deck,
+        ...side.hand,
+        ...side.rideDeck,
+      ].any((card) => _bindsText.hasMatch(card.effect)),
+    );
   }
+
+  /// "bind", "binds" or "bind zone" in a card's text, but not "Love-binding".
+  static final _bindsText = RegExp(r'\bbind(s)?\b', caseSensitive: false);
+
+  /// Whether either deck has a card that binds, or counts the bind zone:
+  /// a deck whose table will hold bound cards as the game goes.
+  late final bool binds;
 
   /// Whether either deck has a set order in it, which a desktop board makes
   /// room for beside the field.
@@ -80,7 +94,7 @@ class PlaytestController extends ChangeNotifier {
 
   /// Whether a desktop board keeps a column beside each field for the cards
   /// that sit on the table there: set orders, and a stride deck's crest.
-  bool get keepsTableColumn => playsSetOrders || strides;
+  bool get keepsTableColumn => playsSetOrders || strides || binds;
 
   /// The game being played, for the screens that need to ask its rules or its
   /// card database something -- choosing a crest to play, among them.
@@ -506,6 +520,20 @@ class PlaytestController extends ChangeNotifier {
 
   void returnFromDrop(PlaytestSide side, GameCard card) {
     engine.returnFromDrop(side, card);
+    _sync();
+  }
+
+  void bindCard(PlaytestSide side, GameCard card) {
+    engine.bindCard(side, card);
+    _sync();
+  }
+
+  void unbindCard(
+    PlaytestSide side,
+    GameCard card, {
+    OrderExit to = OrderExit.drop,
+  }) {
+    engine.unbindCard(side, card, to: to);
     _sync();
   }
 

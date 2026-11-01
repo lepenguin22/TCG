@@ -146,6 +146,7 @@ class SideSnapshot {
     required this.gZoneIds,
     required this.faceUpG,
     required this.removedIds,
+    this.bindIds = const [],
     required this.crestIds,
     required this.orderZoneIds,
     this.restedOrders = const [],
@@ -179,6 +180,9 @@ class SideSnapshot {
   final List<int> gZoneIds;
   final List<int> faceUpG;
   final List<int> removedIds;
+
+  /// The bind zone, face up for both players like the drop.
+  final List<int> bindIds;
   final List<int> crestIds;
 
   /// The set orders on the table. Face up and public: a set order is text
@@ -210,6 +214,7 @@ class SideSnapshot {
     'gZone': gZoneIds,
     'faceUpG': faceUpG,
     'removed': removedIds,
+    'bind': bindIds,
     'crest': crestIds,
     'orders': orderZoneIds,
     'restedOrders': restedOrders,
@@ -238,6 +243,7 @@ class SideSnapshot {
     gZoneIds: _ids(json['gZone']),
     faceUpG: _ids(json['faceUpG']),
     removedIds: _ids(json['removed']),
+    bindIds: _ids(json['bind']),
     crestIds: _ids(json['crest']),
     orderZoneIds: _ids(json['orders']),
     restedOrders: _ids(json['restedOrders']),
@@ -453,7 +459,7 @@ const logTail = 60;
 ///
 /// The rule this file exists for: a card's face is sent only to a player who
 /// may see it. Everything on the field, in the drop, the soul, the damage,
-/// the G zone, the crest zone and the trigger zone is public and goes to
+/// the G zone, the bind zone, the crest zone and the trigger zone is public and goes to
 /// both. A hand goes to its owner. A ride deck goes to its owner. A deck goes
 /// to nobody, because its order is not even its owner's to know.
 PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
@@ -477,6 +483,7 @@ PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
     // through it, face-down cards included.
     reveal(side.gZone);
     reveal(side.removed);
+    reveal(side.bind);
     reveal(side.crestZone);
     // Set orders sit face up on the table, so both players read them.
     reveal(side.orderZone);
@@ -540,6 +547,7 @@ SideSnapshot _sideSnapshot(PlaytestSide side, {required bool ownedByViewer}) =>
       gZoneIds: [for (final card in side.gZone) card.instanceId],
       faceUpG: side.faceUpG.toList(),
       removedIds: [for (final card in side.removed) card.instanceId],
+      bindIds: [for (final card in side.bind) card.instanceId],
       crestIds: [for (final card in side.crestZone) card.instanceId],
       orderZoneIds: [for (final card in side.orderZone) card.instanceId],
       restedOrders: side.restedOrders.toList(),

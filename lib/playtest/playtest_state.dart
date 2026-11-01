@@ -198,6 +198,13 @@ class PlaytestSide {
   /// pile exists so what left is visible rather than simply gone.
   final List<GameCard> removed = [];
 
+  /// The bind zone: cards an ability binds out of the soul or the drop zone.
+  ///
+  /// Face up and public, like the drop. A bound card is out of the soul and
+  /// the drop -- it counts for neither -- until an ability says where it goes
+  /// next, so the board leaves that to the player rather than guessing.
+  final List<GameCard> bind = [];
+
   /// The order zone, where a set order sits face up once it is played.
   ///
   /// It is not a pile of spent cards: everything here is still doing

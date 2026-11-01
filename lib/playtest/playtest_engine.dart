@@ -815,6 +815,7 @@ class PlaytestEngine {
     if (deck && side.deck.remove(card)) return 'deck';
     if (side.drop.remove(card)) return 'drop zone';
     if (side.soul.remove(card)) return 'soul';
+    if (side.bind.remove(card)) return 'bind zone';
     return null;
   }
 
@@ -1086,6 +1087,49 @@ class PlaytestEngine {
     if (!side.drop.remove(card)) return;
     side.removed.add(card);
     state.note('${side.name} removes ${card.name} from the game.', by: side);
+  }
+
+  /// Binds a card out of the soul or the drop zone, as an ability says to.
+  void bindCard(PlaytestSide side, GameCard card) {
+    final String from;
+    if (side.soul.remove(card)) {
+      from = 'soul';
+    } else if (side.drop.remove(card)) {
+      from = 'drop zone';
+    } else {
+      return;
+    }
+    side.bind.add(card);
+    state.note('${side.name} binds ${card.name} from the $from.', by: side);
+  }
+
+  /// Takes a card out of the bind zone, wherever the ability says it goes.
+  void unbindCard(
+    PlaytestSide side,
+    GameCard card, {
+    OrderExit to = OrderExit.drop,
+  }) {
+    if (!side.bind.remove(card)) return;
+    switch (to) {
+      case OrderExit.drop:
+        side.drop.add(card);
+      case OrderExit.soul:
+        side.soul.add(card);
+      case OrderExit.hand:
+        side.hand.add(card);
+      case OrderExit.removed:
+        side.removed.add(card);
+    }
+    state.note(
+      '${side.name} takes ${card.name} out of the bind zone '
+      '${switch (to) {
+        OrderExit.drop => 'to the drop zone',
+        OrderExit.soul => 'into the soul',
+        OrderExit.hand => 'to hand',
+        OrderExit.removed => 'and out of the game',
+      }}.',
+      by: side,
+    );
   }
 
   /// Puts a card from hand into the soul.
