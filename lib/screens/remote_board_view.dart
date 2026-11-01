@@ -294,6 +294,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   board: board,
                   mine: true,
                   onRemoveOrder: _removeOrder,
+                  onBoundCard: _boundCard,
                   below: true,
                 ),
                 const SizedBox(height: 6),
@@ -1193,12 +1194,16 @@ class _Table extends StatelessWidget {
     required this.board,
     required this.mine,
     this.onRemoveOrder,
+    this.onBoundCard,
     this.below = false,
   });
 
   final SideSnapshot side;
   final RemoteBoard board;
   final bool mine;
+
+  /// Where one of this player's own bound cards goes next.
+  final void Function(int id)? onBoundCard;
 
   /// What can be done with one of this player's own set orders: resting
   /// it, or taking it off the table.
@@ -1218,7 +1223,14 @@ class _Table extends StatelessWidget {
         if (board.cardOf(id) != null) id,
     ];
     final orders = [for (final id in orderIds) board.cardOf(id)!];
-    if (crests.isEmpty && orders.isEmpty) return const SizedBox.shrink();
+    final boundIds = [
+      for (final id in side.bindIds)
+        if (board.cardOf(id) != null) id,
+    ];
+    final bound = [for (final id in boundIds) board.cardOf(id)!];
+    if (crests.isEmpty && orders.isEmpty && bound.isEmpty) {
+      return const SizedBox.shrink();
+    }
     void openCrests() => _showPile(
       context,
       label: 'Crest',
@@ -1239,7 +1251,7 @@ class _Table extends StatelessWidget {
     return TableStrip(
       key: ValueKey('remote-table-$whose'),
       listKey: ValueKey('remote-table-list-$whose'),
-      caption: tableCaption(crests, orders),
+      caption: tableCaption(crests, orders, bound: bound),
       below: below,
       tiles: [
         for (var i = 0; i < crests.length; i += 1)
@@ -1262,6 +1274,24 @@ class _Table extends StatelessWidget {
             onTap: mine && onRemoveOrder != null
                 ? () => onRemoveOrder!(orderIds[i])
                 : openOrders,
+          ),
+        for (var i = 0; i < bound.length; i += 1)
+          TableCard(
+            key: ValueKey('remote-bind-$whose-$i'),
+            card: bound[i],
+            width: TableStrip.width,
+            accent: tableBindColour,
+            badge: 'BIND',
+            // Your own bound card opens where it can go; theirs, the pile.
+            onTap: mine && onBoundCard != null
+                ? () => onBoundCard!(boundIds[i])
+                : () => _showPile(
+                    context,
+                    label: 'Bind',
+                    cards: side.bindIds,
+                    board: board,
+                    owner: side.name,
+                  ),
           ),
       ],
     );

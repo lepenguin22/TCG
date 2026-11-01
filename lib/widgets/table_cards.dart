@@ -5,8 +5,9 @@ import '../theme.dart';
 import 'card_image.dart';
 
 // The cards a board puts on the table beside its field: set orders, which
-// stay out doing what they say, and crests. Shared by the board you play
-// alone and the board of a game on two devices, so the two draw them alike.
+// stay out doing what they say, crests, and the cards in the bind zone.
+// Shared by the board you play alone and the board of a game on two
+// devices, so the two draw them alike.
 
 /// The crests a board draws on the table beside the field: a stride deck's
 /// crest, such as Nightrose, and anything else an ability put in the crest
@@ -22,21 +23,32 @@ List<GameCard> tableCrests(Iterable<GameCard> crestZone) => [
 ];
 
 /// What heads a run of cards on the table: how many orders, since a deck
-/// built on set orders counts them, or what it is when it is only a crest.
-/// A crest carries its own badge, so a run with both still reads; naming
-/// both up top did not fit the width of one small card.
-String tableCaption(List<GameCard> crests, List<GameCard> orders) =>
-    orders.isNotEmpty
+/// built on set orders counts them; how many are bound, since a deck that
+/// binds counts those; or what it is when it is only a crest. A crest and a
+/// bound card carry their own badges, so a run with several kinds still
+/// reads; naming them all up top did not fit the width of one small card.
+String tableCaption(
+  List<GameCard> crests,
+  List<GameCard> orders, {
+  List<GameCard> bound = const [],
+}) => orders.isNotEmpty
     ? 'ORDERS ${orders.length}'
+    : bound.isNotEmpty
+    ? 'BIND ${bound.length}'
     : (crests.length == 1 ? 'CREST' : 'CRESTS');
 
 /// The colour a crest is framed in on the table: the one the deck builder
 /// badges a crest with.
 const tableCrestColour = Color(0xFF4FC08D);
 
-/// One card on the table beside a field, a set order or a crest: its art, with its name along the
-/// bottom the way a unit has its power, since the art alone is a small thing
-/// to read a name off and an offline game may have no art at all.
+/// The colour a bound card is framed in on the table, so it is not read as
+/// a set order beside it.
+const tableBindColour = Color(0xFF7FA7F5);
+
+/// One card on the table beside a field -- a set order, a crest or a bound
+/// card: its art, with its name along the bottom the way a unit has its
+/// power, since the art alone is a small thing to read a name off and an
+/// offline game may have no art at all.
 class TableCard extends StatelessWidget {
   const TableCard({
     super.key,

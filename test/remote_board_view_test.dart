@@ -403,9 +403,13 @@ void main() {
     await tester.tap(find.byKey(ValueKey('remote-bind-${card.instanceId}')));
     await tester.pumpAndSettle();
     expect(you.bind, [card]);
+    // On the table against your field.
+    expect(find.byKey(const ValueKey('remote-bind-my-0')), findsOneWidget);
+    expect(find.text('BIND 1'), findsOneWidget);
 
-    // The other player sees it bound, and cannot move it.
+    // The other player sees it bound, on the table too, and cannot move it.
     await pumpBoard(tester, game.theirs);
+    expect(find.byKey(const ValueKey('remote-bind-their-0')), findsOneWidget);
     await tester.tap(find.text('Bind 1'));
     await tester.pumpAndSettle();
     expect(find.text(card.name), findsWidgets);

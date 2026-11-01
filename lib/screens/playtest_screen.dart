@@ -845,6 +845,7 @@ List<Widget> _tableTiles(
 }) {
   final crests = tableCrests(side.crestZone);
   final orders = side.orderZone;
+  final bound = side.bind;
   final cards = [
     for (var i = 0; i < crests.length; i += 1)
       TableCard(
@@ -863,22 +864,33 @@ List<Widget> _tableTiles(
         rested: side.isRestedOrder(orders[i]),
         onTap: () => _showOrderZoneSheet(context, game, side),
       ),
+    // Bound cards last: they come and go within a turn, where crests and
+    // set orders stay put.
+    for (var i = 0; i < bound.length; i += 1)
+      TableCard(
+        key: ValueKey('bind-${side.name}-$i'),
+        card: bound[i],
+        width: width,
+        accent: tableBindColour,
+        badge: 'BIND',
+        onTap: () => _showBindSheet(context, game, side),
+      ),
   ];
   if (limit == null || cards.length <= limit) return cards;
   // Past what fits, the last place stands for the rest rather than a card
-  // quietly going missing. Crests come first, so what is left over is
-  // orders unless a board has more crests than places.
+  // quietly going missing, and opens the pile the first hidden card is in.
   final shown = limit - 1;
-  final hiddenOrders = cards.length - shown > 0 && shown >= crests.length;
   return [
     ...cards.take(shown),
     _MoreOrders(
       key: ValueKey('order-${side.name}-more'),
       count: cards.length - shown,
       width: width,
-      onTap: hiddenOrders
+      onTap: shown < crests.length
+          ? () => _showCrestSheet(context, game, side)
+          : shown < crests.length + orders.length
           ? () => _showOrderZoneSheet(context, game, side)
-          : () => _showCrestSheet(context, game, side),
+          : () => _showBindSheet(context, game, side),
     ),
   ];
 }
@@ -921,7 +933,7 @@ class _OrderTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final crests = tableCrests(side.crestZone);
     final orders = side.orderZone;
-    final count = crests.length + orders.length;
+    final count = crests.length + orders.length + side.bind.length;
     if (count == 0) return const SizedBox.shrink();
 
     return LayoutBuilder(
@@ -982,7 +994,7 @@ class _OrderTable extends StatelessWidget {
               SizedBox(
                 height: _caption,
                 child: Text(
-                  tableCaption(crests, orders),
+                  tableCaption(crests, orders, bound: side.bind),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -1045,11 +1057,13 @@ class _OrderStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final crests = tableCrests(side.crestZone);
     final orders = side.orderZone;
-    if (crests.isEmpty && orders.isEmpty) return const SizedBox.shrink();
+    if (crests.isEmpty && orders.isEmpty && side.bind.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return TableStrip(
       key: ValueKey('order-strip-${side.name}'),
       listKey: ValueKey('order-strip-list-${side.name}'),
-      caption: tableCaption(crests, orders),
+      caption: tableCaption(crests, orders, bound: side.bind),
       tiles: _tableTiles(context, game, side, width: TableStrip.width),
       below: below,
     );
@@ -1433,38 +1447,7 @@ class _ZoneRail extends StatelessWidget {
           label: 'Bind',
           count: side.bind.length,
           highlight: true,
-          onTap: () => _showPileSheet(
-            context,
-            game,
-            side,
-            title: 'Bind zone',
-            cards: side.bind,
-            callable: true,
-            bottomable: true,
-            header: (_) => [
-              const Text(
-                'Bound out of the soul or the drop zone. Where a card goes '
-                'next is on the card that bound it.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-            ],
-            moves: [
-              ('To drop', (card) => game.unbindCard(side, card)),
-              (
-                'To soul',
-                (card) => game.unbindCard(side, card, to: OrderExit.soul),
-              ),
-              (
-                'To hand',
-                (card) => game.unbindCard(side, card, to: OrderExit.hand),
-              ),
-              (
-                'Out of the game',
-                (card) => game.unbindCard(side, card, to: OrderExit.removed),
-              ),
-            ],
-          ),
+          onTap: () => _showBindSheet(context, game, side),
         ),
       // Only a deck that strides has a G zone, so it only appears for one.
       if (side.gZone.isNotEmpty)
@@ -1806,6 +1789,40 @@ void _showPileSheet(
         ],
       ),
     ),
+  );
+}
+
+/// The bind zone, and where each bound card goes next.
+void _showBindSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  _showPileSheet(
+    context,
+    game,
+    side,
+    title: 'Bind zone',
+    cards: side.bind,
+    callable: true,
+    bottomable: true,
+    header: (_) => [
+      const Text(
+        'Bound out of the soul or the drop zone. Where a card goes '
+        'next is on the card that bound it.',
+        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
+      const SizedBox(height: 12),
+    ],
+    moves: [
+      ('To drop', (card) => game.unbindCard(side, card)),
+      ('To soul', (card) => game.unbindCard(side, card, to: OrderExit.soul)),
+      ('To hand', (card) => game.unbindCard(side, card, to: OrderExit.hand)),
+      (
+        'Out of the game',
+        (card) => game.unbindCard(side, card, to: OrderExit.removed),
+      ),
+    ],
   );
 }
 
