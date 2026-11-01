@@ -158,6 +158,10 @@ class PlaytestHost {
       IntentKind.activateFromDrop,
       // A damage check heals the defender, on the attacker's turn.
       IntentKind.chooseHeal,
+      // A cost paid on the other player's turn binds as readily as one paid
+      // on your own, and only out of your own zones.
+      IntentKind.bindCard,
+      IntentKind.unbindCard,
     };
     final needsTurn = !offTurn.contains(intent.kind);
     final mulliganing = state.phase == PlaytestPhase.mulligan;
@@ -220,6 +224,21 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.toggleOrderRest(side, card);
+      case IntentKind.bindCard:
+        final card = [
+          ...side.soul,
+          ...side.drop,
+        ].where((c) => c.instanceId == intent.card).firstOrNull;
+        if (card == null) {
+          return _refuse(side, 'no such card in your soul or drop zone');
+        }
+        engine.bindCard(side, card);
+      case IntentKind.unbindCard:
+        final card = side.bind
+            .where((c) => c.instanceId == intent.card)
+            .firstOrNull;
+        if (card == null) return _refuse(side, 'no such card in the bind zone');
+        engine.unbindCard(side, card, to: intent.exit ?? OrderExit.drop);
       case IntentKind.chooseHeal:
         // Only your own heal, out of your own damage zone.
         final check = state.triggerZone

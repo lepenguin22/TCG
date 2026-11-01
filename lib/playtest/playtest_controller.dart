@@ -509,6 +509,20 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void bindCard(PlaytestSide side, GameCard card) {
+    engine.bindCard(side, card);
+    _sync();
+  }
+
+  void unbindCard(
+    PlaytestSide side,
+    GameCard card, {
+    OrderExit to = OrderExit.drop,
+  }) {
+    engine.unbindCard(side, card, to: to);
+    _sync();
+  }
+
   void bottomDeck(PlaytestSide side, GameCard card) {
     engine.bottomDeck(side, card);
     _sync();

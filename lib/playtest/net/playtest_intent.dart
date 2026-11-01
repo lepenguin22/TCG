@@ -40,6 +40,13 @@ enum IntentKind {
   /// Which damage a heal trigger heals: [PlaytestIntent.card] is the damage
   /// to heal and [PlaytestIntent.amount] the heal trigger's own card.
   chooseHeal,
+
+  /// Binds [PlaytestIntent.card] out of the asker's soul or drop zone.
+  bindCard,
+
+  /// Takes [PlaytestIntent.card] out of the asker's bind zone, to
+  /// [PlaytestIntent.exit].
+  unbindCard,
 }
 
 /// One request, named and with its arguments.

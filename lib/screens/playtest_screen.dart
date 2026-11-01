@@ -1367,6 +1367,7 @@ class _ZoneRail extends StatelessWidget {
           callable: true,
           bottomable: true,
           fromDrop: true,
+          bindable: true,
         ),
       ),
       _Pile(
@@ -1422,6 +1423,46 @@ class _ZoneRail extends StatelessWidget {
                 style: TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
               const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      // The bind zone, which an ability fills out of the soul and the drop.
+      // Only there once something is bound, since most decks bind nothing.
+      if (side.bind.isNotEmpty)
+        _Pile(
+          label: 'Bind',
+          count: side.bind.length,
+          highlight: true,
+          onTap: () => _showPileSheet(
+            context,
+            game,
+            side,
+            title: 'Bind zone',
+            cards: side.bind,
+            callable: true,
+            bottomable: true,
+            header: (_) => [
+              const Text(
+                'Bound out of the soul or the drop zone. Where a card goes '
+                'next is on the card that bound it.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+            ],
+            moves: [
+              ('To drop', (card) => game.unbindCard(side, card)),
+              (
+                'To soul',
+                (card) => game.unbindCard(side, card, to: OrderExit.soul),
+              ),
+              (
+                'To hand',
+                (card) => game.unbindCard(side, card, to: OrderExit.hand),
+              ),
+              (
+                'Out of the game',
+                (card) => game.unbindCard(side, card, to: OrderExit.removed),
+              ),
             ],
           ),
         ),
@@ -1601,6 +1642,8 @@ void _showPileSheet(
   bool callable = false,
   bool bottomable = false,
   bool fromDrop = false,
+  bool bindable = false,
+  List<(String, void Function(GameCard card))> moves = const [],
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -1720,6 +1763,28 @@ void _showPileSheet(
                                 },
                                 child: const Text('Remove'),
                               ),
+                            // An ability binds cards out of the soul and the
+                            // drop zone.
+                            if (bindable && game.controls(side))
+                              TextButton(
+                                key: ValueKey('bind-${card.instanceId}'),
+                                onPressed: () {
+                                  game.bindCard(side, card);
+                                  Navigator.of(sheetContext).pop();
+                                },
+                                child: const Text('To bind'),
+                              ),
+                            // Wherever a card goes next, where the pile says
+                            // it can go more than one way.
+                            if (game.controls(side))
+                              for (final (label, move) in moves)
+                                TextButton(
+                                  onPressed: () {
+                                    move(card);
+                                    Navigator.of(sheetContext).pop();
+                                  },
+                                  child: Text(label),
+                                ),
                             // Costs put cards under the deck out of the drop
                             // and the soul as well as out of hand.
                             if (bottomable && game.controls(side))
@@ -1815,6 +1880,7 @@ void _showSoulSheet(
     onAction: (card) => game.soulBlast(side, card),
     callable: true,
     bottomable: true,
+    bindable: true,
     header: (sheetContext) => [
       OutlinedButton(
         onPressed: () {

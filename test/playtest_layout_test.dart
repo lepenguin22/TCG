@@ -210,6 +210,33 @@ void main() {
     double circleWidth(WidgetTester tester, String key) =>
         tester.getSize(find.byKey(ValueKey(key))).width;
 
+    testWidgets('a soul card is bound, and the bind zone moves it on', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.handSide;
+      game.soulCharge(side, 1);
+      await tester.pumpAndSettle();
+      final card = side.soul.last;
+      expect(find.text('Bind'), findsNothing, reason: 'nothing bound yet');
+
+      await tester.tap(find.text('Soul').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('bind-${card.instanceId}')));
+      await tester.pumpAndSettle();
+      expect(side.bind, [card]);
+      expect(side.soul, isNot(contains(card)));
+
+      await tester.tap(find.text('Bind'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Bind zone (1)'), findsOneWidget);
+      await tester.tap(find.text('To hand'));
+      await tester.pumpAndSettle();
+      expect(side.bind, isEmpty);
+      expect(side.hand, contains(card));
+      expect(find.text('Bind'), findsNothing, reason: 'the pile goes again');
+    });
+
     testWidgets('a heal asks which damage it takes', (tester) async {
       final game = await pump(tester, opening);
       final side = game.you;

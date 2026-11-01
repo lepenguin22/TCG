@@ -305,6 +305,8 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   phase: snapshot.phase,
                   onPlayFromDrop: _playFromDrop,
                   onRemoveOrder: _removeOrder,
+                  onSoulCard: _soulCard,
+                  onBoundCard: _boundCard,
                 ),
               ],
             ),
@@ -470,6 +472,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
           onTap: () =>
               ask(PlaytestIntent(IntentKind.activateFromDrop, card: id)),
         ),
+      _bindAction(id),
       if (inBattle)
         for (final amount in [0, 5000, 10000, 15000, 20000])
           _Action(
@@ -488,6 +491,44 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
               ),
             ),
           ),
+    ]);
+  }
+
+  /// Binding a card out of your own soul or drop zone, as an ability says.
+  _Action _bindAction(int id) => _Action(
+    key: ValueKey('remote-bind-$id'),
+    icon: Icons.link,
+    label: 'Put into the bind zone',
+    onTap: () => ask(PlaytestIntent(IntentKind.bindCard, card: id)),
+  );
+
+  /// A card in your own soul: what can be done with it here.
+  Future<void> _soulCard(int id) async {
+    final face = board.cardOf(id);
+    if (face == null) return;
+    await _sheet([_CardHeading(face: face), _bindAction(id)]);
+  }
+
+  /// A card in your own bind zone, and where it goes next.
+  Future<void> _boundCard(int id) async {
+    final face = board.cardOf(id);
+    if (face == null) return;
+    await _sheet([
+      _CardHeading(face: face),
+      for (final exit in const [
+        (OrderExit.drop, 'To the drop zone', Icons.delete_outline),
+        (OrderExit.soul, 'Into the soul', Icons.auto_awesome_outlined),
+        (OrderExit.hand, 'To hand', Icons.back_hand_outlined),
+        (OrderExit.removed, 'Out of the game', Icons.block_outlined),
+      ])
+        _Action(
+          key: ValueKey('remote-unbind-${exit.$1.name}'),
+          icon: exit.$3,
+          label: exit.$2,
+          onTap: () => ask(
+            PlaytestIntent(IntentKind.unbindCard, card: id, exit: exit.$1),
+          ),
+        ),
     ]);
   }
 
@@ -904,6 +945,8 @@ class _SideStrip extends StatelessWidget {
     required this.phase,
     this.onPlayFromDrop,
     this.onRemoveOrder,
+    this.onSoulCard,
+    this.onBoundCard,
   });
 
   final SideSnapshot side;
@@ -915,6 +958,10 @@ class _SideStrip extends StatelessWidget {
 
   /// Taking one of this player's own set orders off the table.
   final void Function(int id)? onRemoveOrder;
+
+  /// What can be done with a card in this player's own soul, or bind zone.
+  final void Function(int id)? onSoulCard;
+  final void Function(int id)? onBoundCard;
 
   @override
   Widget build(BuildContext context) {
@@ -960,6 +1007,7 @@ class _SideStrip extends StatelessWidget {
                 ('Soul', side.soulIds),
                 if (side.gZoneIds.isNotEmpty) ('G', side.gZoneIds),
                 if (side.removedIds.isNotEmpty) ('Removed', side.removedIds),
+                if (side.bindIds.isNotEmpty) ('Bind', side.bindIds),
                 if (side.crestIds.isNotEmpty) ('Crest', side.crestIds),
                 // Set orders are face up for both players, since both are
                 // playing under what they say.
@@ -975,15 +1023,24 @@ class _SideStrip extends StatelessWidget {
                   // the table the same way: only its owner may move it.
                   onPlay: !mine
                       ? null
-                      : pile.$1 == 'Drop'
-                      ? onPlayFromDrop
-                      : pile.$1 == 'Orders'
-                      ? onRemoveOrder
-                      : null,
-                  playLabel: pile.$1 == 'Orders' ? 'Move' : 'Play',
-                  playKeyPrefix: pile.$1 == 'Orders'
-                      ? 'move-order'
-                      : 'play-from-drop',
+                      : switch (pile.$1) {
+                          'Drop' => onPlayFromDrop,
+                          'Orders' => onRemoveOrder,
+                          'Soul' => onSoulCard,
+                          'Bind' => onBoundCard,
+                          _ => null,
+                        },
+                  playLabel: switch (pile.$1) {
+                    'Orders' || 'Bind' => 'Move',
+                    'Soul' => 'Bind',
+                    _ => 'Play',
+                  },
+                  playKeyPrefix: switch (pile.$1) {
+                    'Orders' => 'move-order',
+                    'Soul' => 'soul-card',
+                    'Bind' => 'move-bound',
+                    _ => 'play-from-drop',
+                  },
                 ),
             ],
           ),
