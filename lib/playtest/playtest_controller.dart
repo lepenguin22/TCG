@@ -523,6 +523,14 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  /// D-Legions [side]'s vanguard, paying with [returned] out of the drop.
+  /// Returns the partner, or null where it could not be done.
+  GameCard? dLegion(PlaytestSide side, List<GameCard> returned) {
+    final mate = engine.dLegion(side, returned);
+    _sync();
+    return mate;
+  }
+
   void bindCard(PlaytestSide side, GameCard card) {
     engine.bindCard(side, card);
     _sync();

@@ -859,6 +859,87 @@ void main() {
     });
   });
 
+  group('D-Legion across two devices', () {
+    GameCard card(int id, String name, Map<String, String> attributes) =>
+        GameCard(
+          id,
+          CardDefinition(
+            id: 'test-$id',
+            gameId: 'vanguard',
+            name: name,
+            attributes: attributes,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+
+    test('the vanguard D-Legions, and both boards see the partner', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final idle = game.host.state.inactive;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      active.field[Circle.vanguard] = FieldUnit(
+        card(990101, 'Knuckle', {
+          'grade': '3',
+          'cardType': 'normal',
+          'power': '13000',
+          'effect': '[ACT](VC):[D-Legion]"Slash" (...)',
+        }),
+      );
+      idle.field[Circle.vanguard] = FieldUnit(
+        card(990102, 'Theirs', {'grade': '3', 'cardType': 'normal'}),
+      );
+      final mate = card(990103, 'Slash', {
+        'grade': '2',
+        'cardType': 'normal',
+        'power': '10000',
+      });
+      active.deck.insert(0, mate);
+      final cost = [
+        for (var i = 0; i < 4; i += 1)
+          card(990110 + i, 'Filler $i', {'grade': '1', 'cardType': 'normal'}),
+      ];
+      active.drop.addAll(cost);
+      game.host.state.phase = PlaytestPhase.main;
+
+      // The other player cannot do it for them, or with their cards.
+      theirs.ask(
+        PlaytestIntent(
+          IntentKind.dLegion,
+          cards: [for (final c in cost) c.instanceId],
+        ),
+      );
+      await pumpEventQueue();
+      expect(active.vanguard!.legionMate, isNull);
+
+      mine.ask(
+        PlaytestIntent(
+          IntentKind.dLegion,
+          cards: [for (final c in cost) c.instanceId],
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(active.vanguard!.legionMate, mate);
+      expect(
+        mine.snapshot!.me.units[Circle.vanguard]!.legionMateId,
+        mate.instanceId,
+      );
+      expect(
+        theirs.snapshot!.them.units[Circle.vanguard]!.legionMateId,
+        mate.instanceId,
+      );
+      expect(theirs.snapshot!.knows(mate.instanceId), isTrue);
+      expect(mine.snapshot!.me.dLegionUsed, isTrue);
+
+      // And not a second time.
+      mine.ask(PlaytestIntent(IntentKind.dLegion, cards: const [1, 2, 3, 4]));
+      await pumpEventQueue();
+      expect(game.host.refusals.last, isNotEmpty);
+    });
+  });
+
   group('moving units and drive across two devices', () {
     /// A unit of [side]'s put straight onto [circle], the way a call would
     /// leave it.

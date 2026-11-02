@@ -427,4 +427,76 @@ void main() {
     expect(you.bind, isEmpty);
     expect(you.drop, contains(card));
   });
+
+  testWidgets('your vanguard D-Legions from its sheet', (tester) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final game = await hosted();
+    game.mine.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    game.theirs.ask(const PlaytestIntent(IntentKind.confirmMulligan));
+    await tester.pump();
+    final state = game.host.state;
+    final active = state.active;
+    final board = active == state.you ? game.mine : game.theirs;
+    final other = active == state.you ? game.theirs : game.mine;
+    GameCard card(int id, String name, Map<String, String> attributes) =>
+        GameCard(
+          id,
+          CardDefinition(
+            id: 'remote-legion-$id',
+            gameId: 'vanguard',
+            name: name,
+            attributes: attributes,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+    active.field[Circle.vanguard] = FieldUnit(
+      card(990201, 'Knuckle', {
+        'grade': '3',
+        'cardType': 'normal',
+        'power': '13000',
+        'effect': '[ACT](VC):[D-Legion]"Slash" (...)',
+      }),
+    );
+    state.inactive.field[Circle.vanguard] = FieldUnit(
+      card(990202, 'Theirs', {'grade': '3', 'cardType': 'normal'}),
+    );
+    final mate = card(990203, 'Slash', {
+      'grade': '2',
+      'cardType': 'normal',
+      'power': '10000',
+    });
+    active.deck.insert(0, mate);
+    active.drop.addAll([
+      for (var i = 0; i < 4; i += 1)
+        card(990210 + i, 'Filler $i', {'grade': '1', 'cardType': 'normal'}),
+    ]);
+    state.phase = PlaytestPhase.main;
+    game.host.broadcast();
+
+    await pumpBoard(tester, board);
+    await tester.tap(find.byKey(const ValueKey('my-vanguard')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('remote-d-legion')));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 4; i += 1) {
+      await tester.tap(
+        find.byKey(ValueKey('remote-d-legion-pick-${990210 + i}')),
+      );
+      await tester.pump();
+    }
+    await tester.tap(find.byKey(const ValueKey('remote-d-legion-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(active.vanguard!.legionMate, mate);
+    expect(find.byKey(const ValueKey('remote-legion-990203')), findsOneWidget);
+    expect(find.text('23000'), findsOneWidget, reason: '13000 + 10000');
+
+    // The other board sees it too.
+    await pumpBoard(tester, other);
+    expect(find.byKey(const ValueKey('remote-legion-990203')), findsOneWidget);
+  });
 }

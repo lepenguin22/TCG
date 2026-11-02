@@ -468,7 +468,12 @@ class PlaytestEngine {
       side.hand.remove(card);
     }
     final previous = side.vanguard;
-    if (previous != null) side.soul.add(previous.card);
+    if (previous != null) {
+      side.soul.add(previous.card);
+      // A D-Legion is one vanguard of two cards, and both are ridden over.
+      final mate = previous.legionMate;
+      if (mate != null) side.soul.add(mate);
+    }
     side.field[Circle.vanguard] = FieldUnit(card);
     state.ridden = true;
     state.note(
@@ -508,6 +513,83 @@ class PlaytestEngine {
     if (!side.goesFirst) {
       _chargeEnergy(side, chargeOf(crest));
     }
+  }
+
+  // ----------------------------------------------------------------- D-Legion
+
+  static final _dLegionMate = RegExp(r'\[D-Legion\]\s*"([^"]+)"');
+
+  /// The card a vanguard D-Legions with, as its own text names it:
+  /// `[ACT](VC):[D-Legion]"Brawler, Big Bang Slash Dragon"`. Null for a card
+  /// with no D-Legion.
+  static String? dLegionMateOf(GameCard card) =>
+      _dLegionMate.firstMatch(card.effect)?.group(1);
+
+  /// Whether [side]'s vanguard can D-Legion now: it names a partner, it has
+  /// none yet, the player has not D-Legioned this game, it is their main
+  /// phase, and -- the ability's own condition -- the opponent's vanguard is
+  /// grade 3 or greater. Whether the drop holds a cost to pay is asked
+  /// separately, as the cards are chosen.
+  bool canDLegion(PlaytestSide side) {
+    final vanguard = side.vanguard;
+    if (vanguard == null || vanguard.legionMate != null) return false;
+    if (dLegionMateOf(vanguard.card) == null || side.dLegionUsed) return false;
+    if (state.active != side || state.phase != PlaytestPhase.main) {
+      return false;
+    }
+    final foe = side == state.you ? state.opponent : state.you;
+    return (foe.vanguard?.card.grade ?? 0) >= 3;
+  }
+
+  /// Whether a card in the drop can be returned for D-Legion at all: any
+  /// card but a heal or an over trigger.
+  static bool dLegionCostCard(GameCard card) =>
+      card.trigger != 'heal' && card.trigger != 'over';
+
+  /// Whether [cards] pay for D-Legion: four cards out of [side]'s drop, no
+  /// more than two of them trigger units, and none of those a heal or an
+  /// over.
+  bool isDLegionCost(PlaytestSide side, List<GameCard> cards) {
+    if (cards.length != 4 || cards.toSet().length != 4) return false;
+    if (!cards.every(side.drop.contains)) return false;
+    if (!cards.every(dLegionCostCard)) return false;
+    return cards.where((c) => c.trigger != null).length <= 2;
+  }
+
+  /// D-Legions [side]'s vanguard.
+  ///
+  /// "Choose up to two trigger units other than [Heal] and [Over], and cards
+  /// other than trigger units for a total of four cards from drop, return
+  /// them to the deck, search the deck for the specified card, D-Legion."
+  /// The four go back first, so a returned card can be the one found. The
+  /// partner joins the vanguard on its circle, and the deck is shuffled
+  /// afterwards, as a search always leaves it.
+  ///
+  /// Returns the partner, or null where the D-Legion could not be made --
+  /// including a deck with no copy of the partner left in it, which still
+  /// costs nothing, since the cost is checked before anything moves.
+  GameCard? dLegion(PlaytestSide side, List<GameCard> returned) {
+    if (!canDLegion(side) || !isDLegionCost(side, returned)) return null;
+    final vanguard = side.vanguard!;
+    final name = dLegionMateOf(vanguard.card)!;
+    bool isMate(GameCard c) => c.name == name;
+    if (!side.deck.any(isMate) && !returned.any(isMate)) return null;
+
+    for (final card in returned) {
+      side.drop.remove(card);
+      side.deck.add(card);
+    }
+    final mate = side.deck.lastWhere(isMate);
+    side.deck.remove(mate);
+    side.deck.shuffle(_random);
+    vanguard.legionMate = mate;
+    side.dLegionUsed = true;
+    state.note(
+      '${side.name} returns four cards from the drop and D-Legions '
+      '${vanguard.card.name} with ${mate.name}.',
+      by: side,
+    );
+    return mate;
   }
 
   // -------------------------------------------------------------------- stride

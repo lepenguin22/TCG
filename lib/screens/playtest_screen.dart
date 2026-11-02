@@ -1792,6 +1792,103 @@ void _showPileSheet(
   );
 }
 
+/// Choosing the four cards D-Legion returns from the drop.
+///
+/// Up to two may be triggers, and never a heal or an over, so those are
+/// shown but cannot be picked, and a third trigger cannot be added.
+void _showDLegionSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  final picked = <GameCard>[];
+  final mateName = PlaytestEngine.dLegionMateOf(side.vanguard!.card)!;
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      builder: (_, scrollController) => StatefulBuilder(
+        builder: (_, setState) {
+          final triggers = picked.where((c) => c.trigger != null).length;
+          final ready = game.engine.isDLegionCost(side, picked);
+          bool pickable(GameCard card) =>
+              PlaytestEngine.dLegionCostCard(card) &&
+              (picked.contains(card) ||
+                  (picked.length < 4 &&
+                      (card.trigger == null || triggers < 2)));
+          return ListView(
+            key: const ValueKey('d-legion-sheet'),
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              SectionHeader(
+                title: 'D-Legion with $mateName',
+                caption:
+                    'Choose four cards from the drop to return to the deck: '
+                    'up to two triggers, and no heal or over. '
+                    '${picked.length} of 4 chosen.',
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const ValueKey('d-legion-confirm'),
+                  onPressed: !ready
+                      ? null
+                      : () {
+                          final mate = game.dLegion(side, [...picked]);
+                          Navigator.of(sheetContext).pop();
+                          if (mate == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'There is no $mateName left in the deck.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                  child: const Text('Return them and D-Legion'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final card in side.drop.reversed)
+                CheckboxListTile(
+                  key: ValueKey('d-legion-pick-${card.instanceId}'),
+                  contentPadding: EdgeInsets.zero,
+                  value: picked.contains(card),
+                  onChanged: pickable(card)
+                      ? (on) => setState(() {
+                          on == true ? picked.add(card) : picked.remove(card);
+                        })
+                      : null,
+                  title: Text(
+                    card.name,
+                    style: const TextStyle(color: AppColors.text, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    card.trigger == null
+                        ? 'Grade ${card.grade}'
+                        : PlaytestEngine.dLegionCostCard(card)
+                        ? '${card.trigger} trigger'
+                        : '${card.trigger} trigger — cannot be returned',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
 /// The bind zone, and where each bound card goes next.
 void _showBindSheet(
   BuildContext context,
@@ -3182,6 +3279,9 @@ class _CircleSlot extends StatelessWidget {
   }
 }
 
+/// The colour a D-Legion is marked in on the board.
+const _legionColour = Color(0xFFF5A35B);
+
 class _UnitTile extends StatelessWidget {
   const _UnitTile({required this.unit, required this.circle});
 
@@ -3231,6 +3331,7 @@ class _UnitTile extends StatelessWidget {
       );
     }
 
+    final mate = unit.legionMate;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -3238,6 +3339,48 @@ class _UnitTile extends StatelessWidget {
           opacity: unit.rested ? 0.45 : 1,
           child: CardImage(url: unit.card.imageUrl, width: 140),
         ),
+        // The D-Legion partner stands beside the vanguard on its circle, so
+        // it is drawn there, smaller, in the top corner.
+        if (mate != null)
+          Align(
+            key: ValueKey('legion-mate-${mate.instanceId}'),
+            alignment: Alignment.topRight,
+            child: FractionallySizedBox(
+              widthFactor: 0.42,
+              child: Tooltip(
+                message: 'D-Legion: ${mate.name}',
+                child: AspectRatio(
+                  aspectRatio: cardAspectRatio,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: _legionColour, width: 1.5),
+                    ),
+                    child: Opacity(
+                      opacity: unit.rested ? 0.45 : 1,
+                      child: CardImage(url: mate.imageUrl, width: 60),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (mate != null)
+          Positioned(
+            left: 0,
+            top: 0,
+            child: Container(
+              color: _legionColour,
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              child: const Text(
+                'D-LEGION',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ),
         if (unit.rested)
           const Center(
             child: Icon(Icons.rotate_right, size: 18, color: Colors.white70),
@@ -4504,6 +4647,44 @@ void _showUnitSheet(
                 child: const Text('Unlock'),
               ),
             ] else ...[
+              if (unit.legionMate != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'D-Legioned with ${unit.legionMate!.name} '
+                  '(${unit.legionMate!.power} power, added in). Both go '
+                  'into the soul when this vanguard is ridden over.',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              // D-Legion: the vanguard's own [ACT], once a game.
+              if (circle == Circle.vanguard &&
+                  game.controls(side) &&
+                  game.engine.canDLegion(side))
+                ListTile(
+                  key: const ValueKey('d-legion'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.group_add, color: _legionColour),
+                  title: Text(
+                    'D-Legion with '
+                    '${PlaytestEngine.dLegionMateOf(unit.card)}',
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Return four cards from the drop to the deck -- up to '
+                    'two triggers, no heal or over -- and search for it.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _showDLegionSheet(context, game, side);
+                  },
+                ),
               // Moving between the rows of a column is a rule the engine keeps,
               // not something applied by hand, so it sits above that line.
               if (game.controls(side) && game.engine.canMove(side, circle)) ...[

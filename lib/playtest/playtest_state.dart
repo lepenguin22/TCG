@@ -154,7 +154,13 @@ class FieldUnit {
   /// for the rest of the turn.
   int battleBonus = 0;
 
-  int get power => card.power + powerBonus + battleBonus;
+  /// The card a vanguard has D-Legioned with, standing beside it on the
+  /// vanguard circle. The two are one vanguard: their power is added
+  /// together, and when the vanguard is ridden over both go into the soul.
+  GameCard? legionMate;
+
+  int get power =>
+      card.power + (legionMate?.power ?? 0) + powerBonus + battleBonus;
 
   int get critical => 1 + criticalBonus;
 
@@ -204,6 +210,10 @@ class PlaytestSide {
   /// the drop -- it counts for neither -- until an ability says where it goes
   /// next, so the board leaves that to the player rather than guessing.
   final List<GameCard> bind = [];
+
+  /// Whether this player has D-Legioned this game. The ability says
+  /// "once", and a later vanguard naming the same partner is no second go.
+  bool dLegionUsed = false;
 
   /// The order zone, where a set order sits face up once it is played.
   ///

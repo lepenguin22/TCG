@@ -247,6 +247,77 @@ void main() {
       expect(find.text('Bind'), findsNothing, reason: 'the pile goes again');
     });
 
+    testWidgets('a vanguard D-Legions from its sheet', (tester) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      final foe = game.state.inactive;
+      GameCard card(int id, String name, Map<String, String> attributes) =>
+          GameCard(
+            id,
+            CardDefinition(
+              id: 'layout-legion-$id',
+              gameId: 'vanguard',
+              name: name,
+              attributes: attributes,
+              createdAt: DateTime(2026),
+              updatedAt: DateTime(2026),
+            ),
+          );
+      side.field[Circle.vanguard] = FieldUnit(
+        card(9601, 'Knuckle', {
+          'grade': '3',
+          'cardType': 'normal',
+          'power': '13000',
+          'effect': '[ACT](VC):[D-Legion]"Slash" (...)',
+        }),
+      );
+      foe.field[Circle.vanguard] = FieldUnit(
+        card(9602, 'Theirs', {'grade': '3', 'cardType': 'normal'}),
+      );
+      final mate = card(9603, 'Slash', {
+        'grade': '2',
+        'cardType': 'normal',
+        'power': '10000',
+      });
+      side.deck.insert(0, mate);
+      final cost = [
+        card(9610, 'Heal', {
+          'grade': '0',
+          'cardType': 'trigger',
+          'trigger': 'heal',
+        }),
+        for (var i = 1; i <= 4; i += 1)
+          card(9610 + i, 'Filler $i', {'grade': '1', 'cardType': 'normal'}),
+      ];
+      side.drop.addAll(cost);
+      game.state.phase = PlaytestPhase.main;
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(ValueKey('circle-${side.name}-vanguard')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('d-legion')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('d-legion-sheet')), findsOneWidget);
+
+      // A heal cannot be returned.
+      final heal = tester.widget<CheckboxListTile>(
+        find.byKey(const ValueKey('d-legion-pick-9610')),
+      );
+      expect(heal.onChanged, isNull);
+      for (var i = 1; i <= 4; i += 1) {
+        await tester.tap(find.byKey(ValueKey('d-legion-pick-${9610 + i}')));
+        await tester.pump();
+      }
+      await tester.tap(find.byKey(const ValueKey('d-legion-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(side.vanguard!.legionMate, mate);
+      expect(find.byKey(const ValueKey('legion-mate-9603')), findsOneWidget);
+      expect(find.text('D-LEGION'), findsOneWidget);
+      expect(find.text('23000'), findsOneWidget, reason: '13000 + 10000');
+    });
+
     testWidgets('a heal asks which damage it takes', (tester) async {
       final game = await pump(tester, opening);
       final side = game.you;

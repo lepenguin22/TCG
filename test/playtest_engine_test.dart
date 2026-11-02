@@ -3641,4 +3641,150 @@ void main() {
       expect(you.bind, isEmpty);
     });
   });
+
+  group('D-Legion', () {
+    GameCard card(int id, String name, Map<String, String> attributes) =>
+        GameCard(
+          id,
+          CardDefinition(
+            id: 'test-$id',
+            gameId: 'vanguard',
+            name: name,
+            attributes: attributes,
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        );
+
+    const mateName = 'Brawler, Big Bang Slash Dragon';
+    GameCard knuckle() => card(990001, 'Brawler, Big Bang Knuckle Dragon', {
+      'grade': '3',
+      'cardType': 'normal',
+      'power': '13000',
+      'effect':
+          '[ACT](VC):[D-Legion]"$mateName" (If your opponent\'s vanguard is '
+          'grade 3 or greater, this unit may ... D-Legion)',
+    });
+    GameCard slash(int id) => card(id, mateName, {
+      'grade': '2',
+      'cardType': 'normal',
+      'power': '10000',
+    });
+    GameCard filler(int id, {String? trigger}) => card(id, 'Filler $id', {
+      'grade': trigger == null ? '1' : '0',
+      'cardType': trigger == null ? 'normal' : 'trigger',
+      'power': '8000',
+      'trigger': ?trigger,
+    });
+
+    /// Your vanguard a D-Legion grade 3, theirs grade [theirGrade], a copy
+    /// of the partner in your deck and [drop] in your drop, in your main
+    /// phase.
+    Future<(PlaytestEngine, PlaytestSide)> setUp({
+      int theirGrade = 3,
+      List<GameCard>? drop,
+    }) async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.active;
+      final foe = engine.state.inactive;
+      you.field[Circle.vanguard] = FieldUnit(knuckle());
+      foe.field[Circle.vanguard] = FieldUnit(
+        card(990002, 'Their Vanguard', {
+          'grade': '$theirGrade',
+          'cardType': 'normal',
+          'power': '13000',
+        }),
+      );
+      you.deck.insert(0, slash(990003));
+      you.drop.addAll(
+        drop ?? [for (var i = 0; i < 4; i += 1) filler(990010 + i)],
+      );
+      engine.state.phase = PlaytestPhase.main;
+      return (engine, you);
+    }
+
+    test('the partner is named by the card', () {
+      expect(PlaytestEngine.dLegionMateOf(knuckle()), mateName);
+      expect(PlaytestEngine.dLegionMateOf(slash(1)), isNull);
+    });
+
+    test('only while their vanguard is grade 3 or greater', () async {
+      final (low, lowSide) = await setUp(theirGrade: 2);
+      expect(low.canDLegion(lowSide), isFalse);
+      final (high, highSide) = await setUp();
+      expect(high.canDLegion(highSide), isTrue);
+    });
+
+    test(
+      'four cards go back, the partner joins, and the power adds up',
+      () async {
+        final (engine, you) = await setUp();
+        final cost = [...you.drop.sublist(you.drop.length - 4)];
+        final deckBefore = you.deck.length;
+
+        final mate = engine.dLegion(you, cost);
+
+        expect(mate?.name, mateName);
+        expect(you.vanguard!.legionMate, mate);
+        expect(you.vanguard!.power, 13000 + 10000);
+        expect(you.drop.where(cost.contains), isEmpty);
+        expect(you.deck.length, deckBefore + 4 - 1);
+        expect(you.deck, isNot(contains(mate)));
+        expect(you.dLegionUsed, isTrue);
+        expect(engine.canDLegion(you), isFalse, reason: 'once a game');
+      },
+    );
+
+    test(
+      'the cost is four, with at most two triggers and no heal or over',
+      () async {
+        final (engine, you) = await setUp(
+          drop: [
+            filler(990020, trigger: 'critical'),
+            filler(990021, trigger: 'draw'),
+            filler(990022, trigger: 'front'),
+            filler(990023, trigger: 'heal'),
+            filler(990024),
+            filler(990025),
+          ],
+        );
+        final [crit, draw, front, heal, a, b] = you.drop.sublist(
+          you.drop.length - 6,
+        );
+        expect(engine.isDLegionCost(you, [crit, draw, a, b]), isTrue);
+        expect(engine.isDLegionCost(you, [crit, draw, front, a]), isFalse);
+        expect(engine.isDLegionCost(you, [heal, crit, a, b]), isFalse);
+        expect(engine.isDLegionCost(you, [crit, a, b]), isFalse);
+        expect(engine.isDLegionCost(you, [a, a, b, crit]), isFalse);
+
+        expect(engine.dLegion(you, [crit, draw, front, a]), isNull);
+        expect(you.vanguard!.legionMate, isNull, reason: 'nothing moved');
+        expect(you.drop, containsAll([crit, draw, front, a]));
+      },
+    );
+
+    test('a returned card can be the partner found', () async {
+      final (engine, you) = await setUp(
+        drop: [slash(990030), filler(990031), filler(990032), filler(990033)],
+      );
+      you.deck.removeWhere((c) => c.name == mateName);
+      final cost = [...you.drop.sublist(you.drop.length - 4)];
+      expect(engine.dLegion(you, cost)?.instanceId, 990030);
+    });
+
+    test('riding over a D-Legion puts both into the soul', () async {
+      final (engine, you) = await setUp();
+      final cost = [...you.drop.sublist(you.drop.length - 4)];
+      final mate = engine.dLegion(you, cost)!;
+      final leader = you.vanguard!.card;
+      final next = you.hand.firstWhere((c) => c.isUnit);
+
+      engine.ride(you, next, fromRideDeck: false);
+
+      expect(you.soul, containsAll([leader, mate]));
+      expect(you.vanguard!.legionMate, isNull);
+    });
+  });
 }
