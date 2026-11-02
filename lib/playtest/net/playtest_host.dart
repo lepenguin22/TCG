@@ -239,6 +239,29 @@ class PlaytestHost {
             .firstOrNull;
         if (card == null) return _refuse(side, 'no such card in the bind zone');
         engine.unbindCard(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.dLegion:
+        // Out of the asker's own drop: an id that is not there finds
+        // nothing, and four that are not a legal cost do nothing.
+        final ids = intent.cards ?? const <int>[];
+        final returned = [
+          for (final id in ids)
+            ?side.drop.where((c) => c.instanceId == id).firstOrNull,
+        ];
+        if (returned.length != ids.length) {
+          return _refuse(side, 'those cards are not all in your drop');
+        }
+        if (!engine.canDLegion(side)) {
+          return _refuse(side, 'your vanguard cannot D-Legion now');
+        }
+        if (!engine.isDLegionCost(side, returned)) {
+          return _refuse(
+            side,
+            'D-Legion returns four cards: up to two triggers, no heal or over',
+          );
+        }
+        if (engine.dLegion(side, returned) == null) {
+          return _refuse(side, 'there is no D-Legion partner left in the deck');
+        }
       case IntentKind.chooseHeal:
         // Only your own heal, out of your own damage zone.
         final check = state.triggerZone

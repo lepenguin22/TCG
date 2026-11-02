@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../playtest/net/playtest_intent.dart';
 import '../playtest/net/playtest_wire.dart';
 import '../playtest/net/remote_board.dart';
+import '../playtest/playtest_engine.dart' show PlaytestEngine;
 import '../playtest/playtest_state.dart';
 import '../theme.dart';
 import '../widgets/card_image.dart';
@@ -776,10 +777,149 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
     ]);
   }
 
+  /// Whether this player's vanguard can D-Legion now, worked out from the
+  /// board as this device sees it. The host checks again when asked.
+  String? _dLegionMate(Circle circle, UnitSnapshot unit) {
+    if (circle != Circle.vanguard || unit.legionMateId != null) return null;
+    if (snapshot.me.dLegionUsed || !snapshot.myTurn) return null;
+    if (snapshot.phase != PlaytestPhase.main) return null;
+    final theirs = snapshot.them.units[Circle.vanguard];
+    if ((board.cardOf(theirs?.cardId ?? -1)?.grade ?? 0) < 3) return null;
+    final face = board.cardOf(unit.cardId);
+    return face == null ? null : PlaytestEngine.dLegionMateOf(face);
+  }
+
+  /// Choosing the four cards D-Legion returns from your drop.
+  Future<void> _dLegionSheet(String mateName) async {
+    final picked = <int>[];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: StatefulBuilder(
+          builder: (_, setState) {
+            final drop = snapshot.me.dropIds;
+            GameCard? faceOf(int id) => board.cardOf(id);
+            final triggers = picked
+                .where((id) => faceOf(id)?.trigger != null)
+                .length;
+            bool pickable(int id) {
+              final card = faceOf(id);
+              if (card == null || !PlaytestEngine.dLegionCostCard(card)) {
+                return false;
+              }
+              return picked.contains(id) ||
+                  (picked.length < 4 && (card.trigger == null || triggers < 2));
+            }
+
+            return SingleChildScrollView(
+              key: const ValueKey('remote-d-legion-sheet'),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SheetTitle('D-Legion with $mateName'),
+                  Text(
+                    'Choose four cards from your drop to return to the deck: '
+                    'up to two triggers, and no heal or over. '
+                    '${picked.length} of 4 chosen.',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      key: const ValueKey('remote-d-legion-confirm'),
+                      onPressed: picked.length != 4
+                          ? null
+                          : () {
+                              Navigator.of(sheetContext).pop();
+                              ask(
+                                PlaytestIntent(
+                                  IntentKind.dLegion,
+                                  cards: [...picked],
+                                ),
+                              );
+                            },
+                      child: const Text('Return them and D-Legion'),
+                    ),
+                  ),
+                  for (final id in drop.reversed)
+                    CheckboxListTile(
+                      key: ValueKey('remote-d-legion-pick-$id'),
+                      contentPadding: EdgeInsets.zero,
+                      value: picked.contains(id),
+                      onChanged: pickable(id)
+                          ? (on) => setState(() {
+                              on == true ? picked.add(id) : picked.remove(id);
+                            })
+                          : null,
+                      title: Text(
+                        faceOf(id)?.name ?? 'A card',
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        switch (faceOf(id)) {
+                          final card? when card.trigger == null =>
+                            'Grade ${card.grade}',
+                          final card?
+                              when PlaytestEngine.dLegionCostCard(card) =>
+                            '${card.trigger} trigger',
+                          final card? =>
+                            '${card.trigger} trigger — cannot be returned',
+                          null => '',
+                        },
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _unitSheet(Circle circle, UnitSnapshot unit) async {
     final face = board.cardOf(unit.cardId);
+    final mateName = _dLegionMate(circle, unit);
+    final mate = unit.legionMateId == null
+        ? null
+        : board.cardOf(unit.legionMateId!);
     await _sheet([
       if (face != null) _CardHeading(face: face),
+      if (mate != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'D-Legioned with ${mate.name} (${mate.power} power, added in). '
+            'Both go into the soul when this vanguard is ridden over.',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ),
+      if (mateName != null)
+        _Action(
+          key: const ValueKey('remote-d-legion'),
+          icon: Icons.group_add,
+          label: 'D-Legion with $mateName',
+          detail:
+              'Return four cards from the drop to the deck and search for '
+              'it.',
+          onTap: () => _dLegionSheet(mateName),
+        ),
       _Action(
         icon: unit.rested ? Icons.arrow_upward : Icons.arrow_downward,
         label: unit.rested ? 'Stand it' : 'Rest it',
@@ -1341,6 +1481,9 @@ class _Field extends StatelessWidget {
                         face: side.units[circle] == null
                             ? null
                             : board.cardOf(side.units[circle]!.cardId),
+                        mate: side.units[circle]?.legionMateId == null
+                            ? null
+                            : board.cardOf(side.units[circle]!.legionMateId!),
                         selected: selected == circle,
                         onTap: () => onTap(circle),
                       ),
@@ -1361,10 +1504,14 @@ class _UnitCell extends StatelessWidget {
     required this.face,
     required this.selected,
     required this.onTap,
+    this.mate,
   });
 
   final UnitSnapshot? unit;
   final GameCard? face;
+
+  /// The vanguard's D-Legion partner, whose power is added to its own.
+  final GameCard? mate;
   final bool selected;
   final VoidCallback onTap;
 
@@ -1372,7 +1519,10 @@ class _UnitCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final power = face == null
         ? null
-        : face!.power + (unit?.powerBonus ?? 0) + (unit?.battleBonus ?? 0);
+        : face!.power +
+              (mate?.power ?? 0) +
+              (unit?.powerBonus ?? 0) +
+              (unit?.battleBonus ?? 0);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1397,10 +1547,20 @@ class _UnitCell extends StatelessWidget {
                 children: [
                   Expanded(child: CardImage(url: face?.imageUrl, width: 34)),
                   Text(
-                    face?.name ?? 'A unit',
+                    mate == null
+                        ? face?.name ?? 'A unit'
+                        : 'D-Legion · ${mate!.name}',
+                    key: mate == null
+                        ? null
+                        : ValueKey('remote-legion-${mate!.instanceId}'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.text, fontSize: 10),
+                    style: TextStyle(
+                      color: mate == null
+                          ? AppColors.text
+                          : const Color(0xFFF5A35B),
+                      fontSize: 10,
+                    ),
                   ),
                   Text(
                     '${power ?? ''}'

@@ -47,6 +47,10 @@ enum IntentKind {
   /// Takes [PlaytestIntent.card] out of the asker's bind zone, to
   /// [PlaytestIntent.exit].
   unbindCard,
+
+  /// D-Legions the asker's vanguard, returning [PlaytestIntent.cards] from
+  /// their drop.
+  dLegion,
 }
 
 /// One request, named and with its arguments.
@@ -62,6 +66,7 @@ class PlaytestIntent {
     this.to,
     this.amount,
     this.exit,
+    this.cards,
   });
 
   final IntentKind kind;
@@ -81,6 +86,9 @@ class PlaytestIntent {
   /// Where a set order goes when it is taken off the table.
   final OrderExit? exit;
 
+  /// Several cards by instance id, for a cost paid with more than one.
+  final List<int>? cards;
+
   Map<String, Object?> toJson() => {
     'kind': kind.name,
     if (card != null) 'card': card,
@@ -88,6 +96,7 @@ class PlaytestIntent {
     if (to != null) 'to': to!.name,
     if (amount != null) 'amount': amount,
     if (exit != null) 'exit': exit!.name,
+    if (cards != null) 'cards': cards,
   };
 
   /// Reads an intent off the wire, or nothing at all.
@@ -107,6 +116,12 @@ class PlaytestIntent {
       to: _circle(json['to']),
       amount: json['amount'] is int ? json['amount']! as int : null,
       exit: OrderExit.values.where((e) => e.name == json['exit']).firstOrNull,
+      cards: json['cards'] is List
+          ? [
+              for (final id in json['cards']! as List)
+                if (id is int) id,
+            ]
+          : null,
     );
   }
 
