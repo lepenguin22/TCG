@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import collections
 import gzip
+from html import unescape
 import io
 import json
 import pathlib
@@ -183,8 +184,11 @@ def fetch(url: str, missing_ok: bool = False) -> str | None:
 def strip_tags(html: str) -> list[str]:
     text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
     text = re.sub(r"<[^>]+>", "\n", text)
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&")
-    text = text.replace("&gt;", ">").replace("&lt;", "<").replace("&#038;", "&")
+    # Every entity the site uses, not just a handful: "&quot;" and "&#039;"
+    # were left in names and rules text, so a card read here did not match
+    # the same card from the mirror. Decoded after the tags are gone, so a
+    # decoded "<" cannot start one.
+    text = unescape(text).replace("\xa0", " ")
     text = re.sub(r"[ \t]+", " ", text)
     return [line.strip() for line in text.splitlines() if line.strip()]
 
@@ -289,6 +293,8 @@ def parse_card(number: str, name: str, image: str, html: str) -> dict[str, objec
     stats, is what lets a ride deck crest through: a crest has no grade, no
     power and no shield, and anchoring on the grade dropped every one of them.
     """
+    # The name comes off the set listing's alt text, still HTML-escaped.
+    name = unescape(name)
     lines = strip_tags(html)
 
     # The end of the block: the format line the card's own number follows.

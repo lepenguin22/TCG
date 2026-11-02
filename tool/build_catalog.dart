@@ -152,6 +152,39 @@ String _ruleKey(String effect) => effect
     .replaceAll(RegExp(r'\([^)]{9,}\)'), '')
     .replaceAll(RegExp(r'[^a-z0-9]'), '');
 
+/// Text with its HTML entities turned back into the characters they stand
+/// for.
+///
+/// The official site escapes quotes and apostrophes, and earlier reads kept
+/// them: `&quot;Hero&quot; Who Strives for Peace, Himmel`, `Poppin&#039;Party`.
+/// Besides reading badly, an escaped name is a different name to the same
+/// card's other printings, so the two were not folded together. The mirror
+/// has a typo of its own, `&91;` for `&#91;`, the "[" of a cost.
+String decodeEntities(String text) {
+  if (!text.contains('&')) return text;
+  const named = {
+    'quot': '"',
+    'amp': '&',
+    'apos': "'",
+    'lt': '<',
+    'gt': '>',
+    'nbsp': ' ',
+  };
+  return text.replaceAllMapped(
+    RegExp(r'&(#x[0-9a-fA-F]+|#?[0-9]+|[a-zA-Z]+);'),
+    (m) {
+      final body = m[1]!;
+      if (named[body] case final char?) return char;
+      final code = body.startsWith('#x')
+          ? int.tryParse(body.substring(2), radix: 16)
+          : int.tryParse(body.startsWith('#') ? body.substring(1) : body);
+      // An unknown name, or a number that is no character, stays as it was.
+      if (code == null || code <= 0 || code > 0x10FFFF) return m[0]!;
+      return String.fromCharCode(code);
+    },
+  );
+}
+
 /// Whether a card type is a unit, and so must have a power.
 bool _isUnit(String cardType) =>
     cardType == 'normal' || cardType == 'trigger' || cardType == 'g-unit';
@@ -365,7 +398,7 @@ void main() async {
 
     for (final raw in cards.whereType<Map<String, dynamic>>()) {
       printings += 1;
-      final name = (raw['name'] as String? ?? '').trim();
+      final name = decodeEntities(raw['name'] as String? ?? '').trim();
       final cardType =
           _cardTypes[raw['type']] ?? (_isStrideCrest(raw) ? 'crest' : null);
       // Tokens, markers and untyped rows are not deck cards. A stride crest
@@ -402,7 +435,7 @@ void main() async {
       final shield = _asInt(raw['shield']);
       final power = _asInt(raw['power']);
       final grade = _asInt(raw['grade']);
-      final effect = (raw['effect'] as String? ?? '').trim();
+      final effect = decodeEntities(raw['effect'] as String? ?? '').trim();
       final image = raw['image_url'] as String? ?? '';
 
       // The source files sentinels under "Trigger Unit" alongside real
