@@ -236,8 +236,27 @@ Future<Map<String, Map<String, Object?>>> _readErrata() async {
   };
 }
 
+/// The sets read off the English card list, then the ones that are not on it
+/// yet.
+///
+/// unofficial_sets.json holds sets Japan has released ahead of English, with
+/// the new cards translated by hand and marked as such on each card. It is a
+/// file of its own so that a refresh, which rewrites extra_sets.json, never
+/// touches it; a set comes out of it by hand once the English list has it.
 Future<List<({String name, List<dynamic> cards})>> _readExtraSets() async {
-  final file = File('data/cardlist/extra_sets.json');
+  return [
+    for (final path in const [
+      'data/cardlist/extra_sets.json',
+      'data/cardlist/unofficial_sets.json',
+    ])
+      ...await _readSetFile(path),
+  ];
+}
+
+Future<List<({String name, List<dynamic> cards})>> _readSetFile(
+  String path,
+) async {
+  final file = File(path);
   if (!file.existsSync()) return const [];
   final decoded = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
   return [
@@ -473,8 +492,12 @@ void main() async {
           ? (_triggerOf(raw) ?? (isOver ? 'over' : null))
           : null;
 
+      // A card the English list does not have yet keeps its whole address:
+      // its picture is on the Japanese site, under another prefix.
       final relativeImage = image.startsWith(_imageBase)
           ? image.substring(_imageBase.length)
+          : image.startsWith('https://')
+          ? image
           : '';
 
       final entry = <String, Object?>{
