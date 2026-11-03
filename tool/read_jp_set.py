@@ -9,9 +9,11 @@ runs, on GitHub Actions, since the site is not reachable from everywhere.
     python3 tool/read_jp_set.py --find ごーすと      # sets whose name matches
     python3 tool/read_jp_set.py --expansion 123      # every card in a set
     python3 tool/read_jp_set.py --search DZ-SS19     # cards a keyword finds
+    python3 tool/read_jp_set.py --raw /cardlist/      # a page's links and text
 """
 
 import argparse
+import re
 import sys
 
 import scrape_cardlist as site
@@ -59,8 +61,26 @@ def main() -> int:
     parser.add_argument("--find", default="")
     parser.add_argument("--expansion", type=int, default=0)
     parser.add_argument("--search", default="")
+    # A page as it comes, for working out how the Japanese site lays out its
+    # lists: the links on it that lead into the card list, and its text.
+    parser.add_argument("--raw", default="")
     args = parser.parse_args()
     use_japanese_site()
+
+    if args.raw:
+        url = args.raw if args.raw.startswith("http") else f"{JP}{args.raw}"
+        page = site.fetch(url, missing_ok=True) or ""
+        print(f"{url}: {len(page)} characters")
+        links = sorted(set(re.findall(r'href="([^"]*card[^"]*)"', page)))
+        print(f"{len(links)} card links:")
+        for link in links[:300]:
+            print(f"  {link}")
+        for chunk in re.findall(r'.{0,200}(?:expansion|cardno)=.{0,200}', page)[:15]:
+            print(f"  RAW {chunk}")
+        print("TEXT:")
+        for line in site.strip_tags(page)[:400]:
+            print(f"    {line}")
+        return 0
 
     if args.find:
         found = site.expansions()
