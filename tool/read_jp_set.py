@@ -64,6 +64,9 @@ def main() -> int:
     # A page as it comes, for working out how the Japanese site lays out its
     # lists: the links on it that lead into the card list, and its text.
     parser.add_argument("--raw", default="")
+    # With --raw: print the code around this pattern in the page and its
+    # scripts, to see how a script asks for a card.
+    parser.add_argument("--grep", default="")
     args = parser.parse_args()
     use_japanese_site()
 
@@ -74,6 +77,18 @@ def main() -> int:
         # The Japanese card pages fill themselves in from a script, so what
         # matters is where that script gets the card from.
         scripts = re.findall(r'<script[^>]+src="([^"]+)"', page)
+        if args.grep:
+            sources = [("page", page)] + [
+                (src, site.fetch(src, missing_ok=True) or "")
+                for src in scripts
+                if "bushiroad-card-manager" in src
+            ]
+            for where, text in sources:
+                for match in list(re.finditer(args.grep, text))[:12]:
+                    start = max(match.start() - 400, 0)
+                    snippet = text[start : match.end() + 400].replace("\n", " ")
+                    print(f"--- {where}:\n{snippet}\n")
+            return 0
         print(f"{len(scripts)} scripts:")
         for src in scripts:
             print(f"  {src}")
