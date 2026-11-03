@@ -118,8 +118,17 @@ def main() -> int:
             for card in cards:
                 number = card.get("card_number") or card.get("cardno") or ""
                 detail = get(f"detail?cardno={urllib.parse.quote(str(number))}")
+                card = detail.get("card", detail) if isinstance(detail, dict) else detail
+                # The card alone: its rulings and the decks that ran it are
+                # read on the site, and the text comes twice, once as HTML.
+                if isinstance(card, dict):
+                    card = {
+                        key: value
+                        for key, value in card.items()
+                        if key not in ("text_html", "update_time", "disp_flg", "priority", "id")
+                    }
                 print(f"=== {number}")
-                print(show(lean(detail), 6000))
+                print(show(lean(card), 6000))
                 print(flush=True)
         return 0
 
