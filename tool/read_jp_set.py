@@ -33,8 +33,9 @@ def use_japanese_site() -> None:
 
 
 def get(path: str) -> object:
-    """One answer from the feed, as JSON."""
-    text = site.fetch(f"{API}/{path.lstrip('/')}", missing_ok=True)
+    """One answer from the feed, as JSON; or a whole address, to see it is there."""
+    url = path if path.startswith("https://") else f"{API}/{path.lstrip('/')}"
+    text = site.fetch(url, missing_ok=True)
     if text is None:
         raise SystemExit(f"{path}: not found")
     try:
