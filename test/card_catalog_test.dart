@@ -6,6 +6,8 @@ import 'package:tcg_decks/games/card_catalog.dart';
 import 'package:tcg_decks/store/decklog_import.dart';
 import 'package:tcg_decks/games/vanguard/vanguard_game.dart';
 
+import '../tool/build_catalog.dart' show decodeEntities;
+
 CatalogCard card(String name, Map<String, Object> extra) =>
     CatalogCard.fromJson({'n': name, ...extra});
 
@@ -144,6 +146,29 @@ void main() {
     });
   });
 
+  group('decoding the card list', () {
+    test('entities become the characters they stand for', () {
+      expect(
+        decodeEntities('&quot;Hero&quot; Who Strives for Peace, Himmel'),
+        '"Hero" Who Strives for Peace, Himmel',
+      );
+      expect(decodeEntities('Poppin&#039;Party'), "Poppin'Party");
+      expect(decodeEntities('Stark &amp; Frieren'), 'Stark & Frieren');
+      expect(decodeEntities('&#x5B;Rest&#93;'), '[Rest]');
+      // The mirror's typo for "&#91;".
+      expect(
+        decodeEntities('[COST]&91;[Rest] a rear-guard]'),
+        '[COST][[Rest] a rear-guard]',
+      );
+    });
+
+    test('text with no entity, or an unknown one, is left alone', () {
+      expect(decodeEntities('Dragonic Overlord'), 'Dragonic Overlord');
+      expect(decodeEntities('A & B'), 'A & B');
+      expect(decodeEntities('&bogus;'), '&bogus;');
+    });
+  });
+
   group('the bundled Vanguard catalog', () {
     // Reads the real generated asset off disk. Guards against shipping a
     // catalog that is missing, truncated, or has drifted from the schema the
@@ -158,6 +183,20 @@ void main() {
 
     test('is present and substantial', () {
       expect(cards.length, greaterThan(9000));
+    });
+
+    test('no name or rules text is left HTML-escaped', () {
+      // "&quot;Hero&quot; Who Strives for Peace" reads badly, and does not
+      // match the same card's other printings, so they are not folded
+      // together. The catalog builder decodes them; this says it did.
+      final escaped = RegExp(r'&(#x[0-9a-fA-F]+|#?[0-9]+|[a-zA-Z]+);');
+      final left = [
+        for (final entry in cards)
+          if (escaped.hasMatch(entry.name) ||
+              escaped.hasMatch(entry.attributes['effect'] ?? ''))
+            entry.name,
+      ];
+      expect(left, isEmpty);
     });
 
     test('every entry has a name, grade and card type', () {
