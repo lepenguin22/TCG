@@ -4651,15 +4651,16 @@ void _showUnitSheet(
                 const SizedBox(height: 8),
                 Text(
                   'D-Legioned with ${unit.legionMate!.name} '
-                  '(${unit.legionMate!.power} power, added in). Both go '
-                  'into the soul when this vanguard is ridden over.',
+                  '(${unit.legionMate!.power} power, added when this '
+                  'vanguard attacks). Both go into the soul when it is '
+                  'ridden over.',
                   style: const TextStyle(
                     color: AppColors.textMuted,
                     fontSize: 12,
                   ),
                 ),
               ],
-              // D-Legion: the vanguard's own [ACT], once a game.
+              // D-Legion: the vanguard's own [ACT], once per unit.
               if (circle == Circle.vanguard &&
                   game.controls(side) &&
                   game.engine.canDLegion(side))

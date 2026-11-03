@@ -526,14 +526,14 @@ class PlaytestEngine {
       _dLegionMate.firstMatch(card.effect)?.group(1);
 
   /// Whether [side]'s vanguard can D-Legion now: it names a partner, it has
-  /// none yet, the player has not D-Legioned this game, it is their main
-  /// phase, and -- the ability's own condition -- the opponent's vanguard is
+  /// not D-Legioned yet -- once per unit, so a later D-Legion unit ridden on
+  /// top has its own go -- it is their main phase, and -- the ability's own condition -- the opponent's vanguard is
   /// grade 3 or greater. Whether the drop holds a cost to pay is asked
   /// separately, as the cards are chosen.
   bool canDLegion(PlaytestSide side) {
     final vanguard = side.vanguard;
     if (vanguard == null || vanguard.legionMate != null) return false;
-    if (dLegionMateOf(vanguard.card) == null || side.dLegionUsed) return false;
+    if (dLegionMateOf(vanguard.card) == null) return false;
     if (state.active != side || state.phase != PlaytestPhase.main) {
       return false;
     }
@@ -583,7 +583,6 @@ class PlaytestEngine {
     side.deck.remove(mate);
     side.deck.shuffle(_random);
     vanguard.legionMate = mate;
-    side.dLegionUsed = true;
     state.note(
       '${side.name} returns four cards from the drop and D-Legions '
       '${vanguard.card.name} with ${mate.name}.',

@@ -315,7 +315,9 @@ void main() {
       expect(side.vanguard!.legionMate, mate);
       expect(find.byKey(const ValueKey('legion-mate-9603')), findsOneWidget);
       expect(find.text('D-LEGION'), findsOneWidget);
-      expect(find.text('23000'), findsOneWidget, reason: '13000 + 10000');
+      // The powers add up only when it attacks; the circle shows the leader.
+      expect(find.text('23000'), findsNothing);
+      expect(side.vanguard!.attackingPower, 13000 + 10000);
     });
 
     testWidgets('a heal asks which damage it takes', (tester) async {

@@ -155,12 +155,22 @@ class FieldUnit {
   int battleBonus = 0;
 
   /// The card a vanguard has D-Legioned with, standing beside it on the
-  /// vanguard circle. The two are one vanguard: their power is added
-  /// together, and when the vanguard is ridden over both go into the soul.
+  /// vanguard circle. The two are one vanguard: they attack together, and
+  /// when the vanguard is ridden over both go into the soul.
+  ///
+  /// A unit D-Legions once: the ability says "this unit may ... once", and
+  /// the official FAQ reads that per unit, so a different D-Legion unit
+  /// ridden later -- a new [FieldUnit] -- has its own go.
   GameCard? legionMate;
 
-  int get power =>
-      card.power + (legionMate?.power ?? 0) + powerBonus + battleBonus;
+  /// The unit's power as it stands -- and, for a D-Legion, as it is
+  /// attacked: the official FAQ has the two powers added "only when
+  /// attacking", and an attack on the vanguard is an attack on the leader.
+  int get power => card.power + powerBonus + battleBonus;
+
+  /// The unit's power when it attacks: a D-Legion attacks with both cards,
+  /// the leader's power and the partner's added together.
+  int get attackingPower => power + (legionMate?.power ?? 0);
 
   int get critical => 1 + criticalBonus;
 
@@ -210,10 +220,6 @@ class PlaytestSide {
   /// the drop -- it counts for neither -- until an ability says where it goes
   /// next, so the board leaves that to the player rather than guessing.
   final List<GameCard> bind = [];
-
-  /// Whether this player has D-Legioned this game. The ability says
-  /// "once", and a later vanguard naming the same partner is no second go.
-  bool dLegionUsed = false;
 
   /// The order zone, where a set order sits face up once it is played.
   ///
@@ -498,7 +504,7 @@ class PendingAttack {
   /// +5000 pushes with that too -- an 8000 booster on a 5000 pump boosts for
   /// 13000 -- which is how the game works and what a deck built on pumping
   /// the back row is counting on.
-  int get attackPower => attacker.power + (booster?.power ?? 0);
+  int get attackPower => attacker.attackingPower + (booster?.power ?? 0);
 
   int get shield =>
       guardians.fold(shieldBonus, (sum, card) => sum + card.shield);

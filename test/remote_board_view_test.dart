@@ -493,7 +493,10 @@ void main() {
 
     expect(active.vanguard!.legionMate, mate);
     expect(find.byKey(const ValueKey('remote-legion-990203')), findsOneWidget);
-    expect(find.text('23000'), findsOneWidget, reason: '13000 + 10000');
+    // The two powers add up only when the D-Legion attacks, so the circle
+    // shows the leader's own.
+    expect(find.text('13000'), findsWidgets);
+    expect(find.text('23000'), findsNothing);
 
     // The other board sees it too.
     await pumpBoard(tester, other);

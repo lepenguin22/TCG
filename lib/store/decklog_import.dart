@@ -196,6 +196,7 @@ Future<DecklogImportResult> importDecklogDeck(
   String? name,
   String gameId = 'vanguard',
   String formatId = formatStandard,
+  String? description,
 }) async {
   final game = gameById(gameId);
   final asset = game.catalogAsset;
@@ -267,7 +268,7 @@ Future<DecklogImportResult> importDecklogDeck(
         : (source.name ?? 'Deck Log ${source.code}'),
     gameId: gameId,
     formatId: formatId,
-    description: 'Imported from Deck Log (${source.code}).',
+    description: description ?? 'Imported from Deck Log (${source.code}).',
   );
 
   var matched = 0;
