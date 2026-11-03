@@ -3718,7 +3718,7 @@ void main() {
     });
 
     test(
-      'four cards go back, the partner joins, and the power adds up',
+      'four cards go back, the partner joins, and the power adds up to attack',
       () async {
         final (engine, you) = await setUp();
         final cost = [...you.drop.sublist(you.drop.length - 4)];
@@ -3728,12 +3728,14 @@ void main() {
 
         expect(mate?.name, mateName);
         expect(you.vanguard!.legionMate, mate);
-        expect(you.vanguard!.power, 13000 + 10000);
+        // The official FAQ: the powers add up only when attacking. Attacked,
+        // the D-Legion is the leader alone.
+        expect(you.vanguard!.attackingPower, 13000 + 10000);
+        expect(you.vanguard!.power, 13000);
         expect(you.drop.where(cost.contains), isEmpty);
         expect(you.deck.length, deckBefore + 4 - 1);
         expect(you.deck, isNot(contains(mate)));
-        expect(you.dLegionUsed, isTrue);
-        expect(engine.canDLegion(you), isFalse, reason: 'once a game');
+        expect(engine.canDLegion(you), isFalse, reason: 'once per unit');
       },
     );
 
@@ -3772,6 +3774,47 @@ void main() {
       you.deck.removeWhere((c) => c.name == mateName);
       final cost = [...you.drop.sublist(you.drop.length - 4)];
       expect(engine.dLegion(you, cost)?.instanceId, 990030);
+    });
+
+    test('a D-Legion attacks with both powers and defends with one', () async {
+      final (engine, you) = await setUp();
+      engine.dLegion(you, [...you.drop.sublist(you.drop.length - 4)]);
+      final legion = you.vanguard!;
+      final other = FieldUnit(filler(990050));
+
+      final attacking = PendingAttack(
+        attacker: legion,
+        attackerCircle: Circle.vanguard,
+        target: other,
+        targetCircle: Circle.vanguard,
+        booster: FieldUnit(filler(990051)),
+      );
+      expect(attacking.attackPower, 13000 + 10000 + 8000);
+
+      final attacked = PendingAttack(
+        attacker: other,
+        attackerCircle: Circle.vanguard,
+        target: legion,
+        targetCircle: Circle.vanguard,
+      );
+      expect(attacked.defence, 13000);
+    });
+
+    test('a D-Legion unit ridden later has its own once', () async {
+      // The official FAQ: "once" is the unit's, so a new D-Legion vanguard on
+      // top of one that already D-Legioned can D-Legion again.
+      final (engine, you) = await setUp();
+      engine.dLegion(you, [...you.drop.sublist(you.drop.length - 4)]);
+      expect(engine.canDLegion(you), isFalse);
+
+      you.field[Circle.vanguard] = FieldUnit(knuckle());
+      you.deck.insert(0, slash(990040));
+      you.drop.addAll([for (var i = 0; i < 4; i += 1) filler(990041 + i)]);
+      expect(engine.canDLegion(you), isTrue);
+      expect(
+        engine.dLegion(you, [...you.drop.sublist(you.drop.length - 4)]),
+        isNotNull,
+      );
     });
 
     test('riding over a D-Legion puts both into the soul', () async {

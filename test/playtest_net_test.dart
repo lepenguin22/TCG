@@ -931,9 +931,7 @@ void main() {
         mate.instanceId,
       );
       expect(theirs.snapshot!.knows(mate.instanceId), isTrue);
-      expect(mine.snapshot!.me.dLegionUsed, isTrue);
-
-      // And not a second time.
+      // And not a second time by the same unit.
       mine.ask(PlaytestIntent(IntentKind.dLegion, cards: const [1, 2, 3, 4]));
       await pumpEventQueue();
       expect(game.host.refusals.last, isNotEmpty);

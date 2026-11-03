@@ -154,7 +154,6 @@ class SideSnapshot {
     required this.faceUpG,
     required this.removedIds,
     this.bindIds = const [],
-    this.dLegionUsed = false,
     required this.crestIds,
     required this.orderZoneIds,
     this.restedOrders = const [],
@@ -192,8 +191,6 @@ class SideSnapshot {
   /// The bind zone, face up for both players like the drop.
   final List<int> bindIds;
 
-  /// Whether this player has D-Legioned this game, which is once.
-  final bool dLegionUsed;
   final List<int> crestIds;
 
   /// The set orders on the table. Face up and public: a set order is text
@@ -226,7 +223,6 @@ class SideSnapshot {
     'faceUpG': faceUpG,
     'removed': removedIds,
     'bind': bindIds,
-    'dLegionUsed': dLegionUsed,
     'crest': crestIds,
     'orders': orderZoneIds,
     'restedOrders': restedOrders,
@@ -256,7 +252,6 @@ class SideSnapshot {
     faceUpG: _ids(json['faceUpG']),
     removedIds: _ids(json['removed']),
     bindIds: _ids(json['bind']),
-    dLegionUsed: json['dLegionUsed'] as bool? ?? false,
     crestIds: _ids(json['crest']),
     orderZoneIds: _ids(json['orders']),
     restedOrders: _ids(json['restedOrders']),
@@ -563,7 +558,6 @@ SideSnapshot _sideSnapshot(PlaytestSide side, {required bool ownedByViewer}) =>
       faceUpG: side.faceUpG.toList(),
       removedIds: [for (final card in side.removed) card.instanceId],
       bindIds: [for (final card in side.bind) card.instanceId],
-      dLegionUsed: side.dLegionUsed,
       crestIds: [for (final card in side.crestZone) card.instanceId],
       orderZoneIds: [for (final card in side.orderZone) card.instanceId],
       restedOrders: side.restedOrders.toList(),

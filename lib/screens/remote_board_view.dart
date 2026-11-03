@@ -781,7 +781,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
   /// board as this device sees it. The host checks again when asked.
   String? _dLegionMate(Circle circle, UnitSnapshot unit) {
     if (circle != Circle.vanguard || unit.legionMateId != null) return null;
-    if (snapshot.me.dLegionUsed || !snapshot.myTurn) return null;
+    if (!snapshot.myTurn) return null;
     if (snapshot.phase != PlaytestPhase.main) return null;
     final theirs = snapshot.them.units[Circle.vanguard];
     if ((board.cardOf(theirs?.cardId ?? -1)?.grade ?? 0) < 3) return null;
@@ -1510,7 +1510,8 @@ class _UnitCell extends StatelessWidget {
   final UnitSnapshot? unit;
   final GameCard? face;
 
-  /// The vanguard's D-Legion partner, whose power is added to its own.
+  /// The vanguard's D-Legion partner, whose power is added to its own only
+  /// when it attacks.
   final GameCard? mate;
   final bool selected;
   final VoidCallback onTap;
@@ -1519,10 +1520,7 @@ class _UnitCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final power = face == null
         ? null
-        : face!.power +
-              (mate?.power ?? 0) +
-              (unit?.powerBonus ?? 0) +
-              (unit?.battleBonus ?? 0);
+        : face!.power + (unit?.powerBonus ?? 0) + (unit?.battleBonus ?? 0);
     return GestureDetector(
       onTap: onTap,
       child: Container(
