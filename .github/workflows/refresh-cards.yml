@@ -47,7 +47,7 @@ on:
       japanese:
         description: >-
           Read the Japanese card list instead, writing nothing: arguments for
-          tool/read_jp_set.py, e.g. "--find SS19" or "--expansion 123". For
+          tool/read_jp_set.py, e.g. "--products SS19" or "--cards expansion=123". For
           translating a set that has not reached the English list yet.
         required: false
         default: ''
