@@ -50,6 +50,19 @@ void main() {
       );
     });
 
+    test('a picture with a whole address is left as it is', () {
+      // A card the English list does not have yet is drawn from the Japanese
+      // site, which the English prefix would only break.
+      const japanese =
+          'https://cf-vanguard.com/wordpress/wp-content/images/cardlist/'
+          'DZ-SS19/dzss19_001.png';
+      final parsed = CatalogCard.fromJson({
+        'n': 'Lubna',
+        'i': japanese,
+      }, imageBase: 'https://example.test/cards/');
+      expect(parsed.attributes['imageUrl'], japanese);
+    });
+
     test('card text comes through as the effect attribute', () {
       final parsed = CatalogCard.fromJson({
         'n': 'Some Card',
@@ -197,6 +210,34 @@ void main() {
             entry.name,
       ];
       expect(left, isEmpty);
+    });
+
+    test('every card of the Japanese-only DZ-SS19 is there', () {
+      // The start deck is out in Japan months before English, so its new
+      // cards are translated by hand and its reprints lead to the English
+      // cards; a Japanese Deck Log list of it finds all eighteen by number.
+      for (var i = 1; i <= 18; i += 1) {
+        final number = 'DZ-SS19/${i.toString().padLeft(3, '0')}';
+        final found = cards.where((c) => c.allNumbers.contains(number));
+        expect(found, hasLength(1), reason: number);
+      }
+      final lubna = cards.singleWhere(
+        (c) => c.attributes['cardNo'] == 'DZ-SS19/001',
+      );
+      expect(lubna.name, endsWith('Lubna'));
+      expect(lubna.attributes['nation'], 'lyrical-monasterio');
+      expect(lubna.attributes['effect'], contains('Unofficial translation'));
+      // Its D-Legion partner is named exactly as the catalog names Santi.
+      final mate = RegExp(r'\[D-Legion\]\s*"([^"]+)"')
+          .firstMatch(lubna.attributes['effect']!)!
+          .group(1);
+      expect(cards.where((c) => c.name == mate), hasLength(1));
+      // A reprint is the English card, with the English card's text.
+      final sarka = cards.singleWhere(
+        (c) => c.allNumbers.contains('DZ-SS19/011'),
+      );
+      expect(sarka.attributes['cardNo'], 'D-LBT01/047EN');
+      expect(sarka.attributes['effect'], isNot(contains('Unofficial')));
     });
 
     test('every entry has a name, grade and card type', () {
@@ -428,9 +469,13 @@ void main() {
       for (final entry in cards) {
         final url = entry.attributes['imageUrl'];
         expect(url, isNotNull, reason: entry.name);
+        // The Japanese site for a card the English list does not have yet.
         expect(
           url,
-          startsWith('https://en.cf-vanguard.com/'),
+          anyOf(
+            startsWith('https://en.cf-vanguard.com/'),
+            startsWith('https://cf-vanguard.com/'),
+          ),
           reason: entry.name,
         );
         expect(

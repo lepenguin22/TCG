@@ -78,6 +78,10 @@ class CatalogCard {
     'sp': 'possibleSeries',
   };
 
+  /// A card not on the English list yet carries its picture's whole address.
+  static String _imageUrl(String imageBase, String image) =>
+      image.startsWith('https://') ? image : '$imageBase$image';
+
   /// [imageBase] is the shared prefix the catalog strips from image URLs to
   /// keep the asset small; it is put back here so the rest of the app only
   /// ever sees a complete URL.
@@ -92,7 +96,7 @@ class CatalogCard {
     final images = json['i2'] as Map? ?? const {};
     final otherImages = <String, String>{
       for (final entry in images.entries)
-        '${entry.key}': '$imageBase${entry.value}',
+        '${entry.key}': _imageUrl(imageBase, '${entry.value}'),
     };
     final attributes = <String, String>{};
     for (final entry in json.entries) {
@@ -104,7 +108,7 @@ class CatalogCard {
       }
       final key = _aliases[entry.key] ?? entry.key;
       final value = '${entry.value}';
-      attributes[key] = key == 'imageUrl' ? '$imageBase$value' : value;
+      attributes[key] = key == 'imageUrl' ? _imageUrl(imageBase, value) : value;
     }
     final lowerName = name.toLowerCase();
     final cardNo = (attributes['cardNo'] ?? '').toLowerCase();
