@@ -71,15 +71,32 @@ def main() -> int:
         url = args.raw if args.raw.startswith("http") else f"{JP}{args.raw}"
         page = site.fetch(url, missing_ok=True) or ""
         print(f"{url}: {len(page)} characters")
-        links = sorted(set(re.findall(r'href="([^"]*card[^"]*)"', page)))
-        print(f"{len(links)} card links:")
-        for link in links[:300]:
-            print(f"  {link}")
-        for chunk in re.findall(r'.{0,200}(?:expansion|cardno)=.{0,200}', page)[:15]:
-            print(f"  RAW {chunk}")
-        print("TEXT:")
-        for line in site.strip_tags(page)[:400]:
-            print(f"    {line}")
+        # The Japanese card pages fill themselves in from a script, so what
+        # matters is where that script gets the card from.
+        scripts = re.findall(r'<script[^>]+src="([^"]+)"', page)
+        print(f"{len(scripts)} scripts:")
+        for src in scripts:
+            print(f"  {src}")
+        endpoints = set(
+            re.findall(r'["\']([^"\'\s]*(?:api|json|ajax|search)[^"\'\s]*)["\']', page)
+        )
+        print(f"{len(endpoints)} likely data addresses in the page:")
+        for endpoint in sorted(endpoints)[:60]:
+            print(f"  {endpoint}")
+        # And in the site's own scripts, which is where a fetch would be.
+        for src in scripts:
+            if "cf-vanguard" not in src and not src.startswith("/"):
+                continue
+            full = src if src.startswith("http") else f"{JP}{src}"
+            code = site.fetch(full, missing_ok=True) or ""
+            found = sorted(set(re.findall(
+                r'["\'`]([^"\'`\s]*(?:api|json|ajax|cardlist|cardsearch)[^"\'`\s]*)["\'`]',
+                code,
+            )))
+            if found:
+                print(f"in {src}:")
+                for item in found[:40]:
+                    print(f"  {item}")
         return 0
 
     if args.find:
