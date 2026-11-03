@@ -44,6 +44,13 @@ on:
           working out why a card will not read.
         required: false
         default: ''
+      japanese:
+        description: >-
+          Read the Japanese card list instead, writing nothing: arguments for
+          tool/read_jp_set.py, e.g. "--find SS19" or "--expansion 123". For
+          translating a set that has not reached the English list yet.
+        required: false
+        default: ''
       push_to_branch:
         description: >-
           Branch to commit the regenerated files straight to. Leave empty to
@@ -76,7 +83,15 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Print a set from the Japanese card list
+        if: inputs.japanese != ''
+        working-directory: tool
+        env:
+          JAPANESE: ${{ inputs.japanese }}
+        run: python3 read_jp_set.py $JAPANESE
+
       - name: Read any sets the catalog does not have
+        if: inputs.japanese == ''
         env:
           EXPANSIONS: ${{ inputs.expansions }}
           CARDS: ${{ inputs.cards }}
@@ -105,19 +120,19 @@ jobs:
           fi
 
       - name: Rebuild the catalog
-        if: inputs.search == '' && inputs.dry_run == ''
+        if: inputs.japanese == '' && inputs.search == '' && inputs.dry_run == ''
         run: dart run tool/build_catalog.dart
 
       # The catalog feeds the deck rules, so a bad regeneration must not reach
       # a pull request: these are the same checks the APK build runs.
       - name: Verify the new catalog
-        if: inputs.search == '' && inputs.dry_run == ''
+        if: inputs.japanese == '' && inputs.search == '' && inputs.dry_run == ''
         run: flutter test test/card_catalog_test.dart
 
       # Straight onto a branch when one is named: a single promo picked up by
       # number does not need a pull request of its own.
       - name: Push to the branch that asked for it
-        if: inputs.push_to_branch != '' && inputs.search == '' && inputs.dry_run == ''
+        if: inputs.japanese == '' && inputs.push_to_branch != '' && inputs.search == '' && inputs.dry_run == ''
         env:
           BRANCH: ${{ inputs.push_to_branch }}
         run: |
@@ -137,7 +152,7 @@ jobs:
           git push origin "HEAD:$BRANCH"
 
       - name: Open a pull request if anything changed
-        if: inputs.push_to_branch == '' && inputs.search == '' && inputs.dry_run == ''
+        if: inputs.japanese == '' && inputs.push_to_branch == '' && inputs.search == '' && inputs.dry_run == ''
         uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/refresh-card-database
