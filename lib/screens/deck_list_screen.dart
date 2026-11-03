@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../games/card_catalog.dart';
 import '../games/game_definition.dart';
 import '../games/games.dart';
+import '../games/vanguard/start_decks.dart';
 import '../models/deck.dart';
 import '../store/deck_store.dart';
+import '../store/decklog_import.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/option_picker.dart';
@@ -55,6 +58,12 @@ class _DeckListScreenState extends State<DeckListScreen> {
       appBar: AppBar(
         title: const Text('My Decks'),
         actions: [
+          IconButton(
+            key: const ValueKey('start-decks'),
+            tooltip: 'Start decks',
+            icon: const Icon(Icons.inventory_2_outlined),
+            onPressed: _startDecks,
+          ),
           IconButton(
             tooltip: 'Import from Deck Log',
             icon: const Icon(Icons.download_outlined),
@@ -156,6 +165,66 @@ class _DeckListScreenState extends State<DeckListScreen> {
         MaterialPageRoute<void>(builder: (_) => DeckScreen(deckId: deckId)),
       );
     }
+  }
+
+  /// The decks the app ships with: pick one and it is added to My Decks,
+  /// a copy of its own to change as the user likes.
+  Future<void> _startDecks() async {
+    final picked = await showModalBottomSheet<StartDeck>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            const Text(
+              'Start decks',
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Ready-made decks. Adding one puts a copy in My Decks.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            for (final deck in startDecks)
+              Card(
+                child: ListTile(
+                  key: ValueKey('start-deck-${deck.id}'),
+                  title: Text(deck.name),
+                  subtitle: Text(
+                    '${deck.count(ride: false)} card main deck, '
+                    '${deck.count(ride: true)} card ride deck\n'
+                    '${deck.description}',
+                  ),
+                  isThreeLine: true,
+                  trailing: const Icon(Icons.add),
+                  onTap: () => Navigator.of(sheetContext).pop(deck),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final result = await importDecklogDeck(
+      context.read<DeckStore>(),
+      context.read<CardCatalog>(),
+      picked.toDecklog(),
+      description: picked.description,
+    );
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DeckScreen(deckId: result.deck.id),
+      ),
+    );
   }
 
   Future<void> _createDeck() async {
