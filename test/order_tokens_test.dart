@@ -99,7 +99,7 @@ void main() {
         final xceed = catalog.firstWhere(
           (c) => c.name == 'SYSTEM CODE: X-ceed',
         );
-        game.host.orderTokens = {
+        game.host.madeCards = {
           'DZ-BT04/T02EN': tokenFromCatalog(xceed, 'vanguard'),
         };
 
@@ -143,5 +143,102 @@ void main() {
         expect(active.drop.map((c) => c.instanceId), isNot(contains(id)));
       },
     );
+  });
+
+  group('markers', () {
+    const netText =
+        '[ACT](VC)[1/Turn]:[COST][Counter-Blast 1], choose a card from your '
+        'drop, put it face up as your AutoMOD gauge, choose one of your (RC) '
+        'without any X-ceed NET markers, and put an X-ceed NET marker.';
+
+    test('a card names its marker, and the database has X-ceed NET', () {
+      expect(markerNamesIn([netText]), ['X-ceed NET']);
+      final choices = markerChoices(catalog, [netText]);
+      expect(choices.first.name, 'X-ceed NET');
+      expect(choices.first.attributes['cardNo'], 'DZ-BT14/T04EN');
+      expect(choices.first.attributes['effect'], contains('AutoMOD'));
+    });
+
+    test('a marker is the circle\'s, and stays when the unit goes', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.active;
+      final net = catalog.firstWhere((c) => c.name == 'X-ceed NET');
+
+      expect(
+        engine.placeMarker(
+          you,
+          Circle.vanguard,
+          markerFromCatalog(net, 'vanguard'),
+        ),
+        isNull,
+        reason: 'markers go on rear-guard circles',
+      );
+      final marker = engine.placeMarker(
+        you,
+        Circle.backCenter,
+        markerFromCatalog(net, 'vanguard'),
+      )!;
+      expect(you.markersOn(Circle.backCenter), [marker]);
+
+      final unit = you.hand.firstWhere((c) => c.isUnit);
+      you.field[Circle.backCenter] = FieldUnit(unit);
+      engine.retire(you, Circle.backCenter);
+      expect(you.markersOn(Circle.backCenter), [marker]);
+
+      engine.removeMarker(you, Circle.backCenter, marker);
+      expect(you.markersOn(Circle.backCenter), isEmpty);
+    });
+
+    test('across two devices, both boards see the marker', () async {
+      final game = await seatedGame();
+      final active = game.host.state.active;
+      final mine = active == game.sideOne ? game.one : game.two;
+      final theirs = active == game.sideOne ? game.two : game.one;
+      final net = catalog.firstWhere((c) => c.name == 'X-ceed NET');
+      game.host.madeCards = {
+        'DZ-BT14/T04EN': markerFromCatalog(net, 'vanguard'),
+      };
+
+      mine.ask(
+        const PlaytestIntent(
+          IntentKind.placeMarker,
+          circle: Circle.backCenter,
+          name: 'X-ceed NET',
+          cardNo: 'DZ-BT14/T04EN',
+        ),
+      );
+      await pumpEventQueue();
+      final marker = active.markersOn(Circle.backCenter).single;
+      expect(marker.card.attributes['effect'], contains('AutoMOD'));
+      expect(theirs.snapshot!.them.markers[Circle.backCenter], [
+        marker.instanceId,
+      ]);
+      expect(theirs.snapshot!.knows(marker.instanceId), isTrue);
+
+      // Not on the vanguard circle.
+      mine.ask(
+        const PlaytestIntent(
+          IntentKind.placeMarker,
+          circle: Circle.vanguard,
+          name: 'X-ceed NET',
+        ),
+      );
+      await pumpEventQueue();
+      expect(active.markersOn(Circle.vanguard), isEmpty);
+      expect(game.host.refusals.last, contains('rear-guard'));
+
+      mine.ask(
+        PlaytestIntent(
+          IntentKind.removeMarker,
+          circle: Circle.backCenter,
+          card: marker.instanceId,
+        ),
+      );
+      await pumpEventQueue();
+      expect(active.markersOn(Circle.backCenter), isEmpty);
+      expect(mine.snapshot!.me.markers, isEmpty);
+    });
   });
 }

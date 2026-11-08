@@ -67,13 +67,13 @@ class HostSession extends ChangeNotifier {
   PlaytestTransport? _guest;
   PlaytestHost? host;
 
-  /// The order zone tokens the card database has, by card number, handed to
-  /// the game when it starts; see [PlaytestHost.orderTokens].
-  Map<String, CardDefinition> get orderTokens => _orderTokens;
-  Map<String, CardDefinition> _orderTokens = const {};
-  set orderTokens(Map<String, CardDefinition> tokens) {
-    _orderTokens = tokens;
-    host?.orderTokens = tokens;
+  /// The order zone tokens and markers the card database has, by card
+  /// number, handed to the game; see [PlaytestHost.madeCards].
+  Map<String, CardDefinition> get madeCards => _madeCards;
+  Map<String, CardDefinition> _madeCards = const {};
+  set madeCards(Map<String, CardDefinition> cards) {
+    _madeCards = cards;
+    host?.madeCards = cards;
   }
 
   /// The host's own board, which is a guest of its own game.
@@ -164,7 +164,7 @@ class HostSession extends ChangeNotifier {
       random: random,
     );
     final game = PlaytestHost(engine)
-      ..orderTokens = orderTokens
+      ..madeCards = madeCards
       ..onSeatChanged = (side, connected) {
         if (side.name != guestName) return;
         guestConnected = connected;

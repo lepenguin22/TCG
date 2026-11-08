@@ -13,7 +13,7 @@ import '../playtest/playtest_state.dart';
 import '../theme.dart';
 import '../widgets/card_image.dart';
 import '../widgets/table_cards.dart';
-import 'playtest_screen.dart' show OrderTokenPicker, phaseColor;
+import 'playtest_screen.dart' show MarkerBadge, OrderTokenPicker, phaseColor;
 
 /// The board of a game being played on another device.
 ///
@@ -332,7 +332,16 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
 
   void _tapMyCircle(Circle circle) {
     final unit = snapshot.me.units[circle];
-    if (unit == null) return;
+    if (unit == null) {
+      // An empty circle can still be given a marker: the ability chooses a
+      // circle, not a unit.
+      if (circle.isRearGuard &&
+          ((snapshot.me.markers[circle] ?? const []).isNotEmpty ||
+              markerNamesIn(widget.deckEffects).isNotEmpty)) {
+        _markerSheet(circle);
+      }
+      return;
+    }
     // In the battle phase a front row unit is picked up to attack with;
     // everywhere else, tapping a unit is asking what can be done to it.
     if (snapshot.phase == PlaytestPhase.battle &&
@@ -551,6 +560,54 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
             PlaytestIntent(IntentKind.unbindCard, card: id, exit: exit.$1),
           ),
         ),
+    ]);
+  }
+
+  /// One of your rear-guard circles' markers, and putting one there. The
+  /// host makes it, from its own copy of the card database.
+  Future<void> _markerSheet(Circle circle) async {
+    final asset = gameById(board.gameId).catalogAsset;
+    final catalog = context.read<CardCatalog?>();
+    final options = asset == null || catalog == null
+        ? Future.value(const <CatalogCard>[])
+        : catalog
+              .load(asset)
+              .then((cards) => cards.where(isMarkerCard).toList());
+    await _sheet([
+      Text(
+        'Markers on ${circle.label}',
+        style: const TextStyle(
+          color: AppColors.text,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      for (final id in snapshot.me.markers[circle] ?? const <int>[])
+        _Action(
+          key: ValueKey('remote-marker-remove-$id'),
+          icon: Icons.close,
+          label: 'Take ${board.cardOf(id)?.name ?? 'the marker'} off',
+          onTap: () => ask(
+            PlaytestIntent(IntentKind.removeMarker, circle: circle, card: id),
+          ),
+        ),
+      OrderTokenPicker.markers(
+        options: options,
+        effects: widget.deckEffects,
+        gameId: board.gameId,
+        keyPrefix: 'remote-marker',
+        onPick: (marker) {
+          Navigator.of(context).pop();
+          ask(
+            PlaytestIntent(
+              IntentKind.placeMarker,
+              circle: circle,
+              name: marker.name,
+              cardNo: marker.attributes['cardNo'],
+            ),
+          );
+        },
+      ),
     ]);
   }
 
@@ -955,8 +1012,8 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'D-Legioned with ${mate.name} (${mate.power} power, added in). '
-            'Both go into the soul when this vanguard is ridden over.',
+            'D-Legioned with ${mate.name} (${mate.power} power, added when '
+            'it attacks). Both go into the soul when it is ridden over.',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ),
@@ -969,6 +1026,18 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
               'Return four cards from the drop to the deck and search for '
               'it.',
           onTap: () => _dLegionSheet(mateName),
+        ),
+      if (circle.isRearGuard &&
+          ((snapshot.me.markers[circle] ?? const []).isNotEmpty ||
+              markerNamesIn(widget.deckEffects).isNotEmpty))
+        _Action(
+          key: const ValueKey('remote-markers'),
+          icon: Icons.push_pin_outlined,
+          label: (snapshot.me.markers[circle] ?? const []).isEmpty
+              ? 'Put a marker on this circle'
+              : 'Markers on this circle',
+          detail: 'Such as X-ceed NET. It stays when the unit leaves.',
+          onTap: () => _markerSheet(circle),
         ),
       _Action(
         icon: unit.rested ? Icons.arrow_upward : Icons.arrow_downward,
@@ -1534,6 +1603,13 @@ class _Field extends StatelessWidget {
                         mate: side.units[circle]?.legionMateId == null
                             ? null
                             : board.cardOf(side.units[circle]!.legionMateId!),
+                        markers: [
+                          for (final id in side.markers[circle] ?? const [])
+                            ?board.cardOf(id),
+                        ],
+                        markersKey: ValueKey(
+                          '${mine ? 'my' : 'their'}-markers-${circle.name}',
+                        ),
                         selected: selected == circle,
                         onTap: () => onTap(circle),
                       ),
@@ -1555,10 +1631,16 @@ class _UnitCell extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.mate,
+    this.markers = const [],
+    this.markersKey,
   });
 
   final UnitSnapshot? unit;
   final GameCard? face;
+
+  /// The markers on this circle, which stay whatever unit is on it.
+  final List<GameCard> markers;
+  final Key? markersKey;
 
   /// The vanguard's D-Legion partner, whose power is added to its own only
   /// when it attacks.
@@ -1588,39 +1670,52 @@ class _UnitCell extends StatelessWidget {
             width: selected ? 2 : 1,
           ),
         ),
-        child: unit == null
-            ? const SizedBox.shrink()
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(child: CardImage(url: face?.imageUrl, width: 34)),
-                  Text(
-                    mate == null
-                        ? face?.name ?? 'A unit'
-                        : 'D-Legion · ${mate!.name}',
-                    key: mate == null
-                        ? null
-                        : ValueKey('remote-legion-${mate!.instanceId}'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: mate == null
-                          ? AppColors.text
-                          : const Color(0xFFF5A35B),
-                      fontSize: 10,
-                    ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            unit == null
+                ? const SizedBox.shrink()
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: CardImage(url: face?.imageUrl, width: 34),
+                      ),
+                      Text(
+                        mate == null
+                            ? face?.name ?? 'A unit'
+                            : 'D-Legion · ${mate!.name}',
+                        key: mate == null
+                            ? null
+                            : ValueKey('remote-legion-${mate!.instanceId}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: mate == null
+                              ? AppColors.text
+                              : const Color(0xFFF5A35B),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        '${power ?? ''}'
+                        '${unit!.rested ? ' · rested' : ''}',
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '${power ?? ''}'
-                    '${unit!.rested ? ' · rested' : ''}',
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+            if (markers.isNotEmpty)
+              Positioned(
+                left: 0,
+                top: 0,
+                child: MarkerBadge(key: markersKey, markers: markers),
               ),
+          ],
+        ),
       ),
     );
   }

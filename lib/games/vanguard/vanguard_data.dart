@@ -77,6 +77,8 @@ const cardTypeOptions = <FieldOption>[
   // around it does nothing without it.
   FieldOption('crest', 'Crest'),
   FieldOption('token', 'Token'),
+  // A marker an ability puts on a circle, such as X-ceed NET.
+  FieldOption('marker', 'Marker'),
 ];
 
 const triggerOptions = <FieldOption>[

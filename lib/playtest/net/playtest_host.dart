@@ -38,10 +38,10 @@ class PlaytestHost {
   final Map<String, String> _tokens = {};
   static final Random _tokenSource = Random.secure();
 
-  /// The order zone tokens the card database has, by card number, for a
-  /// player who asks for one. The host makes the token from its own copy of
-  /// the card, so nothing of what a token says comes over the wire.
-  Map<String, CardDefinition> orderTokens = const {};
+  /// The order zone tokens and markers the card database has, by card
+  /// number, for a player who asks for one. The host makes it from its own
+  /// copy of the card, so nothing of what one says comes over the wire.
+  Map<String, CardDefinition> madeCards = const {};
 
   /// Told when a seat is taken or lost, for a screen that says so.
   void Function(PlaytestSide side, bool connected)? onSeatChanged;
@@ -222,8 +222,36 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.placeMarker:
+        final circle = intent.circle;
+        if (circle == null || !circle.isRearGuard) {
+          return _refuse(side, 'a marker goes on a rear-guard circle');
+        }
+        final known = madeCards[intent.cardNo ?? ''];
+        final name = intent.name?.trim() ?? '';
+        final marker = known?.attributes['cardType'] == 'marker'
+            ? known
+            : (name.isEmpty || name.length > 80)
+            ? null
+            : namedMarker(
+                name,
+                side.deck.firstOrNull?.card.gameId ?? 'vanguard',
+              );
+        if (marker == null) return _refuse(side, 'no such marker');
+        engine.placeMarker(side, circle, marker);
+      case IntentKind.removeMarker:
+        final circle = intent.circle;
+        final marker = circle == null
+            ? null
+            : side
+                  .markersOn(circle)
+                  .where((c) => c.instanceId == intent.card)
+                  .firstOrNull;
+        if (marker == null) return _refuse(side, 'no such marker there');
+        engine.removeMarker(side, circle!, marker);
       case IntentKind.placeOrderToken:
-        final known = orderTokens[intent.cardNo ?? ''];
+        final made = madeCards[intent.cardNo ?? ''];
+        final known = made?.attributes['cardType'] == 'order-set' ? made : null;
         final name = intent.name?.trim() ?? '';
         if (known == null && (name.isEmpty || name.length > 80)) {
           return _refuse(side, 'no such token');

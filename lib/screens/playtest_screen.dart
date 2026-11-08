@@ -3299,17 +3299,32 @@ class _CircleSlot extends StatelessWidget {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: unit == null
-              ? Center(
-                  child: Text(
-                    circle == Circle.vanguard ? 'VG' : '—',
-                    style: const TextStyle(
-                      color: AppColors.textFaint,
-                      fontSize: 11,
-                    ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              unit == null
+                  ? Center(
+                      child: Text(
+                        circle == Circle.vanguard ? 'VG' : '—',
+                        style: const TextStyle(
+                          color: AppColors.textFaint,
+                          fontSize: 11,
+                        ),
+                      ),
+                    )
+                  : _UnitTile(unit: unit, circle: circle),
+              // The circle's markers, which stay whatever unit is on it.
+              if (side.markersOn(circle).isNotEmpty)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: MarkerBadge(
+                    key: ValueKey('markers-${side.name}-${circle.name}'),
+                    markers: side.markersOn(circle),
                   ),
-                )
-              : _UnitTile(unit: unit, circle: circle),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -3334,8 +3349,122 @@ class _CircleSlot extends StatelessWidget {
       return;
     }
     final unit = side.field[circle];
-    if (unit != null) _showUnitSheet(context, game, side, circle, unit);
+    if (unit != null) {
+      _showUnitSheet(context, game, side, circle, unit);
+    } else if (game.controls(side) &&
+        circle.isRearGuard &&
+        (side.markersOn(circle).isNotEmpty ||
+            markerNamesIn(_effectsOf(side)).isNotEmpty)) {
+      // An empty circle can still be given a marker: the ability chooses a
+      // circle, not a unit.
+      _showMarkerSheet(context, game, side, circle);
+    }
   }
+}
+
+/// The markers on a circle, in its corner. Shared with the two-device
+/// board.
+class MarkerBadge extends StatelessWidget {
+  const MarkerBadge({super.key, required this.markers});
+
+  final List<GameCard> markers;
+
+  @override
+  Widget build(BuildContext context) {
+    final names = <String, int>{};
+    for (final marker in markers) {
+      names[marker.name] = (names[marker.name] ?? 0) + 1;
+    }
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 80),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      decoration: const BoxDecoration(
+        color: _markerColour,
+        borderRadius: BorderRadius.only(bottomRight: Radius.circular(6)),
+      ),
+      child: Text(
+        [
+          for (final entry in names.entries)
+            entry.value > 1 ? '${entry.key} ×${entry.value}' : entry.key,
+        ].join(', '),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 8,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/// The colour a circle's markers are drawn in.
+const _markerColour = Color(0xFF7FD6E8);
+
+/// A rear-guard circle's markers: what is on it, and putting one more there.
+void _showMarkerSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+  Circle circle,
+) {
+  final definition = gameById(game.gameId);
+  final asset = definition.catalogAsset;
+  final catalog = context.read<CardCatalog?>();
+  final options = asset == null || catalog == null
+      ? Future.value(const <CatalogCard>[])
+      : catalog.load(asset).then((cards) => cards.where(isMarkerCard).toList());
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (_, scrollController) => ListenableBuilder(
+          listenable: game,
+          builder: (_, _) => ListView(
+            key: const ValueKey('marker-sheet'),
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              SectionHeader(
+                title: 'Markers on ${circle.label}',
+                caption: side.field[circle] == null
+                    ? 'No unit here. A marker stays on the circle for the '
+                          'next one.'
+                    : 'On ${side.field[circle]!.card.name}\u2019s circle. '
+                          'What a marker gives is on the marker.',
+              ),
+              if (side.markersOn(circle).isEmpty)
+                const Text(
+                  'None yet.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              for (final marker in side.markersOn(circle)) ...[
+                const SizedBox(height: 8),
+                _CardHeading(card: marker),
+                TextButton(
+                  key: ValueKey('marker-remove-${marker.instanceId}'),
+                  onPressed: () => game.removeMarker(side, circle, marker),
+                  child: const Text('Take it off'),
+                ),
+              ],
+              OrderTokenPicker.markers(
+                options: options,
+                effects: _effectsOf(side),
+                gameId: definition.id,
+                onPick: (marker) => game.placeMarker(side, circle, marker),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// The colour a D-Legion is marked in on the board.
@@ -4759,6 +4888,39 @@ void _showUnitSheet(
               // Exchanging two rear-guards anywhere on the board, which is
               // what the cards that move units about actually say -- the
               // column move above is the one the rules give for free.
+              // Only for a deck that makes a marker, or a circle that has
+              // one: most decks never put a marker anywhere.
+              if (game.controls(side) &&
+                  circle.isRearGuard &&
+                  (side.markersOn(circle).isNotEmpty ||
+                      markerNamesIn(_effectsOf(side)).isNotEmpty))
+                ListTile(
+                  key: ValueKey('markers-from-${circle.name}'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.push_pin_outlined,
+                    color: AppColors.accent,
+                  ),
+                  title: Text(
+                    side.markersOn(circle).isEmpty
+                        ? 'Put a marker on this circle'
+                        : 'Markers on this circle '
+                              '(${side.markersOn(circle).length})',
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Such as X-ceed NET. It stays on the circle when the '
+                    'unit leaves.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _showMarkerSheet(context, game, side, circle);
+                  },
+                ),
               if (game.controls(side) &&
                   circle.isRearGuard &&
                   Circle.values.any(
@@ -5182,9 +5344,10 @@ class _SheetAction extends StatelessWidget {
   }
 }
 
-/// Putting a token into the order zone: the ones this deck's cards name
-/// first, then any other the card database has, then one by name for a
-/// token the database has no card for.
+/// Putting something an ability makes onto the board -- a token into the
+/// order zone, a marker onto a circle: the ones this deck's cards name first,
+/// then any other the card database has, then one by name for one the
+/// database has no card for.
 class OrderTokenPicker extends StatelessWidget {
   const OrderTokenPicker({
     super.key,
@@ -5193,24 +5356,66 @@ class OrderTokenPicker extends StatelessWidget {
     required this.gameId,
     required this.onPick,
     this.keyPrefix = 'order-token',
-  });
+  }) : title = 'PUT A TOKEN HERE',
+       caption =
+           'A token an ability makes, such as SYSTEM CODE: X-ceed. It is '
+           'in no deck, and taking it out of the order zone removes it '
+           'from the game. The ones your deck names come first.',
+       namesIn = orderTokenNamesIn,
+       choicesFor = orderTokenChoices,
+       fromCatalog = tokenFromCatalog,
+       byName = namedToken,
+       hint = 'Forge',
+       otherLabel = 'Another token, by name';
+
+  /// The same, for a marker on a circle.
+  const OrderTokenPicker.markers({
+    super.key,
+    required this.options,
+    required this.effects,
+    required this.gameId,
+    required this.onPick,
+    this.keyPrefix = 'marker',
+  }) : title = 'PUT A MARKER HERE',
+       caption =
+           'A marker an ability puts on a circle, such as X-ceed NET. It '
+           'is the circle\u2019s, not the unit\u2019s: it stays when the '
+           'unit leaves. The ones your deck names come first.',
+       namesIn = markerNamesIn,
+       choicesFor = markerChoices,
+       fromCatalog = markerFromCatalog,
+       byName = namedMarker,
+       hint = 'Dragontree',
+       otherLabel = 'Another marker, by name';
 
   final Future<List<CatalogCard>> options;
   final List<String> effects;
   final String gameId;
-  final void Function(CardDefinition token) onPick;
+  final void Function(CardDefinition made) onPick;
   final String keyPrefix;
+  final String title;
+  final String caption;
+  final List<String> Function(Iterable<String> effects) namesIn;
+  final List<CatalogCard> Function(
+    List<CatalogCard> catalog,
+    Iterable<String> effects,
+  )
+  choicesFor;
+  final CardDefinition Function(CatalogCard card, String gameId) fromCatalog;
+  final CardDefinition Function(String name, String gameId) byName;
+  final String hint;
+  final String otherLabel;
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<CatalogCard>>(
       future: options,
       builder: (context, snapshot) {
-        final named = orderTokenNamesIn(effects);
-        final choices = orderTokenChoices(snapshot.data ?? const [], effects);
+        final named = namesIn(effects);
+        final choices = choicesFor(snapshot.data ?? const [], effects);
         final known = {for (final c in choices) c.name.toLowerCase()};
         // Named by the deck's cards, but not in the database.
-        final byName = [
+        final unknown = [
           for (final name in named)
             if (!known.contains(name.toLowerCase())) name,
         ];
@@ -5219,9 +5424,9 @@ class OrderTokenPicker extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 18),
-            const Text(
-              'PUT A TOKEN HERE',
-              style: TextStyle(
+            Text(
+              title,
+              style: const TextStyle(
                 color: AppColors.textFaint,
                 fontSize: 11,
                 letterSpacing: 0.6,
@@ -5229,11 +5434,9 @@ class OrderTokenPicker extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'A token an ability makes, such as SYSTEM CODE: X-ceed. It is '
-              'in no deck, and taking it out of the order zone removes it '
-              'from the game. The ones your deck names come first.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            Text(
+              caption,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             if (snapshot.connectionState == ConnectionState.waiting)
               const Padding(
@@ -5243,13 +5446,13 @@ class OrderTokenPicker extends StatelessWidget {
                   style: TextStyle(color: AppColors.textFaint, fontSize: 12),
                 ),
               ),
-            for (final name in byName)
+            for (final name in unknown)
               _row(
                 context,
                 key: '$keyPrefix-name-$name',
                 title: name,
                 subtitle: 'Named by your deck',
-                onTap: () => onPick(namedToken(name, gameId)),
+                onTap: () => onPick(byName(name, gameId)),
               ),
             for (final token in choices)
               _row(
@@ -5262,18 +5465,18 @@ class OrderTokenPicker extends StatelessWidget {
                   ?token.attributes['cardNo'],
                 ].join(' · '),
                 image: token.attributes['imageUrl'],
-                onTap: () => onPick(tokenFromCatalog(token, gameId)),
+                onTap: () => onPick(fromCatalog(token, gameId)),
               ),
             TextButton.icon(
               key: ValueKey('$keyPrefix-other'),
               onPressed: () async {
-                final name = await _askName(context);
+                final name = await _askName(context, hint);
                 if (name != null && name.trim().isNotEmpty) {
-                  onPick(namedToken(name, gameId));
+                  onPick(byName(name, gameId));
                 }
               },
               icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text('Another token, by name'),
+              label: Text(otherLabel),
             ),
           ],
         );
@@ -5305,17 +5508,17 @@ class OrderTokenPicker extends StatelessWidget {
     trailing: TextButton(onPressed: onTap, child: const Text('Put here')),
   );
 
-  static Future<String?> _askName(BuildContext context) {
+  static Future<String?> _askName(BuildContext context, String hint) {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Token name'),
+        title: const Text('Name'),
         content: TextField(
           key: const ValueKey('order-token-name'),
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Forge'),
+          decoration: InputDecoration(hintText: hint),
           onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
         ),
         actions: [

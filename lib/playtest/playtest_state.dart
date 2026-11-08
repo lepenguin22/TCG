@@ -298,6 +298,13 @@ class PlaytestSide {
 
   final Map<Circle, FieldUnit> field = {};
 
+  /// Markers on this player's circles: "put an X-ceed NET marker" on a
+  /// rear-guard circle. A marker is the circle's, not the unit's, so it stays
+  /// put when the unit on it moves, leaves or is replaced.
+  final Map<Circle, List<GameCard>> markers = {};
+
+  List<GameCard> markersOn(Circle circle) => markers[circle] ?? const [];
+
   FieldUnit? get vanguard => field[Circle.vanguard];
 
   int get damageCount => damage.length;

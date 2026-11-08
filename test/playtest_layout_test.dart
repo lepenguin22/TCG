@@ -303,6 +303,60 @@ void main() {
       expect(side.drop.where((c) => c.name == 'SYSTEM CODE: X-ceed'), isEmpty);
     });
 
+    testWidgets('a deck that makes a marker puts one on a circle', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      side.hand.add(
+        GameCard(
+          9801,
+          CardDefinition(
+            id: 'layout-impauldio',
+            gameId: 'vanguard',
+            name: 'Impauldio',
+            attributes: const {
+              'grade': '3',
+              'cardType': 'normal',
+              'effect':
+                  '[ACT](VC)[1/Turn]:[COST][Counter-Blast 1], choose one of '
+                  'your (RC) without any X-ceed NET markers, and put an '
+                  'X-ceed NET marker.',
+            },
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ),
+      );
+      side.field.remove(Circle.backCenter);
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      // An empty circle: tapping it is where the marker is put.
+      final circle = find.byKey(ValueKey('circle-${side.name}-backCenter'));
+      await tester.ensureVisible(circle);
+      await tester.tap(circle);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('marker-sheet')), findsOneWidget);
+      final row = find.byKey(const ValueKey('marker-name-X-ceed NET'));
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.text('Put here')),
+      );
+      await tester.pumpAndSettle();
+
+      final marker = side.markersOn(Circle.backCenter).single;
+      expect(marker.name, 'X-ceed NET');
+
+      // Shown on the circle once the sheet is closed.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('markers-${side.name}-backCenter')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('a vanguard D-Legions from its sheet', (tester) async {
       final game = await pump(tester, opening);
       final side = game.state.active;

@@ -130,13 +130,16 @@ List<ValidationIssue> _checkGZone({
   // in the database because a playtest needs them, which is exactly why a
   // deck could pick one up by accident.
   for (final item in [...ride, ...main, ...gZone]) {
-    const notDeckCards = {'crest', 'token'};
+    const notDeckCards = {'crest', 'token', 'marker'};
     // A ticket is filed under a real card type -- Persona Shield is a blitz
     // order -- so the type does not give it away. Its own text does: "(This
     // card is a ticket card, and cannot be put in a deck)".
-    final isTicket = (item.card.attributes['effect'] ?? '')
-        .toLowerCase()
-        .contains('is a ticket card');
+    // A token or marker says so the same way: "(This represents a SYSTEM
+    // CODE: X-ceed token, and cannot be put in a deck)".
+    final text = (item.card.attributes['effect'] ?? '').toLowerCase();
+    final isTicket =
+        text.contains('is a ticket card') ||
+        text.contains('cannot be put in a deck');
     if (notDeckCards.contains(item.card.attributes['cardType']) || isTicket) {
       issues.add(
         ValidationIssue.error(

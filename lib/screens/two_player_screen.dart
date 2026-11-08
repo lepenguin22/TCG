@@ -69,18 +69,22 @@ class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
     }
   }
 
-  /// The order zone tokens the card database has, for the game this device
-  /// holds: a player asking for one gets the card's own text from here.
+  /// The order zone tokens and markers the card database has, for the game
+  /// this device holds: a player asking for one gets the card's own text
+  /// from here.
   Future<void> _loadOrderTokens(HostSession session) async {
     final gameId = widget.deck.gameId;
     final asset = gameById(gameId).catalogAsset;
     final catalog = context.read<CardCatalog?>();
     if (asset == null || catalog == null) return;
     final cards = await catalog.load(asset);
-    session.orderTokens = {
+    session.madeCards = {
       for (final card in cards.where(isOrderZoneToken))
         if (card.attributes['cardNo'] != null)
           card.attributes['cardNo']!: tokenFromCatalog(card, gameId),
+      for (final card in cards.where(isMarkerCard))
+        if (card.attributes['cardNo'] != null)
+          card.attributes['cardNo']!: markerFromCatalog(card, gameId),
     };
   }
 

@@ -565,6 +565,16 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void placeMarker(PlaytestSide side, Circle circle, CardDefinition marker) {
+    engine.placeMarker(side, circle, marker);
+    _sync();
+  }
+
+  void removeMarker(PlaytestSide side, Circle circle, GameCard marker) {
+    engine.removeMarker(side, circle, marker);
+    _sync();
+  }
+
   void placeOrderToken(PlaytestSide side, CardDefinition token) {
     engine.placeOrderToken(side, token);
     _sync();

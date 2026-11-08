@@ -157,6 +157,7 @@ class SideSnapshot {
     required this.crestIds,
     required this.orderZoneIds,
     this.restedOrders = const [],
+    this.markers = const {},
     required this.energy,
     required this.energyCap,
     required this.goesFirst,
@@ -195,6 +196,9 @@ class SideSnapshot {
 
   /// The set orders on the table. Face up and public: a set order is text
   /// both players are playing under, so both players get to read it.
+  /// Markers on this player's circles, face up for both players.
+  final Map<Circle, List<int>> markers;
+
   final List<int> orderZoneIds;
 
   /// Which of those are rested.
@@ -226,6 +230,10 @@ class SideSnapshot {
     'crest': crestIds,
     'orders': orderZoneIds,
     'restedOrders': restedOrders,
+    if (markers.isNotEmpty)
+      'markers': {
+        for (final entry in markers.entries) entry.key.name: entry.value,
+      },
     'energy': energy,
     'energyCap': energyCap,
     'goesFirst': goesFirst,
@@ -255,6 +263,11 @@ class SideSnapshot {
     crestIds: _ids(json['crest']),
     orderZoneIds: _ids(json['orders']),
     restedOrders: _ids(json['restedOrders']),
+    markers: {
+      for (final entry in (json['markers'] as Map? ?? {}).entries)
+        if (Circle.values.any((c) => c.name == '${entry.key}'))
+          _circle('${entry.key}'): _ids(entry.value),
+    },
     energy: json['energy'] as int? ?? 0,
     energyCap: json['energyCap'] as int? ?? PlaytestSide.baseEnergyCap,
     goesFirst: json['goesFirst'] as bool? ?? false,
@@ -497,6 +510,7 @@ PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
     reveal(side.crestZone);
     // Set orders sit face up on the table, so both players read them.
     reveal(side.orderZone);
+    reveal([for (final on in side.markers.values) ...on]);
   }
   reveal([for (final check in state.triggerZone) check.card]);
   if (state.attack != null) reveal(state.attack!.guardians);
@@ -561,6 +575,10 @@ SideSnapshot _sideSnapshot(PlaytestSide side, {required bool ownedByViewer}) =>
       crestIds: [for (final card in side.crestZone) card.instanceId],
       orderZoneIds: [for (final card in side.orderZone) card.instanceId],
       restedOrders: side.restedOrders.toList(),
+      markers: {
+        for (final entry in side.markers.entries)
+          entry.key: [for (final card in entry.value) card.instanceId],
+      },
       energy: side.energy,
       energyCap: side.energyCap,
       goesFirst: side.goesFirst,

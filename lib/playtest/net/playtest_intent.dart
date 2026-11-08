@@ -55,6 +55,15 @@ enum IntentKind {
   /// Puts a token into the asker's order zone: the card database's token
   /// numbered [PlaytestIntent.cardNo], or one called [PlaytestIntent.name].
   placeOrderToken,
+
+  /// Puts a marker on the asker's rear-guard circle [PlaytestIntent.circle]:
+  /// the card database's marker numbered [PlaytestIntent.cardNo], or one
+  /// called [PlaytestIntent.name].
+  placeMarker,
+
+  /// Takes marker [PlaytestIntent.card] off the asker's circle
+  /// [PlaytestIntent.circle].
+  removeMarker,
 }
 
 /// One request, named and with its arguments.

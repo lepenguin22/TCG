@@ -265,6 +265,7 @@ void main() {
         'ride-deck-crest',
         'crest',
         'token',
+        'marker',
       };
       final seen = cards.map((c) => c.attributes['cardType']).toSet();
       expect(seen.difference(known), isEmpty);

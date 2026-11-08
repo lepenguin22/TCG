@@ -1074,6 +1074,35 @@ class PlaytestEngine {
     return card;
   }
 
+  /// Puts a marker on one of [side]'s rear-guard circles, as the ability
+  /// that makes one says. Null where [circle] is the vanguard circle, which
+  /// the markers in the game are never put on.
+  GameCard? placeMarker(
+    PlaytestSide side,
+    Circle circle,
+    CardDefinition marker,
+  ) {
+    if (!circle.isRearGuard) return null;
+    final card = GameCard(_nextInstanceId++, marker);
+    side.markers.putIfAbsent(circle, () => []).add(card);
+    state.note(
+      '${side.name} puts a ${card.name} marker on ${circle.label}.',
+      by: side,
+    );
+    return card;
+  }
+
+  /// Takes a marker off a circle. It stops existing, as a token does.
+  void removeMarker(PlaytestSide side, Circle circle, GameCard marker) {
+    final on = side.markers[circle];
+    if (on == null || !on.remove(marker)) return;
+    if (on.isEmpty) side.markers.remove(circle);
+    state.note(
+      '${side.name} takes the ${marker.name} marker off ${circle.label}.',
+      by: side,
+    );
+  }
+
   /// Takes a set order off the table, wherever its text says it goes.
   ///
   /// A token goes nowhere: a token that leaves the order zone stops
