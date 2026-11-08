@@ -5,6 +5,7 @@ import '../games/vanguard/vanguard_data.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../store/deck_store.dart';
+import 'order_tokens.dart';
 import 'playtest_state.dart';
 
 /// The rules of a game of Vanguard, as far as they can be played without
@@ -1060,7 +1061,23 @@ class PlaytestEngine {
     state.note('${side.name} sets ${card.name} in the order zone.', by: side);
   }
 
+  /// Puts a token into the order zone, as the ability that makes one says:
+  /// "put a SYSTEM CODE: X-ceed token into your order zone". It is in no
+  /// deck, so it comes from outside the game.
+  GameCard placeOrderToken(PlaytestSide side, CardDefinition token) {
+    final card = GameCard(_nextInstanceId++, token);
+    side.orderZone.add(card);
+    state.note(
+      '${side.name} puts a ${card.name} token into the order zone.',
+      by: side,
+    );
+    return card;
+  }
+
   /// Takes a set order off the table, wherever its text says it goes.
+  ///
+  /// A token goes nowhere: a token that leaves the order zone stops
+  /// existing, whatever [to] says.
   void removeOrder(
     PlaytestSide side,
     GameCard card, {
@@ -1069,6 +1086,14 @@ class PlaytestEngine {
     if (!side.orderZone.remove(card)) return;
     // Wherever it goes, it arrives standing.
     side.restedOrders.remove(card.instanceId);
+    if (isTokenCard(card.card)) {
+      state.note(
+        '${side.name}\u2019s ${card.name} token leaves the order zone, '
+        'and is gone.',
+        by: side,
+      );
+      return;
+    }
     switch (to) {
       case OrderExit.drop:
         side.drop.add(card);

@@ -565,6 +565,11 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void placeOrderToken(PlaytestSide side, CardDefinition token) {
+    engine.placeOrderToken(side, token);
+    _sync();
+  }
+
   void addToken(PlaytestSide side, CardDefinition card) {
     engine.addToken(side, card);
     _sync();

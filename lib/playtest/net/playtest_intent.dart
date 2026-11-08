@@ -51,6 +51,10 @@ enum IntentKind {
   /// D-Legions the asker's vanguard, returning [PlaytestIntent.cards] from
   /// their drop.
   dLegion,
+
+  /// Puts a token into the asker's order zone: the card database's token
+  /// numbered [PlaytestIntent.cardNo], or one called [PlaytestIntent.name].
+  placeOrderToken,
 }
 
 /// One request, named and with its arguments.
@@ -67,6 +71,8 @@ class PlaytestIntent {
     this.amount,
     this.exit,
     this.cards,
+    this.name,
+    this.cardNo,
   });
 
   final IntentKind kind;
@@ -89,6 +95,12 @@ class PlaytestIntent {
   /// Several cards by instance id, for a cost paid with more than one.
   final List<int>? cards;
 
+  /// A name, for a token that is made rather than drawn.
+  final String? name;
+
+  /// A card number in the card database, for the same.
+  final String? cardNo;
+
   Map<String, Object?> toJson() => {
     'kind': kind.name,
     if (card != null) 'card': card,
@@ -97,6 +109,8 @@ class PlaytestIntent {
     if (amount != null) 'amount': amount,
     if (exit != null) 'exit': exit!.name,
     if (cards != null) 'cards': cards,
+    if (name != null) 'name': name,
+    if (cardNo != null) 'cardNo': cardNo,
   };
 
   /// Reads an intent off the wire, or nothing at all.
@@ -122,6 +136,8 @@ class PlaytestIntent {
                 if (id is int) id,
             ]
           : null,
+      name: json['name'] is String ? json['name']! as String : null,
+      cardNo: json['cardNo'] is String ? json['cardNo']! as String : null,
     );
   }
 

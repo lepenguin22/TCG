@@ -247,6 +247,62 @@ void main() {
       expect(find.text('Bind'), findsNothing, reason: 'the pile goes again');
     });
 
+    testWidgets('a deck that makes an order zone token puts one there', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      side.hand.add(
+        GameCard(
+          9701,
+          CardDefinition(
+            id: 'layout-inno',
+            gameId: 'vanguard',
+            name: 'Inno Progrett',
+            attributes: const {
+              'grade': '1',
+              'cardType': 'normal',
+              'effect':
+                  '[AUTO]:When this unit is placed by riding from a grade 0 '
+                  'card, [COST][reveal a grade 3 card with "Impauldio" in its '
+                  'card name from the ride deck], and put a SYSTEM CODE: '
+                  'X-ceed token into your order zone.',
+            },
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ),
+      );
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      // The order zone is empty, and still there to put the token into.
+      final pile = find.text('Orders');
+      await tester.ensureVisible(pile.first);
+      await tester.tap(pile.first);
+      await tester.pumpAndSettle();
+      final row = find.byKey(
+        const ValueKey('order-token-name-SYSTEM CODE: X-ceed'),
+      );
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.text('Put here')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(side.orderZone.single.name, 'SYSTEM CODE: X-ceed');
+      expect(side.orderZone.single.isSetOrder, isTrue);
+
+      // Removing it takes it out of the game.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('order-token-remove')),
+      );
+      await tester.tap(find.byKey(const ValueKey('order-token-remove')));
+      await tester.pumpAndSettle();
+      expect(side.orderZone, isEmpty);
+      expect(side.drop.where((c) => c.name == 'SYSTEM CODE: X-ceed'), isEmpty);
+    });
+
     testWidgets('a vanguard D-Legions from its sheet', (tester) async {
       final game = await pump(tester, opening);
       final side = game.state.active;

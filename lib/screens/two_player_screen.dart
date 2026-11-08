@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../games/card_catalog.dart';
 import '../games/games.dart';
 import '../models/deck.dart';
 import '../playtest/net/socket_transport.dart';
 import '../playtest/net/two_player_session.dart';
 import '../playtest/net/wire_deck.dart';
+import '../playtest/order_tokens.dart';
 import '../playtest/playtest_state.dart';
 import '../store/deck_store.dart';
 import '../theme.dart';
@@ -42,6 +44,7 @@ class TwoPlayerScreen extends StatefulWidget {
 class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
   HostSession? _host;
   GuestSession? _guest;
+  late final WireDeck _deck;
 
   @override
   void initState() {
@@ -49,7 +52,7 @@ class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
     // The store is read once, here: the deck goes over the wire as cards and
     // is not looked at again.
     final store = context.read<DeckStore>();
-    final deck = WireDeck.of(store.viewOf(widget.deck));
+    final deck = _deck = WireDeck.of(store.viewOf(widget.deck));
     if (widget.hosting) {
       final session = HostSession(
         gameId: widget.deck.gameId,
@@ -58,11 +61,27 @@ class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
       );
       _host = session..addListener(_refresh);
       session.open();
+      _loadOrderTokens(session);
     } else {
       final session = GuestSession(gameId: widget.deck.gameId, deck: deck);
       _guest = session..addListener(_refresh);
       session.join(widget.address!);
     }
+  }
+
+  /// The order zone tokens the card database has, for the game this device
+  /// holds: a player asking for one gets the card's own text from here.
+  Future<void> _loadOrderTokens(HostSession session) async {
+    final gameId = widget.deck.gameId;
+    final asset = gameById(gameId).catalogAsset;
+    final catalog = context.read<CardCatalog?>();
+    if (asset == null || catalog == null) return;
+    final cards = await catalog.load(asset);
+    session.orderTokens = {
+      for (final card in cards.where(isOrderZoneToken))
+        if (card.attributes['cardNo'] != null)
+          card.attributes['cardNo']!: tokenFromCatalog(card, gameId),
+    };
   }
 
   void _refresh() => setState(() {});
@@ -103,6 +122,10 @@ class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
           child: board != null && stage != SessionStage.waiting
               ? RemoteBoardView(
                   board: board,
+                  deckEffects: [
+                    for (final item in _deck.items)
+                      item.attributes['effect'] ?? '',
+                  ],
                   notice: _notice(),
                   onLeave: () => Navigator.of(context).pop(),
                 )

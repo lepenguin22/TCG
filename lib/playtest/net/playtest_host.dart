@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import '../../models/card_definition.dart';
+import '../order_tokens.dart';
 import '../playtest_engine.dart';
 import '../playtest_state.dart';
 import 'playtest_intent.dart';
@@ -35,6 +37,11 @@ class PlaytestHost {
   /// next.
   final Map<String, String> _tokens = {};
   static final Random _tokenSource = Random.secure();
+
+  /// The order zone tokens the card database has, by card number, for a
+  /// player who asks for one. The host makes the token from its own copy of
+  /// the card, so nothing of what a token says comes over the wire.
+  Map<String, CardDefinition> orderTokens = const {};
 
   /// Told when a seat is taken or lost, for a screen that says so.
   void Function(PlaytestSide side, bool connected)? onSeatChanged;
@@ -215,6 +222,20 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.placeOrderToken:
+        final known = orderTokens[intent.cardNo ?? ''];
+        final name = intent.name?.trim() ?? '';
+        if (known == null && (name.isEmpty || name.length > 80)) {
+          return _refuse(side, 'no such token');
+        }
+        engine.placeOrderToken(
+          side,
+          known ??
+              namedToken(
+                name,
+                side.deck.firstOrNull?.card.gameId ?? 'vanguard',
+              ),
+        );
       case IntentKind.toggleOrderRest:
         // Your own set orders only, as with taking one off the table.
         final card = side.orderZone

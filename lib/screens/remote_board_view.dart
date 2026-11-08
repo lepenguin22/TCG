@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../games/card_catalog.dart';
+import '../games/games.dart';
 
 import '../playtest/net/playtest_intent.dart';
 import '../playtest/net/playtest_wire.dart';
 import '../playtest/net/remote_board.dart';
 import '../playtest/playtest_engine.dart' show PlaytestEngine;
+import '../playtest/order_tokens.dart';
 import '../playtest/playtest_state.dart';
 import '../theme.dart';
 import '../widgets/card_image.dart';
 import '../widgets/table_cards.dart';
-import 'playtest_screen.dart' show phaseColor;
+import 'playtest_screen.dart' show OrderTokenPicker, phaseColor;
 
 /// The board of a game being played on another device.
 ///
@@ -23,10 +28,15 @@ class RemoteBoardView extends StatefulWidget {
     required this.board,
     required this.onLeave,
     this.notice,
+    this.deckEffects = const [],
   });
 
   final RemoteBoard board;
   final VoidCallback onLeave;
+
+  /// The rules text of this player's deck, which says what tokens it puts
+  /// into the order zone.
+  final List<String> deckEffects;
 
   /// Something the game wants said across the top of the board: the other
   /// phone has dropped off, this one is dialling again. The board stays
@@ -424,6 +434,16 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
           );
         }
       }
+      // A token an ability puts into the order zone, for a deck that has one.
+      if (orderTokenNamesIn(widget.deckEffects).isNotEmpty) {
+        children.add(
+          TextButton(
+            key: const ValueKey('remote-order-token'),
+            onPressed: _orderTokenSheet,
+            child: const Text('Token'),
+          ),
+        );
+      }
       children.add(
         FilledButton(
           onPressed: () => ask(const PlaytestIntent(IntentKind.nextPhase)),
@@ -531,6 +551,36 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
             PlaytestIntent(IntentKind.unbindCard, card: id, exit: exit.$1),
           ),
         ),
+    ]);
+  }
+
+  /// Putting a token into your own order zone. The host makes it, from its
+  /// own copy of the card database.
+  Future<void> _orderTokenSheet() async {
+    final asset = gameById(board.gameId).catalogAsset;
+    final catalog = context.read<CardCatalog?>();
+    final options = asset == null || catalog == null
+        ? Future.value(const <CatalogCard>[])
+        : catalog
+              .load(asset)
+              .then((cards) => cards.where(isOrderZoneToken).toList());
+    await _sheet([
+      OrderTokenPicker(
+        options: options,
+        effects: widget.deckEffects,
+        gameId: board.gameId,
+        keyPrefix: 'remote-order-token',
+        onPick: (token) {
+          Navigator.of(context).pop();
+          ask(
+            PlaytestIntent(
+              IntentKind.placeOrderToken,
+              name: token.name,
+              cardNo: token.attributes['cardNo'],
+            ),
+          );
+        },
+      ),
     ]);
   }
 

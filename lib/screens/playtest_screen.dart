@@ -9,6 +9,7 @@ import '../games/game_definition.dart';
 import '../games/games.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
+import '../playtest/order_tokens.dart';
 import '../playtest/playtest_controller.dart';
 import '../playtest/playtest_engine.dart';
 import '../playtest/playtest_state.dart';
@@ -1390,8 +1391,12 @@ class _ZoneRail extends StatelessWidget {
         onTap: () => _showSoulSheet(context, game, side),
       ),
       // Set orders, which stay on the table doing what they say. The pile
-      // appears once one is set, since most decks set none all game.
-      if (side.orderZone.isNotEmpty)
+      // appears once one is set, since most decks set none all game -- or
+      // from the start for a deck whose cards put a token there, which is
+      // where that token is put from.
+      if (side.orderZone.isNotEmpty ||
+          (game.controls(side) &&
+              orderTokenNamesIn(_effectsOf(side)).isNotEmpty))
         _Pile(
           label: 'Orders',
           count: side.orderZone.length,
@@ -2511,6 +2516,9 @@ void _showOrderZoneSheet(
   PlaytestController game,
   PlaytestSide side,
 ) {
+  final definition = gameById(game.gameId);
+  // Asked for once rather than on every rebuild, as the crest sheet does.
+  final tokenOptions = _orderTokenOptions(context, definition);
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface,
@@ -2565,21 +2573,37 @@ void _showOrderZoneSheet(
                           side.isRestedOrder(card) ? 'Stand it' : 'Rest it',
                         ),
                       ),
-                      for (final exit in [
-                        (OrderExit.drop, 'To the drop'),
-                        (OrderExit.soul, 'To the soul'),
-                        (OrderExit.hand, 'Back to hand'),
-                        (OrderExit.removed, 'Out of the game'),
-                      ])
+                      // A token that leaves stops existing, so it has one
+                      // way out rather than four.
+                      if (isTokenCard(card.card))
                         TextButton(
-                          key: ValueKey('order-exit-${exit.$1.name}'),
-                          onPressed: () =>
-                              game.removeOrder(side, card, to: exit.$1),
-                          child: Text(exit.$2),
-                        ),
+                          key: const ValueKey('order-token-remove'),
+                          onPressed: () => game.removeOrder(side, card),
+                          child: const Text('Remove the token'),
+                        )
+                      else
+                        for (final exit in [
+                          (OrderExit.drop, 'To the drop'),
+                          (OrderExit.soul, 'To the soul'),
+                          (OrderExit.hand, 'Back to hand'),
+                          (OrderExit.removed, 'Out of the game'),
+                        ])
+                          TextButton(
+                            key: ValueKey('order-exit-${exit.$1.name}'),
+                            onPressed: () =>
+                                game.removeOrder(side, card, to: exit.$1),
+                            child: Text(exit.$2),
+                          ),
                     ],
                   ),
               ],
+              if (game.controls(side))
+                OrderTokenPicker(
+                  options: tokenOptions,
+                  effects: _effectsOf(side),
+                  gameId: definition.id,
+                  onPick: (token) => game.placeOrderToken(side, token),
+                ),
             ],
           ),
         ),
@@ -2869,6 +2893,41 @@ void _showCrestSheet(
 /// the crest a Stride Deckset's own ability puts into the crest zone --
 /// DZ-SS03/T01EN Nightrose and its like, which are what let those decks
 /// stride at all.
+/// The order zone tokens the card database knows, or none where it is not
+/// there to be read.
+Future<List<CatalogCard>> _orderTokenOptions(
+  BuildContext context,
+  GameDefinition game,
+) async {
+  final asset = game.catalogAsset;
+  if (asset == null) return const [];
+  final catalog = context.read<CardCatalog?>();
+  if (catalog == null) return const [];
+  return (await catalog.load(asset)).where(isOrderZoneToken).toList();
+}
+
+/// The rules text of every card [side] plays with, wherever it is now: what
+/// says which tokens the deck makes.
+List<String> _effectsOf(PlaytestSide side) => [
+  for (final zone in [
+    side.deck,
+    side.hand,
+    side.rideDeck,
+    side.soul,
+    side.drop,
+    side.damage,
+    side.bind,
+    side.gZone,
+    side.removed,
+    side.orderZone,
+  ])
+    for (final card in zone) card.card.attributes['effect'] ?? '',
+  for (final unit in side.field.values) ...[
+    unit.card.card.attributes['effect'] ?? '',
+    unit.legionMate?.card.attributes['effect'] ?? '',
+  ],
+];
+
 const _crestTypes = {'ride-deck-crest', 'crest'};
 
 /// The crests the card database knows, or none where it is not
@@ -5120,5 +5179,157 @@ class _SheetAction extends StatelessWidget {
       ),
       onTap: onTap,
     );
+  }
+}
+
+/// Putting a token into the order zone: the ones this deck's cards name
+/// first, then any other the card database has, then one by name for a
+/// token the database has no card for.
+class OrderTokenPicker extends StatelessWidget {
+  const OrderTokenPicker({
+    super.key,
+    required this.options,
+    required this.effects,
+    required this.gameId,
+    required this.onPick,
+    this.keyPrefix = 'order-token',
+  });
+
+  final Future<List<CatalogCard>> options;
+  final List<String> effects;
+  final String gameId;
+  final void Function(CardDefinition token) onPick;
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<CatalogCard>>(
+      future: options,
+      builder: (context, snapshot) {
+        final named = orderTokenNamesIn(effects);
+        final choices = orderTokenChoices(snapshot.data ?? const [], effects);
+        final known = {for (final c in choices) c.name.toLowerCase()};
+        // Named by the deck's cards, but not in the database.
+        final byName = [
+          for (final name in named)
+            if (!known.contains(name.toLowerCase())) name,
+        ];
+        final suggested = {for (final n in named) n.toLowerCase()};
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 18),
+            const Text(
+              'PUT A TOKEN HERE',
+              style: TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 11,
+                letterSpacing: 0.6,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'A token an ability makes, such as SYSTEM CODE: X-ceed. It is '
+              'in no deck, and taking it out of the order zone removes it '
+              'from the game. The ones your deck names come first.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Reading the card database…',
+                  style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                ),
+              ),
+            for (final name in byName)
+              _row(
+                context,
+                key: '$keyPrefix-name-$name',
+                title: name,
+                subtitle: 'Named by your deck',
+                onTap: () => onPick(namedToken(name, gameId)),
+              ),
+            for (final token in choices)
+              _row(
+                context,
+                key: '$keyPrefix-${token.attributes['cardNo'] ?? token.name}',
+                title: token.name,
+                subtitle: [
+                  if (suggested.contains(token.name.toLowerCase()))
+                    'Named by your deck',
+                  ?token.attributes['cardNo'],
+                ].join(' · '),
+                image: token.attributes['imageUrl'],
+                onTap: () => onPick(tokenFromCatalog(token, gameId)),
+              ),
+            TextButton.icon(
+              key: ValueKey('$keyPrefix-other'),
+              onPressed: () async {
+                final name = await _askName(context);
+                if (name != null && name.trim().isNotEmpty) {
+                  onPick(namedToken(name, gameId));
+                }
+              },
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Another token, by name'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row(
+    BuildContext context, {
+    required String key,
+    required String title,
+    required String subtitle,
+    String? image,
+    required VoidCallback onTap,
+  }) => ListTile(
+    key: ValueKey(key),
+    contentPadding: EdgeInsets.zero,
+    leading: CardImage(url: image, width: 32),
+    title: Text(
+      title,
+      style: const TextStyle(color: AppColors.text, fontSize: 14),
+    ),
+    subtitle: subtitle.isEmpty
+        ? null
+        : Text(
+            subtitle,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+    trailing: TextButton(onPressed: onTap, child: const Text('Put here')),
+  );
+
+  static Future<String?> _askName(BuildContext context) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Token name'),
+        content: TextField(
+          key: const ValueKey('order-token-name'),
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Forge'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('order-token-name-ok'),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Put here'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 }
