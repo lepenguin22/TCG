@@ -247,6 +247,167 @@ void main() {
       expect(find.text('Bind'), findsNothing, reason: 'the pile goes again');
     });
 
+    testWidgets('a deck that makes an order zone token puts one there', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      side.hand.add(
+        GameCard(
+          9701,
+          CardDefinition(
+            id: 'layout-inno',
+            gameId: 'vanguard',
+            name: 'Inno Progrett',
+            attributes: const {
+              'grade': '1',
+              'cardType': 'normal',
+              'effect':
+                  '[AUTO]:When this unit is placed by riding from a grade 0 '
+                  'card, [COST][reveal a grade 3 card with "Impauldio" in its '
+                  'card name from the ride deck], and put a SYSTEM CODE: '
+                  'X-ceed token into your order zone.',
+            },
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ),
+      );
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      // The order zone is empty, and still there to put the token into.
+      final pile = find.text('Orders');
+      await tester.ensureVisible(pile.first);
+      await tester.tap(pile.first);
+      await tester.pumpAndSettle();
+      final row = find.byKey(
+        const ValueKey('order-token-name-SYSTEM CODE: X-ceed'),
+      );
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.text('Put here')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(side.orderZone.single.name, 'SYSTEM CODE: X-ceed');
+      expect(side.orderZone.single.isSetOrder, isTrue);
+
+      // Removing it takes it out of the game.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('order-token-remove')),
+      );
+      await tester.tap(find.byKey(const ValueKey('order-token-remove')));
+      await tester.pumpAndSettle();
+      expect(side.orderZone, isEmpty);
+      expect(side.drop.where((c) => c.name == 'SYSTEM CODE: X-ceed'), isEmpty);
+    });
+
+    testWidgets('a deck that makes a marker puts one on a circle', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      side.hand.add(
+        GameCard(
+          9801,
+          CardDefinition(
+            id: 'layout-impauldio',
+            gameId: 'vanguard',
+            name: 'Impauldio',
+            attributes: const {
+              'grade': '3',
+              'cardType': 'normal',
+              'effect':
+                  '[ACT](VC)[1/Turn]:[COST][Counter-Blast 1], choose one of '
+                  'your (RC) without any X-ceed NET markers, and put an '
+                  'X-ceed NET marker.',
+            },
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ),
+      );
+      side.field.remove(Circle.backCenter);
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      // An empty circle: tapping it is where the marker is put.
+      final circle = find.byKey(ValueKey('circle-${side.name}-backCenter'));
+      await tester.ensureVisible(circle);
+      await tester.tap(circle);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('marker-sheet')), findsOneWidget);
+      final row = find.byKey(const ValueKey('marker-name-X-ceed NET'));
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.text('Put here')),
+      );
+      await tester.pumpAndSettle();
+
+      final marker = side.markersOn(Circle.backCenter).single;
+      expect(marker.name, 'X-ceed NET');
+
+      // Shown on the circle once the sheet is closed.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('markers-${side.name}-backCenter')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a deck with an AutoMOD gauge fills it from the drop', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      GameCard card(int id, String name, Map<String, String> attributes) =>
+          GameCard(
+            id,
+            CardDefinition(
+              id: 'layout-gauge-$id',
+              gameId: 'vanguard',
+              name: name,
+              attributes: attributes,
+              createdAt: DateTime(2026),
+              updatedAt: DateTime(2026),
+            ),
+          );
+      side.hand.add(
+        card(9851, 'Impauldio', {
+          'grade': '3',
+          'cardType': 'normal',
+          'effect':
+              '[ACT](VC):[COST][Counter-Blast 1], choose a card from your '
+              'drop, put it face up as your AutoMOD gauge.',
+        }),
+      );
+      final dropped = card(9852, 'Spent Card', {
+        'grade': '1',
+        'cardType': 'normal',
+      });
+      side.drop.add(dropped);
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      final pile = find.byKey(ValueKey('automod-${side.name}'));
+      await tester.ensureVisible(pile);
+      await tester.tap(pile);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('automod-sheet')), findsOneWidget);
+      final row = find.byKey(const ValueKey('automod-from-drop-9852'));
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.text('To gauge')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(side.autoMod, [dropped]);
+      expect(side.drop, isNot(contains(dropped)));
+      expect(find.text('AutoMOD gauge (1)'), findsOneWidget);
+    });
+
     testWidgets('a vanguard D-Legions from its sheet', (tester) async {
       final game = await pump(tester, opening);
       final side = game.state.active;

@@ -241,6 +241,32 @@ void main() {
       );
     });
 
+    test('an order zone token or a marker cannot be in a deck', () {
+      for (final made in [
+        card('SYSTEM CODE: X-ceed', {
+          'grade': '1',
+          'cardType': 'order-set',
+          'effect':
+              '(This represents a SYSTEM CODE: X-ceed token, and cannot be '
+              'put in a deck)',
+        }),
+        card('X-ceed NET', {
+          'cardType': 'marker',
+          'effect':
+              '(This represents an X-ceed NET marker, and cannot be put in a '
+              'deck)',
+        }),
+      ]) {
+        final slots = legalStandardDeck();
+        named(slots, 'Grade 3 C').card = made;
+        expect(
+          errorsOf(viewOf(formatStandard, slots)),
+          contains(contains('put into play by an ability')),
+          reason: made.name,
+        );
+      }
+    });
+
     test('a ticket card cannot be in a deck either', () {
       // A ticket is filed under a real card type -- Persona Shield is a blitz
       // order -- so only its own text gives it away.

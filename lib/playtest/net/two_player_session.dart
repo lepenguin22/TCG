@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../../models/card_definition.dart';
 import '../playtest_engine.dart';
 import '../playtest_state.dart';
 import 'playtest_host.dart';
@@ -65,6 +66,15 @@ class HostSession extends ChangeNotifier {
   PlaytestServer? _server;
   PlaytestTransport? _guest;
   PlaytestHost? host;
+
+  /// The order zone tokens and markers the card database has, by card
+  /// number, handed to the game; see [PlaytestHost.madeCards].
+  Map<String, CardDefinition> get madeCards => _madeCards;
+  Map<String, CardDefinition> _madeCards = const {};
+  set madeCards(Map<String, CardDefinition> cards) {
+    _madeCards = cards;
+    host?.madeCards = cards;
+  }
 
   /// The host's own board, which is a guest of its own game.
   RemoteBoard? board;
@@ -154,6 +164,7 @@ class HostSession extends ChangeNotifier {
       random: random,
     );
     final game = PlaytestHost(engine)
+      ..madeCards = madeCards
       ..onSeatChanged = (side, connected) {
         if (side.name != guestName) return;
         guestConnected = connected;

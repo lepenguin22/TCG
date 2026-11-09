@@ -298,6 +298,31 @@ class PlaytestSide {
 
   final Map<Circle, FieldUnit> field = {};
 
+  /// Markers on this player's circles: "put an X-ceed NET marker" on a
+  /// rear-guard circle. A marker is the circle's, not the unit's, so it stays
+  /// put when the unit on it moves, leaves or is replaced.
+  final Map<Circle, List<GameCard>> markers = {};
+
+  List<GameCard> markersOn(Circle circle) => markers[circle] ?? const [];
+
+  /// The AutoMOD gauge: cards an ability puts here face up -- "choose a card
+  /// from your drop, and put it face up as your AutoMOD gauge". Public, like
+  /// the drop, and counted by the cards that care: "+5000 for every two of
+  /// your AutoMOD gauges".
+  final List<GameCard> autoMod = [];
+
+  /// What the markers on [circle] give the unit standing on it, as their text
+  /// says. [ownTurn] is whether it is this player's turn, since most of what
+  /// a marker gives is "during your turn".
+  int circlePower(Circle circle, {required bool ownTurn}) {
+    if (field[circle] == null) return 0;
+    var total = 0;
+    for (final marker in markersOn(circle)) {
+      total += markerPowerOf(marker.card, this, ownTurn: ownTurn);
+    }
+    return total;
+  }
+
   FieldUnit? get vanguard => field[Circle.vanguard];
 
   int get damageCount => damage.length;
@@ -453,7 +478,14 @@ class PendingAttack {
     required this.target,
     required this.targetCircle,
     this.booster,
+    this.attackerSide,
+    this.targetSide,
   });
+
+  /// Whose units these are, for what their circles give them -- an X-ceed
+  /// NET marker's power is the circle's, not the unit's.
+  final PlaytestSide? attackerSide;
+  final PlaytestSide? targetSide;
 
   final FieldUnit attacker;
   final Circle attackerCircle;
@@ -504,12 +536,25 @@ class PendingAttack {
   /// +5000 pushes with that too -- an 8000 booster on a 5000 pump boosts for
   /// 13000 -- which is how the game works and what a deck built on pumping
   /// the back row is counting on.
-  int get attackPower => attacker.attackingPower + (booster?.power ?? 0);
+  int get attackPower =>
+      attacker.attackingPower +
+      (attackerSide?.circlePower(attackerCircle, ownTurn: true) ?? 0) +
+      (booster?.power ?? 0) +
+      (booster == null
+          ? 0
+          : attackerSide?.circlePower(
+                  attackerCircle.boostedBy!,
+                  ownTurn: true,
+                ) ??
+                0);
 
   int get shield =>
       guardians.fold(shieldBonus, (sum, card) => sum + card.shield);
 
-  int get defence => target.power + shield;
+  int get defence =>
+      target.power +
+      (targetSide?.circlePower(targetCircle, ownTurn: false) ?? 0) +
+      shield;
 
   bool get connects => !perfectGuarded && attackPower >= defence;
 }
@@ -564,4 +609,43 @@ class PlaytestState {
   void note(String text, {PlaytestSide? by}) {
     log.add(LogEntry(text, turn: turn, bySide: by?.name));
   }
+}
+
+final _perTwoGauges = RegExp(
+  r'\[Power\]\s*\+\s*(\d+) for every two of your AutoMOD gauges',
+  caseSensitive: false,
+);
+final _vanguardNamed = RegExp(
+  r'If you have a vanguard with "([^"]+)" in its card name',
+  caseSensitive: false,
+);
+
+/// The power a marker gives the unit on its circle, read off its text.
+///
+/// X-ceed NET: "If you have a vanguard with "Impauldio" in its card name,
+/// the unit on the (RC) with this marker gets ... [CONT](RC):During your
+/// turn, this unit gets [Power]+5000 for every two of your AutoMOD gauges."
+/// A marker whose text says something else gives nothing here: its owner
+/// applies it by hand, as with any other ability.
+int markerPowerOf(
+  CardDefinition marker,
+  PlaytestSide side, {
+  required bool ownTurn,
+}) {
+  final text = marker.attributes['effect'] ?? '';
+  final per = _perTwoGauges.firstMatch(text);
+  if (per == null) return 0;
+  if (text.toLowerCase().contains('during your turn') && !ownTurn) return 0;
+  final named = _vanguardNamed.firstMatch(text)?.group(1);
+  if (named != null) {
+    final vanguard = side.field[Circle.vanguard];
+    final needle = named.toLowerCase();
+    final has =
+        vanguard != null &&
+        (vanguard.card.name.toLowerCase().contains(needle) ||
+            (vanguard.legionMate?.name.toLowerCase().contains(needle) ??
+                false));
+    if (!has) return 0;
+  }
+  return int.parse(per.group(1)!) * (side.autoMod.length ~/ 2);
 }

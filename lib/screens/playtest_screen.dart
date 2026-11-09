@@ -9,6 +9,7 @@ import '../games/game_definition.dart';
 import '../games/games.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
+import '../playtest/order_tokens.dart';
 import '../playtest/playtest_controller.dart';
 import '../playtest/playtest_engine.dart';
 import '../playtest/playtest_state.dart';
@@ -1390,13 +1391,28 @@ class _ZoneRail extends StatelessWidget {
         onTap: () => _showSoulSheet(context, game, side),
       ),
       // Set orders, which stay on the table doing what they say. The pile
-      // appears once one is set, since most decks set none all game.
-      if (side.orderZone.isNotEmpty)
+      // appears once one is set, since most decks set none all game -- or
+      // from the start for a deck whose cards put a token there, which is
+      // where that token is put from.
+      if (side.orderZone.isNotEmpty ||
+          (game.controls(side) &&
+              orderTokenNamesIn(_effectsOf(side)).isNotEmpty))
         _Pile(
           label: 'Orders',
           count: side.orderZone.length,
           highlight: true,
           onTap: () => _showOrderZoneSheet(context, game, side),
+        ),
+      // The AutoMOD gauge, for a deck whose cards fill it -- or once anything
+      // is in it.
+      if (side.autoMod.isNotEmpty ||
+          (game.controls(side) && _usesAutoMod(side)))
+        _Pile(
+          key: ValueKey('automod-${side.name}'),
+          label: 'AutoMOD',
+          count: side.autoMod.length,
+          highlight: side.autoMod.isNotEmpty,
+          onTap: () => _showAutoModSheet(context, game, side),
         ),
       // The crest. Shown even with none in play, since an empty crest zone
       // is where one gets played from -- a deck that brings no crest of its
@@ -1565,6 +1581,7 @@ class _DamageBox extends StatelessWidget {
 
 class _Pile extends StatelessWidget {
   const _Pile({
+    super.key,
     required this.label,
     required this.count,
     required this.onTap,
@@ -2511,6 +2528,9 @@ void _showOrderZoneSheet(
   PlaytestController game,
   PlaytestSide side,
 ) {
+  final definition = gameById(game.gameId);
+  // Asked for once rather than on every rebuild, as the crest sheet does.
+  final tokenOptions = _orderTokenOptions(context, definition);
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface,
@@ -2565,21 +2585,37 @@ void _showOrderZoneSheet(
                           side.isRestedOrder(card) ? 'Stand it' : 'Rest it',
                         ),
                       ),
-                      for (final exit in [
-                        (OrderExit.drop, 'To the drop'),
-                        (OrderExit.soul, 'To the soul'),
-                        (OrderExit.hand, 'Back to hand'),
-                        (OrderExit.removed, 'Out of the game'),
-                      ])
+                      // A token that leaves stops existing, so it has one
+                      // way out rather than four.
+                      if (isTokenCard(card.card))
                         TextButton(
-                          key: ValueKey('order-exit-${exit.$1.name}'),
-                          onPressed: () =>
-                              game.removeOrder(side, card, to: exit.$1),
-                          child: Text(exit.$2),
-                        ),
+                          key: const ValueKey('order-token-remove'),
+                          onPressed: () => game.removeOrder(side, card),
+                          child: const Text('Remove the token'),
+                        )
+                      else
+                        for (final exit in [
+                          (OrderExit.drop, 'To the drop'),
+                          (OrderExit.soul, 'To the soul'),
+                          (OrderExit.hand, 'Back to hand'),
+                          (OrderExit.removed, 'Out of the game'),
+                        ])
+                          TextButton(
+                            key: ValueKey('order-exit-${exit.$1.name}'),
+                            onPressed: () =>
+                                game.removeOrder(side, card, to: exit.$1),
+                            child: Text(exit.$2),
+                          ),
                     ],
                   ),
               ],
+              if (game.controls(side))
+                OrderTokenPicker(
+                  options: tokenOptions,
+                  effects: _effectsOf(side),
+                  gameId: definition.id,
+                  onPick: (token) => game.placeOrderToken(side, token),
+                ),
             ],
           ),
         ),
@@ -2869,6 +2905,198 @@ void _showCrestSheet(
 /// the crest a Stride Deckset's own ability puts into the crest zone --
 /// DZ-SS03/T01EN Nightrose and its like, which are what let those decks
 /// stride at all.
+/// The order zone tokens the card database knows, or none where it is not
+/// there to be read.
+Future<List<CatalogCard>> _orderTokenOptions(
+  BuildContext context,
+  GameDefinition game,
+) async {
+  final asset = game.catalogAsset;
+  if (asset == null) return const [];
+  final catalog = context.read<CardCatalog?>();
+  if (catalog == null) return const [];
+  return (await catalog.load(asset)).where(isOrderZoneToken).toList();
+}
+
+/// The rules text of every card [side] plays with, wherever it is now: what
+/// says which tokens the deck makes.
+List<String> _effectsOf(PlaytestSide side) => [
+  for (final zone in [
+    side.deck,
+    side.hand,
+    side.rideDeck,
+    side.soul,
+    side.drop,
+    side.damage,
+    side.bind,
+    side.gZone,
+    side.removed,
+    side.orderZone,
+  ])
+    for (final card in zone) card.card.attributes['effect'] ?? '',
+  for (final unit in side.field.values) ...[
+    unit.card.card.attributes['effect'] ?? '',
+    unit.legionMate?.card.attributes['effect'] ?? '',
+  ],
+];
+
+/// Whether [side]'s cards fill an AutoMOD gauge.
+bool _usesAutoMod(PlaytestSide side) =>
+    _effectsOf(side).any((e) => e.contains('AutoMOD gauge'));
+
+/// The AutoMOD gauge: what is in it, where each card goes when it leaves,
+/// and putting one more there -- from the drop, as most of the deck's
+/// abilities say, or from the top of the deck, as one that looks says.
+void _showAutoModSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        builder: (_, scrollController) => ListenableBuilder(
+          listenable: game,
+          builder: (_, _) {
+            final yours = game.controls(side);
+            // The deck's top is its end; the top seven, top first.
+            final top = side.deck.reversed.take(7).toList();
+            Widget heading(String text) => Padding(
+              padding: const EdgeInsets.only(top: 18, bottom: 4),
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: AppColors.textFaint,
+                  fontSize: 11,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            );
+            Widget row(GameCard card, String key, Widget trailing) => ListTile(
+              key: ValueKey(key),
+              contentPadding: EdgeInsets.zero,
+              leading: CardImage(
+                url: card.card.attributes['imageUrl'],
+                width: 32,
+              ),
+              title: Text(
+                card.name,
+                style: const TextStyle(color: AppColors.text, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Grade ${card.grade}',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+              trailing: trailing,
+            );
+            return ListView(
+              key: const ValueKey('automod-sheet'),
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                SectionHeader(
+                  title: 'AutoMOD gauge (${side.autoMod.length})',
+                  caption:
+                      'Face up and public. A card that counts gauges -- '
+                      '"+5000 for every two of your AutoMOD gauges" -- counts '
+                      'these, and X-ceed NET adds its power on its own.',
+                ),
+                if (side.autoMod.isEmpty)
+                  const Text(
+                    'Empty.',
+                    style: TextStyle(color: AppColors.textMuted),
+                  ),
+                for (final card in side.autoMod) ...[
+                  row(
+                    card,
+                    'automod-card-${card.instanceId}',
+                    const SizedBox.shrink(),
+                  ),
+                  if (yours)
+                    Wrap(
+                      spacing: 4,
+                      children: [
+                        for (final exit in [
+                          (OrderExit.hand, 'To hand'),
+                          (OrderExit.drop, 'To the drop'),
+                          (OrderExit.soul, 'To the soul'),
+                          (OrderExit.removed, 'Out of the game'),
+                        ])
+                          TextButton(
+                            key: ValueKey(
+                              'automod-exit-${card.instanceId}-${exit.$1.name}',
+                            ),
+                            onPressed: () =>
+                                game.fromAutoMod(side, card, to: exit.$1),
+                            child: Text(exit.$2),
+                          ),
+                      ],
+                    ),
+                ],
+                if (yours) ...[
+                  heading('FROM THE DROP ZONE'),
+                  if (side.drop.isEmpty)
+                    const Text(
+                      'The drop zone is empty.',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  for (final card in side.drop.reversed)
+                    row(
+                      card,
+                      'automod-from-drop-${card.instanceId}',
+                      TextButton(
+                        onPressed: () => game.toAutoMod(side, card),
+                        child: const Text('To gauge'),
+                      ),
+                    ),
+                  heading('FROM THE TOP OF THE DECK'),
+                  const Text(
+                    'For an ability that looks at the top cards and puts one '
+                    'face up as a gauge. Shuffle afterwards if it says to.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  ExpansionTile(
+                    key: const ValueKey('automod-deck-top'),
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(
+                      'Look at the top ${top.length}',
+                      style: const TextStyle(color: AppColors.text),
+                    ),
+                    children: [
+                      for (final card in top)
+                        row(
+                          card,
+                          'automod-from-deck-${card.instanceId}',
+                          TextButton(
+                            onPressed: () => game.toAutoMod(side, card),
+                            child: const Text('To gauge'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    ),
+  );
+}
+
 const _crestTypes = {'ride-deck-crest', 'crest'};
 
 /// The crests the card database knows, or none where it is not
@@ -3240,17 +3468,39 @@ class _CircleSlot extends StatelessWidget {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: unit == null
-              ? Center(
-                  child: Text(
-                    circle == Circle.vanguard ? 'VG' : '—',
-                    style: const TextStyle(
-                      color: AppColors.textFaint,
-                      fontSize: 11,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              unit == null
+                  ? Center(
+                      child: Text(
+                        circle == Circle.vanguard ? 'VG' : '—',
+                        style: const TextStyle(
+                          color: AppColors.textFaint,
+                          fontSize: 11,
+                        ),
+                      ),
+                    )
+                  : _UnitTile(
+                      unit: unit,
+                      circle: circle,
+                      circlePower: side.circlePower(
+                        circle,
+                        ownTurn: game.state.active == side,
+                      ),
                     ),
+              // The circle's markers, which stay whatever unit is on it.
+              if (side.markersOn(circle).isNotEmpty)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: MarkerBadge(
+                    key: ValueKey('markers-${side.name}-${circle.name}'),
+                    markers: side.markersOn(circle),
                   ),
-                )
-              : _UnitTile(unit: unit, circle: circle),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -3275,18 +3525,139 @@ class _CircleSlot extends StatelessWidget {
       return;
     }
     final unit = side.field[circle];
-    if (unit != null) _showUnitSheet(context, game, side, circle, unit);
+    if (unit != null) {
+      _showUnitSheet(context, game, side, circle, unit);
+    } else if (game.controls(side) &&
+        circle.isRearGuard &&
+        (side.markersOn(circle).isNotEmpty ||
+            markerNamesIn(_effectsOf(side)).isNotEmpty)) {
+      // An empty circle can still be given a marker: the ability chooses a
+      // circle, not a unit.
+      _showMarkerSheet(context, game, side, circle);
+    }
   }
+}
+
+/// The markers on a circle, in its corner. Shared with the two-device
+/// board.
+class MarkerBadge extends StatelessWidget {
+  const MarkerBadge({super.key, required this.markers});
+
+  final List<GameCard> markers;
+
+  @override
+  Widget build(BuildContext context) {
+    final names = <String, int>{};
+    for (final marker in markers) {
+      names[marker.name] = (names[marker.name] ?? 0) + 1;
+    }
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 80),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      decoration: const BoxDecoration(
+        color: _markerColour,
+        borderRadius: BorderRadius.only(bottomRight: Radius.circular(6)),
+      ),
+      child: Text(
+        [
+          for (final entry in names.entries)
+            entry.value > 1 ? '${entry.key} ×${entry.value}' : entry.key,
+        ].join(', '),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 8,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/// The colour a circle's markers are drawn in.
+const _markerColour = Color(0xFF7FD6E8);
+
+/// A rear-guard circle's markers: what is on it, and putting one more there.
+void _showMarkerSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+  Circle circle,
+) {
+  final definition = gameById(game.gameId);
+  final asset = definition.catalogAsset;
+  final catalog = context.read<CardCatalog?>();
+  final options = asset == null || catalog == null
+      ? Future.value(const <CatalogCard>[])
+      : catalog.load(asset).then((cards) => cards.where(isMarkerCard).toList());
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (_, scrollController) => ListenableBuilder(
+          listenable: game,
+          builder: (_, _) => ListView(
+            key: const ValueKey('marker-sheet'),
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              SectionHeader(
+                title: 'Markers on ${circle.label}',
+                caption: side.field[circle] == null
+                    ? 'No unit here. A marker stays on the circle for the '
+                          'next one.'
+                    : 'On ${side.field[circle]!.card.name}\u2019s circle. '
+                          'What a marker gives is on the marker.',
+              ),
+              if (side.markersOn(circle).isEmpty)
+                const Text(
+                  'None yet.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              for (final marker in side.markersOn(circle)) ...[
+                const SizedBox(height: 8),
+                _CardHeading(card: marker),
+                TextButton(
+                  key: ValueKey('marker-remove-${marker.instanceId}'),
+                  onPressed: () => game.removeMarker(side, circle, marker),
+                  child: const Text('Take it off'),
+                ),
+              ],
+              OrderTokenPicker.markers(
+                options: options,
+                effects: _effectsOf(side),
+                gameId: definition.id,
+                onPick: (marker) => game.placeMarker(side, circle, marker),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// The colour a D-Legion is marked in on the board.
 const _legionColour = Color(0xFFF5A35B);
 
 class _UnitTile extends StatelessWidget {
-  const _UnitTile({required this.unit, required this.circle});
+  const _UnitTile({
+    required this.unit,
+    required this.circle,
+    this.circlePower = 0,
+  });
 
   final FieldUnit unit;
   final Circle circle;
+
+  /// What the circle's markers give the unit: X-ceed NET's AutoMOD power.
+  final int circlePower;
 
   @override
   Widget build(BuildContext context) {
@@ -3396,11 +3767,11 @@ class _UnitTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  '${unit.power}',
+                  '${unit.power + circlePower}',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: unit.powerBonus > 0
+                    color: unit.powerBonus > 0 || circlePower > 0
                         ? AppColors.success
                         : Colors.white,
                   ),
@@ -4700,6 +5071,39 @@ void _showUnitSheet(
               // Exchanging two rear-guards anywhere on the board, which is
               // what the cards that move units about actually say -- the
               // column move above is the one the rules give for free.
+              // Only for a deck that makes a marker, or a circle that has
+              // one: most decks never put a marker anywhere.
+              if (game.controls(side) &&
+                  circle.isRearGuard &&
+                  (side.markersOn(circle).isNotEmpty ||
+                      markerNamesIn(_effectsOf(side)).isNotEmpty))
+                ListTile(
+                  key: ValueKey('markers-from-${circle.name}'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.push_pin_outlined,
+                    color: AppColors.accent,
+                  ),
+                  title: Text(
+                    side.markersOn(circle).isEmpty
+                        ? 'Put a marker on this circle'
+                        : 'Markers on this circle '
+                              '(${side.markersOn(circle).length})',
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Such as X-ceed NET. It stays on the circle when the '
+                    'unit leaves.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _showMarkerSheet(context, game, side, circle);
+                  },
+                ),
               if (game.controls(side) &&
                   circle.isRearGuard &&
                   Circle.values.any(
@@ -5120,5 +5524,198 @@ class _SheetAction extends StatelessWidget {
       ),
       onTap: onTap,
     );
+  }
+}
+
+/// Putting something an ability makes onto the board -- a token into the
+/// order zone, a marker onto a circle: the ones this deck's cards name first,
+/// then any other the card database has, then one by name for one the
+/// database has no card for.
+class OrderTokenPicker extends StatelessWidget {
+  const OrderTokenPicker({
+    super.key,
+    required this.options,
+    required this.effects,
+    required this.gameId,
+    required this.onPick,
+    this.keyPrefix = 'order-token',
+  }) : title = 'PUT A TOKEN HERE',
+       caption =
+           'A token an ability makes, such as SYSTEM CODE: X-ceed. It is '
+           'in no deck, and taking it out of the order zone removes it '
+           'from the game. The ones your deck names come first.',
+       namesIn = orderTokenNamesIn,
+       choicesFor = orderTokenChoices,
+       fromCatalog = tokenFromCatalog,
+       byName = namedToken,
+       hint = 'Forge',
+       otherLabel = 'Another token, by name';
+
+  /// The same, for a marker on a circle.
+  const OrderTokenPicker.markers({
+    super.key,
+    required this.options,
+    required this.effects,
+    required this.gameId,
+    required this.onPick,
+    this.keyPrefix = 'marker',
+  }) : title = 'PUT A MARKER HERE',
+       caption =
+           'A marker an ability puts on a circle, such as X-ceed NET. It '
+           'is the circle\u2019s, not the unit\u2019s: it stays when the '
+           'unit leaves. The ones your deck names come first.',
+       namesIn = markerNamesIn,
+       choicesFor = markerChoices,
+       fromCatalog = markerFromCatalog,
+       byName = namedMarker,
+       hint = 'Dragontree',
+       otherLabel = 'Another marker, by name';
+
+  final Future<List<CatalogCard>> options;
+  final List<String> effects;
+  final String gameId;
+  final void Function(CardDefinition made) onPick;
+  final String keyPrefix;
+  final String title;
+  final String caption;
+  final List<String> Function(Iterable<String> effects) namesIn;
+  final List<CatalogCard> Function(
+    List<CatalogCard> catalog,
+    Iterable<String> effects,
+  )
+  choicesFor;
+  final CardDefinition Function(CatalogCard card, String gameId) fromCatalog;
+  final CardDefinition Function(String name, String gameId) byName;
+  final String hint;
+  final String otherLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<CatalogCard>>(
+      future: options,
+      builder: (context, snapshot) {
+        final named = namesIn(effects);
+        final choices = choicesFor(snapshot.data ?? const [], effects);
+        final known = {for (final c in choices) c.name.toLowerCase()};
+        // Named by the deck's cards, but not in the database.
+        final unknown = [
+          for (final name in named)
+            if (!known.contains(name.toLowerCase())) name,
+        ];
+        final suggested = {for (final n in named) n.toLowerCase()};
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 11,
+                letterSpacing: 0.6,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              caption,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Reading the card database…',
+                  style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                ),
+              ),
+            for (final name in unknown)
+              _row(
+                context,
+                key: '$keyPrefix-name-$name',
+                title: name,
+                subtitle: 'Named by your deck',
+                onTap: () => onPick(byName(name, gameId)),
+              ),
+            for (final token in choices)
+              _row(
+                context,
+                key: '$keyPrefix-${token.attributes['cardNo'] ?? token.name}',
+                title: token.name,
+                subtitle: [
+                  if (suggested.contains(token.name.toLowerCase()))
+                    'Named by your deck',
+                  ?token.attributes['cardNo'],
+                ].join(' · '),
+                image: token.attributes['imageUrl'],
+                onTap: () => onPick(fromCatalog(token, gameId)),
+              ),
+            TextButton.icon(
+              key: ValueKey('$keyPrefix-other'),
+              onPressed: () async {
+                final name = await _askName(context, hint);
+                if (name != null && name.trim().isNotEmpty) {
+                  onPick(byName(name, gameId));
+                }
+              },
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: Text(otherLabel),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row(
+    BuildContext context, {
+    required String key,
+    required String title,
+    required String subtitle,
+    String? image,
+    required VoidCallback onTap,
+  }) => ListTile(
+    key: ValueKey(key),
+    contentPadding: EdgeInsets.zero,
+    leading: CardImage(url: image, width: 32),
+    title: Text(
+      title,
+      style: const TextStyle(color: AppColors.text, fontSize: 14),
+    ),
+    subtitle: subtitle.isEmpty
+        ? null
+        : Text(
+            subtitle,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+    trailing: TextButton(onPressed: onTap, child: const Text('Put here')),
+  );
+
+  static Future<String?> _askName(BuildContext context, String hint) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Name'),
+        content: TextField(
+          key: const ValueKey('order-token-name'),
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: hint),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('order-token-name-ok'),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Put here'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 }

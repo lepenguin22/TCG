@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import '../../models/card_definition.dart';
+import '../order_tokens.dart';
 import '../playtest_engine.dart';
 import '../playtest_state.dart';
 import 'playtest_intent.dart';
@@ -35,6 +37,11 @@ class PlaytestHost {
   /// next.
   final Map<String, String> _tokens = {};
   static final Random _tokenSource = Random.secure();
+
+  /// The order zone tokens and markers the card database has, by card
+  /// number, for a player who asks for one. The host makes it from its own
+  /// copy of the card, so nothing of what one says comes over the wire.
+  Map<String, CardDefinition> madeCards = const {};
 
   /// Told when a seat is taken or lost, for a screen that says so.
   void Function(PlaytestSide side, bool connected)? onSeatChanged;
@@ -215,6 +222,71 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.toAutoMod:
+        if (intent.card == null) {
+          if (side.deck.isEmpty) return _refuse(side, 'the deck is empty');
+          engine.toAutoMod(side, side.deck.last);
+        } else {
+          // Only out of the asker's own public zones and hand: never the
+          // deck by id, whose order is nobody's to know.
+          final card = [
+            ...side.drop,
+            ...side.soul,
+            ...side.bind,
+            ...side.damage,
+            ...side.hand,
+          ].where((c) => c.instanceId == intent.card).firstOrNull;
+          if (card == null) return _refuse(side, 'no such card to gauge');
+          engine.toAutoMod(side, card);
+        }
+      case IntentKind.fromAutoMod:
+        final card = side.autoMod
+            .where((c) => c.instanceId == intent.card)
+            .firstOrNull;
+        if (card == null) return _refuse(side, 'no such AutoMOD gauge');
+        engine.fromAutoMod(side, card, to: intent.exit ?? OrderExit.hand);
+      case IntentKind.placeMarker:
+        final circle = intent.circle;
+        if (circle == null || !circle.isRearGuard) {
+          return _refuse(side, 'a marker goes on a rear-guard circle');
+        }
+        final known = madeCards[intent.cardNo ?? ''];
+        final name = intent.name?.trim() ?? '';
+        final marker = known?.attributes['cardType'] == 'marker'
+            ? known
+            : (name.isEmpty || name.length > 80)
+            ? null
+            : namedMarker(
+                name,
+                side.deck.firstOrNull?.card.gameId ?? 'vanguard',
+              );
+        if (marker == null) return _refuse(side, 'no such marker');
+        engine.placeMarker(side, circle, marker);
+      case IntentKind.removeMarker:
+        final circle = intent.circle;
+        final marker = circle == null
+            ? null
+            : side
+                  .markersOn(circle)
+                  .where((c) => c.instanceId == intent.card)
+                  .firstOrNull;
+        if (marker == null) return _refuse(side, 'no such marker there');
+        engine.removeMarker(side, circle!, marker);
+      case IntentKind.placeOrderToken:
+        final made = madeCards[intent.cardNo ?? ''];
+        final known = made?.attributes['cardType'] == 'order-set' ? made : null;
+        final name = intent.name?.trim() ?? '';
+        if (known == null && (name.isEmpty || name.length > 80)) {
+          return _refuse(side, 'no such token');
+        }
+        engine.placeOrderToken(
+          side,
+          known ??
+              namedToken(
+                name,
+                side.deck.firstOrNull?.card.gameId ?? 'vanguard',
+              ),
+        );
       case IntentKind.toggleOrderRest:
         // Your own set orders only, as with taking one off the table.
         final card = side.orderZone

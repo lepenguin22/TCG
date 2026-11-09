@@ -5,6 +5,7 @@ import '../games/vanguard/vanguard_data.dart';
 import '../models/card_definition.dart';
 import '../models/deck.dart';
 import '../store/deck_store.dart';
+import 'order_tokens.dart';
 import 'playtest_state.dart';
 
 /// The rules of a game of Vanguard, as far as they can be played without
@@ -1060,7 +1061,104 @@ class PlaytestEngine {
     state.note('${side.name} sets ${card.name} in the order zone.', by: side);
   }
 
+  /// Puts a token into the order zone, as the ability that makes one says:
+  /// "put a SYSTEM CODE: X-ceed token into your order zone". It is in no
+  /// deck, so it comes from outside the game.
+  GameCard placeOrderToken(PlaytestSide side, CardDefinition token) {
+    final card = GameCard(_nextInstanceId++, token);
+    side.orderZone.add(card);
+    state.note(
+      '${side.name} puts a ${card.name} token into the order zone.',
+      by: side,
+    );
+    return card;
+  }
+
+  /// Puts a marker on one of [side]'s rear-guard circles, as the ability
+  /// that makes one says. Null where [circle] is the vanguard circle, which
+  /// the markers in the game are never put on.
+  GameCard? placeMarker(
+    PlaytestSide side,
+    Circle circle,
+    CardDefinition marker,
+  ) {
+    if (!circle.isRearGuard) return null;
+    final card = GameCard(_nextInstanceId++, marker);
+    side.markers.putIfAbsent(circle, () => []).add(card);
+    state.note(
+      '${side.name} puts a ${card.name} marker on ${circle.label}.',
+      by: side,
+    );
+    return card;
+  }
+
+  /// Puts [card] face up as [side]'s AutoMOD gauge, from wherever it is:
+  /// the drop, most often, or the deck when an ability looks at the top of
+  /// it. False when the card is in none of the places a gauge is taken from.
+  bool toAutoMod(PlaytestSide side, GameCard card) {
+    final from = [
+      (side.drop, 'the drop zone'),
+      (side.deck, 'the deck'),
+      (side.hand, 'hand'),
+      (side.soul, 'the soul'),
+      (side.damage, 'the damage zone'),
+      (side.bind, 'the bind zone'),
+    ].where((zone) => zone.$1.contains(card)).firstOrNull;
+    if (from == null) return false;
+    from.$1.remove(card);
+    side.autoMod.add(card);
+    state.note(
+      '${side.name} puts ${card.name} from ${from.$2} face up as an AutoMOD '
+      'gauge (${side.autoMod.length}).',
+      by: side,
+    );
+    return true;
+  }
+
+  /// Takes a card out of [side]'s AutoMOD gauge, to [to].
+  void fromAutoMod(
+    PlaytestSide side,
+    GameCard card, {
+    OrderExit to = OrderExit.hand,
+  }) {
+    if (!side.autoMod.remove(card)) return;
+    switch (to) {
+      case OrderExit.drop:
+        side.drop.add(card);
+      case OrderExit.soul:
+        side.soul.add(card);
+      case OrderExit.hand:
+        side.hand.add(card);
+      case OrderExit.removed:
+        side.removed.add(card);
+    }
+    state.note(
+      '${side.name} takes ${card.name} out of the AutoMOD gauge '
+      '${switch (to) {
+        OrderExit.drop => 'to the drop zone',
+        OrderExit.soul => 'into the soul',
+        OrderExit.hand => 'into hand',
+        OrderExit.removed => 'and out of the game',
+      }}.',
+      by: side,
+    );
+  }
+
+  /// Takes a marker off a circle. It stops existing, as a token does.
+  void removeMarker(PlaytestSide side, Circle circle, GameCard marker) {
+    final on = side.markers[circle];
+    if (on == null || !on.remove(marker)) return;
+    if (on.isEmpty) side.markers.remove(circle);
+    state.note(
+      '${side.name} takes the ${marker.name} marker off ${circle.label}.',
+      by: side,
+    );
+  }
+
   /// Takes a set order off the table, wherever its text says it goes.
+  ///
+  /// A token goes nowhere: a token that leaves the order zone stops
+  /// existing, whatever [to] says.
   void removeOrder(
     PlaytestSide side,
     GameCard card, {
@@ -1069,6 +1167,14 @@ class PlaytestEngine {
     if (!side.orderZone.remove(card)) return;
     // Wherever it goes, it arrives standing.
     side.restedOrders.remove(card.instanceId);
+    if (isTokenCard(card.card)) {
+      state.note(
+        '${side.name}\u2019s ${card.name} token leaves the order zone, '
+        'and is gone.',
+        by: side,
+      );
+      return;
+    }
     switch (to) {
       case OrderExit.drop:
         side.drop.add(card);
@@ -1286,6 +1392,8 @@ class PlaytestEngine {
       target: target,
       targetCircle: to,
       booster: booster,
+      attackerSide: side,
+      targetSide: foe,
     );
     state.attack = pending;
     // A new battle, so the last one's checks come off the trigger zone.

@@ -565,6 +565,31 @@ class PlaytestController extends ChangeNotifier {
     _sync();
   }
 
+  void toAutoMod(PlaytestSide side, GameCard card) {
+    engine.toAutoMod(side, card);
+    _sync();
+  }
+
+  void fromAutoMod(PlaytestSide side, GameCard card, {OrderExit? to}) {
+    engine.fromAutoMod(side, card, to: to ?? OrderExit.hand);
+    _sync();
+  }
+
+  void placeMarker(PlaytestSide side, Circle circle, CardDefinition marker) {
+    engine.placeMarker(side, circle, marker);
+    _sync();
+  }
+
+  void removeMarker(PlaytestSide side, Circle circle, GameCard marker) {
+    engine.removeMarker(side, circle, marker);
+    _sync();
+  }
+
+  void placeOrderToken(PlaytestSide side, CardDefinition token) {
+    engine.placeOrderToken(side, token);
+    _sync();
+  }
+
   void addToken(PlaytestSide side, CardDefinition card) {
     engine.addToken(side, card);
     _sync();

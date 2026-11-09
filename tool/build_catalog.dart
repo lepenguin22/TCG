@@ -212,6 +212,12 @@ const _cardTypes = <String, String>{
 bool _isStrideCrest(Map<String, dynamic> raw) =>
     (raw['effect'] as String? ?? '').contains('You can perform [Stride]');
 
+/// A marker an ability puts on a circle -- "put an X-ceed NET marker" --
+/// filed, like a crest, under no card type at all. It is kept for the same
+/// reason a crest is: it is played, and its text is what it does there.
+bool _isMarker(Map<String, dynamic> raw) => (raw['effect'] as String? ?? '')
+    .contains('marker, and cannot be put in a deck');
+
 /// Sets read from the official card list, which the mirror does not have.
 /// Stats the official card list gets wrong, keyed by the number of the
 /// printing they are wrong on.
@@ -419,10 +425,15 @@ void main() async {
       printings += 1;
       final name = decodeEntities(raw['name'] as String? ?? '').trim();
       final cardType =
-          _cardTypes[raw['type']] ?? (_isStrideCrest(raw) ? 'crest' : null);
-      // Tokens, markers and untyped rows are not deck cards. A stride crest
-      // is not one either -- it cannot be put in a deck -- but it is played,
-      // so it is kept.
+          _cardTypes[raw['type']] ??
+          (_isStrideCrest(raw)
+              ? 'crest'
+              : _isMarker(raw)
+              ? 'marker'
+              : null);
+      // Tokens and untyped rows are not deck cards. A stride crest or a
+      // marker is not one either -- it cannot be put in a deck -- but it is
+      // played, so it is kept.
       if (name.isEmpty || cardType == null) {
         skipped += 1;
         continue;

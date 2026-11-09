@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../games/card_catalog.dart';
+import '../games/games.dart';
 
 import '../playtest/net/playtest_intent.dart';
 import '../playtest/net/playtest_wire.dart';
 import '../playtest/net/remote_board.dart';
 import '../playtest/playtest_engine.dart' show PlaytestEngine;
+import '../playtest/order_tokens.dart';
 import '../playtest/playtest_state.dart';
 import '../theme.dart';
 import '../widgets/card_image.dart';
 import '../widgets/table_cards.dart';
-import 'playtest_screen.dart' show phaseColor;
+import 'playtest_screen.dart' show MarkerBadge, OrderTokenPicker, phaseColor;
 
 /// The board of a game being played on another device.
 ///
@@ -23,10 +28,15 @@ class RemoteBoardView extends StatefulWidget {
     required this.board,
     required this.onLeave,
     this.notice,
+    this.deckEffects = const [],
   });
 
   final RemoteBoard board;
   final VoidCallback onLeave;
+
+  /// The rules text of this player's deck, which says what tokens it puts
+  /// into the order zone.
+  final List<String> deckEffects;
 
   /// Something the game wants said across the top of the board: the other
   /// phone has dropped off, this one is dialling again. The board stays
@@ -309,6 +319,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   onRemoveOrder: _removeOrder,
                   onSoulCard: _soulCard,
                   onBoundCard: _boundCard,
+                  onAutoModCard: _autoModCard,
                 ),
               ],
             ),
@@ -322,7 +333,16 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
 
   void _tapMyCircle(Circle circle) {
     final unit = snapshot.me.units[circle];
-    if (unit == null) return;
+    if (unit == null) {
+      // An empty circle can still be given a marker: the ability chooses a
+      // circle, not a unit.
+      if (circle.isRearGuard &&
+          ((snapshot.me.markers[circle] ?? const []).isNotEmpty ||
+              markerNamesIn(widget.deckEffects).isNotEmpty)) {
+        _markerSheet(circle);
+      }
+      return;
+    }
     // In the battle phase a front row unit is picked up to attack with;
     // everywhere else, tapping a unit is asking what can be done to it.
     if (snapshot.phase == PlaytestPhase.battle &&
@@ -424,12 +444,36 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
           );
         }
       }
+      // A token an ability puts into the order zone, for a deck that has one.
+      if (orderTokenNamesIn(widget.deckEffects).isNotEmpty) {
+        children.add(
+          TextButton(
+            key: const ValueKey('remote-order-token'),
+            onPressed: _orderTokenSheet,
+            child: const Text('Token'),
+          ),
+        );
+      }
       children.add(
         FilledButton(
           onPressed: () => ask(const PlaytestIntent(IntentKind.nextPhase)),
           child: Text(
             snapshot.phase == PlaytestPhase.battle ? 'End turn' : 'Next',
           ),
+        ),
+      );
+    }
+
+    // The AutoMOD gauge, for a deck whose cards fill one: on either
+    // player's turn, since a gauge is added when damage is taken too.
+    if (snapshot.winnerName == null &&
+        widget.deckEffects.any((e) => e.contains('AutoMOD gauge'))) {
+      children.insert(
+        0,
+        TextButton(
+          key: const ValueKey('remote-automod'),
+          onPressed: _autoModSheet,
+          child: const Text('Gauge'),
         ),
       );
     }
@@ -531,6 +575,137 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
             PlaytestIntent(IntentKind.unbindCard, card: id, exit: exit.$1),
           ),
         ),
+    ]);
+  }
+
+  /// Putting a card face up as an AutoMOD gauge: one out of the drop zone,
+  /// or the top card of the deck.
+  Future<void> _autoModSheet() async {
+    await _sheet([
+      Text(
+        'AutoMOD gauge (${snapshot.me.autoModIds.length})',
+        style: const TextStyle(
+          color: AppColors.text,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      _Action(
+        key: const ValueKey('remote-automod-deck'),
+        icon: Icons.layers_outlined,
+        label: 'The top card of the deck',
+        detail: 'Put face up as a gauge.',
+        onTap: () => ask(const PlaytestIntent(IntentKind.toAutoMod)),
+      ),
+      for (final id in snapshot.me.dropIds.reversed)
+        _Action(
+          key: ValueKey('remote-automod-drop-$id'),
+          icon: Icons.delete_outline,
+          label: board.cardOf(id)?.name ?? 'A card',
+          detail: 'From the drop zone.',
+          onTap: () => ask(PlaytestIntent(IntentKind.toAutoMod, card: id)),
+        ),
+    ]);
+  }
+
+  /// A card in your own AutoMOD gauge, and where it goes.
+  Future<void> _autoModCard(int id) async {
+    final face = board.cardOf(id);
+    if (face == null) return;
+    await _sheet([
+      _CardHeading(face: face),
+      for (final exit in const [
+        (OrderExit.hand, 'To hand', Icons.back_hand_outlined),
+        (OrderExit.drop, 'To the drop zone', Icons.delete_outline),
+        (OrderExit.soul, 'Into the soul', Icons.auto_awesome_outlined),
+        (OrderExit.removed, 'Out of the game', Icons.block_outlined),
+      ])
+        _Action(
+          key: ValueKey('remote-automod-exit-${exit.$1.name}'),
+          icon: exit.$3,
+          label: exit.$2,
+          onTap: () => ask(
+            PlaytestIntent(IntentKind.fromAutoMod, card: id, exit: exit.$1),
+          ),
+        ),
+    ]);
+  }
+
+  /// One of your rear-guard circles' markers, and putting one there. The
+  /// host makes it, from its own copy of the card database.
+  Future<void> _markerSheet(Circle circle) async {
+    final asset = gameById(board.gameId).catalogAsset;
+    final catalog = context.read<CardCatalog?>();
+    final options = asset == null || catalog == null
+        ? Future.value(const <CatalogCard>[])
+        : catalog
+              .load(asset)
+              .then((cards) => cards.where(isMarkerCard).toList());
+    await _sheet([
+      Text(
+        'Markers on ${circle.label}',
+        style: const TextStyle(
+          color: AppColors.text,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      for (final id in snapshot.me.markers[circle] ?? const <int>[])
+        _Action(
+          key: ValueKey('remote-marker-remove-$id'),
+          icon: Icons.close,
+          label: 'Take ${board.cardOf(id)?.name ?? 'the marker'} off',
+          onTap: () => ask(
+            PlaytestIntent(IntentKind.removeMarker, circle: circle, card: id),
+          ),
+        ),
+      OrderTokenPicker.markers(
+        options: options,
+        effects: widget.deckEffects,
+        gameId: board.gameId,
+        keyPrefix: 'remote-marker',
+        onPick: (marker) {
+          Navigator.of(context).pop();
+          ask(
+            PlaytestIntent(
+              IntentKind.placeMarker,
+              circle: circle,
+              name: marker.name,
+              cardNo: marker.attributes['cardNo'],
+            ),
+          );
+        },
+      ),
+    ]);
+  }
+
+  /// Putting a token into your own order zone. The host makes it, from its
+  /// own copy of the card database.
+  Future<void> _orderTokenSheet() async {
+    final asset = gameById(board.gameId).catalogAsset;
+    final catalog = context.read<CardCatalog?>();
+    final options = asset == null || catalog == null
+        ? Future.value(const <CatalogCard>[])
+        : catalog
+              .load(asset)
+              .then((cards) => cards.where(isOrderZoneToken).toList());
+    await _sheet([
+      OrderTokenPicker(
+        options: options,
+        effects: widget.deckEffects,
+        gameId: board.gameId,
+        keyPrefix: 'remote-order-token',
+        onPick: (token) {
+          Navigator.of(context).pop();
+          ask(
+            PlaytestIntent(
+              IntentKind.placeOrderToken,
+              name: token.name,
+              cardNo: token.attributes['cardNo'],
+            ),
+          );
+        },
+      ),
     ]);
   }
 
@@ -905,8 +1080,8 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'D-Legioned with ${mate.name} (${mate.power} power, added in). '
-            'Both go into the soul when this vanguard is ridden over.',
+            'D-Legioned with ${mate.name} (${mate.power} power, added when '
+            'it attacks). Both go into the soul when it is ridden over.',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ),
@@ -919,6 +1094,18 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
               'Return four cards from the drop to the deck and search for '
               'it.',
           onTap: () => _dLegionSheet(mateName),
+        ),
+      if (circle.isRearGuard &&
+          ((snapshot.me.markers[circle] ?? const []).isNotEmpty ||
+              markerNamesIn(widget.deckEffects).isNotEmpty))
+        _Action(
+          key: const ValueKey('remote-markers'),
+          icon: Icons.push_pin_outlined,
+          label: (snapshot.me.markers[circle] ?? const []).isEmpty
+              ? 'Put a marker on this circle'
+              : 'Markers on this circle',
+          detail: 'Such as X-ceed NET. It stays when the unit leaves.',
+          onTap: () => _markerSheet(circle),
         ),
       _Action(
         icon: unit.rested ? Icons.arrow_upward : Icons.arrow_downward,
@@ -1088,6 +1275,7 @@ class _SideStrip extends StatelessWidget {
     this.onRemoveOrder,
     this.onSoulCard,
     this.onBoundCard,
+    this.onAutoModCard,
   });
 
   final SideSnapshot side;
@@ -1103,6 +1291,9 @@ class _SideStrip extends StatelessWidget {
   /// What can be done with a card in this player's own soul, or bind zone.
   final void Function(int id)? onSoulCard;
   final void Function(int id)? onBoundCard;
+
+  /// Taking a card out of this player's own AutoMOD gauge.
+  final void Function(int id)? onAutoModCard;
 
   @override
   Widget build(BuildContext context) {
@@ -1153,6 +1344,7 @@ class _SideStrip extends StatelessWidget {
                 // Set orders are face up for both players, since both are
                 // playing under what they say.
                 if (side.orderZoneIds.isNotEmpty) ('Orders', side.orderZoneIds),
+                if (side.autoModIds.isNotEmpty) ('AutoMOD', side.autoModIds),
               ])
                 _PileChip(
                   label: pile.$1,
@@ -1169,10 +1361,11 @@ class _SideStrip extends StatelessWidget {
                           'Orders' => onRemoveOrder,
                           'Soul' => onSoulCard,
                           'Bind' => onBoundCard,
+                          'AutoMOD' => onAutoModCard,
                           _ => null,
                         },
                   playLabel: switch (pile.$1) {
-                    'Orders' || 'Bind' => 'Move',
+                    'Orders' || 'Bind' || 'AutoMOD' => 'Move',
                     'Soul' => 'Bind',
                     _ => 'Play',
                   },
@@ -1180,6 +1373,7 @@ class _SideStrip extends StatelessWidget {
                     'Orders' => 'move-order',
                     'Soul' => 'soul-card',
                     'Bind' => 'move-bound',
+                    'AutoMOD' => 'move-automod',
                     _ => 'play-from-drop',
                   },
                 ),
@@ -1484,6 +1678,13 @@ class _Field extends StatelessWidget {
                         mate: side.units[circle]?.legionMateId == null
                             ? null
                             : board.cardOf(side.units[circle]!.legionMateId!),
+                        markers: [
+                          for (final id in side.markers[circle] ?? const [])
+                            ?board.cardOf(id),
+                        ],
+                        markersKey: ValueKey(
+                          '${mine ? 'my' : 'their'}-markers-${circle.name}',
+                        ),
                         selected: selected == circle,
                         onTap: () => onTap(circle),
                       ),
@@ -1505,10 +1706,16 @@ class _UnitCell extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.mate,
+    this.markers = const [],
+    this.markersKey,
   });
 
   final UnitSnapshot? unit;
   final GameCard? face;
+
+  /// The markers on this circle, which stay whatever unit is on it.
+  final List<GameCard> markers;
+  final Key? markersKey;
 
   /// The vanguard's D-Legion partner, whose power is added to its own only
   /// when it attacks.
@@ -1520,7 +1727,10 @@ class _UnitCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final power = face == null
         ? null
-        : face!.power + (unit?.powerBonus ?? 0) + (unit?.battleBonus ?? 0);
+        : face!.power +
+              (unit?.powerBonus ?? 0) +
+              (unit?.battleBonus ?? 0) +
+              (unit?.circleBonus ?? 0);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1538,39 +1748,52 @@ class _UnitCell extends StatelessWidget {
             width: selected ? 2 : 1,
           ),
         ),
-        child: unit == null
-            ? const SizedBox.shrink()
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(child: CardImage(url: face?.imageUrl, width: 34)),
-                  Text(
-                    mate == null
-                        ? face?.name ?? 'A unit'
-                        : 'D-Legion · ${mate!.name}',
-                    key: mate == null
-                        ? null
-                        : ValueKey('remote-legion-${mate!.instanceId}'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: mate == null
-                          ? AppColors.text
-                          : const Color(0xFFF5A35B),
-                      fontSize: 10,
-                    ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            unit == null
+                ? const SizedBox.shrink()
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: CardImage(url: face?.imageUrl, width: 34),
+                      ),
+                      Text(
+                        mate == null
+                            ? face?.name ?? 'A unit'
+                            : 'D-Legion · ${mate!.name}',
+                        key: mate == null
+                            ? null
+                            : ValueKey('remote-legion-${mate!.instanceId}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: mate == null
+                              ? AppColors.text
+                              : const Color(0xFFF5A35B),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        '${power ?? ''}'
+                        '${unit!.rested ? ' · rested' : ''}',
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '${power ?? ''}'
-                    '${unit!.rested ? ' · rested' : ''}',
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+            if (markers.isNotEmpty)
+              Positioned(
+                left: 0,
+                top: 0,
+                child: MarkerBadge(key: markersKey, markers: markers),
               ),
+          ],
+        ),
       ),
     );
   }
