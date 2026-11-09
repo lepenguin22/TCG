@@ -77,9 +77,14 @@ class UnitSnapshot {
     required this.driveBonus,
     required this.battleBonus,
     this.legionMateId,
+    this.circleBonus = 0,
   });
 
   final int cardId;
+
+  /// What the circle's markers give this unit right now, worked out by the
+  /// device holding the game: X-ceed NET's AutoMOD power.
+  final int circleBonus;
 
   /// The card this vanguard D-Legioned with, standing beside it.
   final int? legionMateId;
@@ -92,7 +97,8 @@ class UnitSnapshot {
   final int driveBonus;
   final int battleBonus;
 
-  static UnitSnapshot of(FieldUnit unit) => UnitSnapshot(
+  static UnitSnapshot of(FieldUnit unit, {int circleBonus = 0}) => UnitSnapshot(
+    circleBonus: circleBonus,
     cardId: unit.card.instanceId,
     rested: unit.rested,
     locked: unit.locked,
@@ -116,6 +122,7 @@ class UnitSnapshot {
     'critical': criticalBonus,
     'drive': driveBonus,
     'battle': battleBonus,
+    if (circleBonus != 0) 'circle': circleBonus,
   };
 
   static UnitSnapshot fromJson(Map<String, Object?> json) => UnitSnapshot(
@@ -129,6 +136,7 @@ class UnitSnapshot {
     driveBonus: json['drive'] as int? ?? 0,
     battleBonus: json['battle'] as int? ?? 0,
     legionMateId: json['legion'] as int?,
+    circleBonus: json['circle'] as int? ?? 0,
   );
 }
 
@@ -158,6 +166,7 @@ class SideSnapshot {
     required this.orderZoneIds,
     this.restedOrders = const [],
     this.markers = const {},
+    this.autoModIds = const [],
     required this.energy,
     required this.energyCap,
     required this.goesFirst,
@@ -196,6 +205,9 @@ class SideSnapshot {
 
   /// The set orders on the table. Face up and public: a set order is text
   /// both players are playing under, so both players get to read it.
+  /// The AutoMOD gauge, face up for both players.
+  final List<int> autoModIds;
+
   /// Markers on this player's circles, face up for both players.
   final Map<Circle, List<int>> markers;
 
@@ -230,6 +242,7 @@ class SideSnapshot {
     'crest': crestIds,
     'orders': orderZoneIds,
     'restedOrders': restedOrders,
+    if (autoModIds.isNotEmpty) 'autoMod': autoModIds,
     if (markers.isNotEmpty)
       'markers': {
         for (final entry in markers.entries) entry.key.name: entry.value,
@@ -263,6 +276,7 @@ class SideSnapshot {
     crestIds: _ids(json['crest']),
     orderZoneIds: _ids(json['orders']),
     restedOrders: _ids(json['restedOrders']),
+    autoModIds: _ids(json['autoMod']),
     markers: {
       for (final entry in (json['markers'] as Map? ?? {}).entries)
         if (Circle.values.any((c) => c.name == '${entry.key}'))
@@ -511,6 +525,7 @@ PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
     // Set orders sit face up on the table, so both players read them.
     reveal(side.orderZone);
     reveal([for (final on in side.markers.values) ...on]);
+    reveal(side.autoMod);
   }
   reveal([for (final check in state.triggerZone) check.card]);
   if (state.attack != null) reveal(state.attack!.guardians);
@@ -520,8 +535,16 @@ PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
   reveal(viewer.rideDeck);
 
   return PlaytestSnapshot(
-    me: _sideSnapshot(viewer, ownedByViewer: true),
-    them: _sideSnapshot(foe, ownedByViewer: false),
+    me: _sideSnapshot(
+      viewer,
+      ownedByViewer: true,
+      ownTurn: state.active == viewer,
+    ),
+    them: _sideSnapshot(
+      foe,
+      ownedByViewer: false,
+      ownTurn: state.active == foe,
+    ),
     faces: faces,
     turn: state.turn,
     phase: state.phase,
@@ -550,39 +573,46 @@ PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
   );
 }
 
-SideSnapshot _sideSnapshot(PlaytestSide side, {required bool ownedByViewer}) =>
-    SideSnapshot(
-      name: side.name,
-      handIds: [for (final card in side.hand) card.instanceId],
-      deckCount: side.deck.length,
-      rideDeckIds: ownedByViewer
-          ? [for (final card in side.rideDeck) card.instanceId]
-          : const [],
-      rideDeckCount: side.rideDeck.length,
-      units: {
-        for (final entry in side.field.entries)
-          entry.key: UnitSnapshot.of(entry.value),
-      },
-      heartId: side.heart?.card.instanceId,
-      damageIds: [for (final card in side.damage) card.instanceId],
-      spentDamage: side.spentDamage.toList(),
-      dropIds: [for (final card in side.drop) card.instanceId],
-      soulIds: [for (final card in side.soul) card.instanceId],
-      gZoneIds: [for (final card in side.gZone) card.instanceId],
-      faceUpG: side.faceUpG.toList(),
-      removedIds: [for (final card in side.removed) card.instanceId],
-      bindIds: [for (final card in side.bind) card.instanceId],
-      crestIds: [for (final card in side.crestZone) card.instanceId],
-      orderZoneIds: [for (final card in side.orderZone) card.instanceId],
-      restedOrders: side.restedOrders.toList(),
-      markers: {
-        for (final entry in side.markers.entries)
-          entry.key: [for (final card in entry.value) card.instanceId],
-      },
-      energy: side.energy,
-      energyCap: side.energyCap,
-      goesFirst: side.goesFirst,
-    );
+SideSnapshot _sideSnapshot(
+  PlaytestSide side, {
+  required bool ownedByViewer,
+  required bool ownTurn,
+}) => SideSnapshot(
+  name: side.name,
+  handIds: [for (final card in side.hand) card.instanceId],
+  deckCount: side.deck.length,
+  rideDeckIds: ownedByViewer
+      ? [for (final card in side.rideDeck) card.instanceId]
+      : const [],
+  rideDeckCount: side.rideDeck.length,
+  units: {
+    for (final entry in side.field.entries)
+      entry.key: UnitSnapshot.of(
+        entry.value,
+        circleBonus: side.circlePower(entry.key, ownTurn: ownTurn),
+      ),
+  },
+  heartId: side.heart?.card.instanceId,
+  damageIds: [for (final card in side.damage) card.instanceId],
+  spentDamage: side.spentDamage.toList(),
+  dropIds: [for (final card in side.drop) card.instanceId],
+  soulIds: [for (final card in side.soul) card.instanceId],
+  gZoneIds: [for (final card in side.gZone) card.instanceId],
+  faceUpG: side.faceUpG.toList(),
+  removedIds: [for (final card in side.removed) card.instanceId],
+  bindIds: [for (final card in side.bind) card.instanceId],
+  crestIds: [for (final card in side.crestZone) card.instanceId],
+  orderZoneIds: [for (final card in side.orderZone) card.instanceId],
+  restedOrders: side.restedOrders.toList(),
+  autoModIds: [for (final card in side.autoMod) card.instanceId],
+  markers: {
+    for (final entry in side.markers.entries)
+      entry.key: [for (final card in entry.value) card.instanceId],
+  },
+  energy: side.energy,
+  energyCap: side.energyCap,
+  goesFirst: side.goesFirst,
+);
 
 List<int> _ids(Object? value) => [
   for (final each in (value as List? ?? const [])) each as int,

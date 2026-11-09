@@ -357,6 +357,57 @@ void main() {
       );
     });
 
+    testWidgets('a deck with an AutoMOD gauge fills it from the drop', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      GameCard card(int id, String name, Map<String, String> attributes) =>
+          GameCard(
+            id,
+            CardDefinition(
+              id: 'layout-gauge-$id',
+              gameId: 'vanguard',
+              name: name,
+              attributes: attributes,
+              createdAt: DateTime(2026),
+              updatedAt: DateTime(2026),
+            ),
+          );
+      side.hand.add(
+        card(9851, 'Impauldio', {
+          'grade': '3',
+          'cardType': 'normal',
+          'effect':
+              '[ACT](VC):[COST][Counter-Blast 1], choose a card from your '
+              'drop, put it face up as your AutoMOD gauge.',
+        }),
+      );
+      final dropped = card(9852, 'Spent Card', {
+        'grade': '1',
+        'cardType': 'normal',
+      });
+      side.drop.add(dropped);
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      final pile = find.byKey(ValueKey('automod-${side.name}'));
+      await tester.ensureVisible(pile);
+      await tester.tap(pile);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('automod-sheet')), findsOneWidget);
+      final row = find.byKey(const ValueKey('automod-from-drop-9852'));
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.text('To gauge')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(side.autoMod, [dropped]);
+      expect(side.drop, isNot(contains(dropped)));
+      expect(find.text('AutoMOD gauge (1)'), findsOneWidget);
+    });
+
     testWidgets('a vanguard D-Legions from its sheet', (tester) async {
       final game = await pump(tester, opening);
       final side = game.state.active;

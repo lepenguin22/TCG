@@ -1403,6 +1403,17 @@ class _ZoneRail extends StatelessWidget {
           highlight: true,
           onTap: () => _showOrderZoneSheet(context, game, side),
         ),
+      // The AutoMOD gauge, for a deck whose cards fill it -- or once anything
+      // is in it.
+      if (side.autoMod.isNotEmpty ||
+          (game.controls(side) && _usesAutoMod(side)))
+        _Pile(
+          key: ValueKey('automod-${side.name}'),
+          label: 'AutoMOD',
+          count: side.autoMod.length,
+          highlight: side.autoMod.isNotEmpty,
+          onTap: () => _showAutoModSheet(context, game, side),
+        ),
       // The crest. Shown even with none in play, since an empty crest zone
       // is where one gets played from -- a deck that brings no crest of its
       // own is exactly the deck that wants to choose one.
@@ -1570,6 +1581,7 @@ class _DamageBox extends StatelessWidget {
 
 class _Pile extends StatelessWidget {
   const _Pile({
+    super.key,
     required this.label,
     required this.count,
     required this.onTap,
@@ -2928,6 +2940,163 @@ List<String> _effectsOf(PlaytestSide side) => [
   ],
 ];
 
+/// Whether [side]'s cards fill an AutoMOD gauge.
+bool _usesAutoMod(PlaytestSide side) =>
+    _effectsOf(side).any((e) => e.contains('AutoMOD gauge'));
+
+/// The AutoMOD gauge: what is in it, where each card goes when it leaves,
+/// and putting one more there -- from the drop, as most of the deck's
+/// abilities say, or from the top of the deck, as one that looks says.
+void _showAutoModSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        builder: (_, scrollController) => ListenableBuilder(
+          listenable: game,
+          builder: (_, _) {
+            final yours = game.controls(side);
+            // The deck's top is its end; the top seven, top first.
+            final top = side.deck.reversed.take(7).toList();
+            Widget heading(String text) => Padding(
+              padding: const EdgeInsets.only(top: 18, bottom: 4),
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: AppColors.textFaint,
+                  fontSize: 11,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            );
+            Widget row(GameCard card, String key, Widget trailing) => ListTile(
+              key: ValueKey(key),
+              contentPadding: EdgeInsets.zero,
+              leading: CardImage(
+                url: card.card.attributes['imageUrl'],
+                width: 32,
+              ),
+              title: Text(
+                card.name,
+                style: const TextStyle(color: AppColors.text, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Grade ${card.grade}',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+              trailing: trailing,
+            );
+            return ListView(
+              key: const ValueKey('automod-sheet'),
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                SectionHeader(
+                  title: 'AutoMOD gauge (${side.autoMod.length})',
+                  caption:
+                      'Face up and public. A card that counts gauges -- '
+                      '"+5000 for every two of your AutoMOD gauges" -- counts '
+                      'these, and X-ceed NET adds its power on its own.',
+                ),
+                if (side.autoMod.isEmpty)
+                  const Text(
+                    'Empty.',
+                    style: TextStyle(color: AppColors.textMuted),
+                  ),
+                for (final card in side.autoMod) ...[
+                  row(
+                    card,
+                    'automod-card-${card.instanceId}',
+                    const SizedBox.shrink(),
+                  ),
+                  if (yours)
+                    Wrap(
+                      spacing: 4,
+                      children: [
+                        for (final exit in [
+                          (OrderExit.hand, 'To hand'),
+                          (OrderExit.drop, 'To the drop'),
+                          (OrderExit.soul, 'To the soul'),
+                          (OrderExit.removed, 'Out of the game'),
+                        ])
+                          TextButton(
+                            key: ValueKey(
+                              'automod-exit-${card.instanceId}-${exit.$1.name}',
+                            ),
+                            onPressed: () =>
+                                game.fromAutoMod(side, card, to: exit.$1),
+                            child: Text(exit.$2),
+                          ),
+                      ],
+                    ),
+                ],
+                if (yours) ...[
+                  heading('FROM THE DROP ZONE'),
+                  if (side.drop.isEmpty)
+                    const Text(
+                      'The drop zone is empty.',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  for (final card in side.drop.reversed)
+                    row(
+                      card,
+                      'automod-from-drop-${card.instanceId}',
+                      TextButton(
+                        onPressed: () => game.toAutoMod(side, card),
+                        child: const Text('To gauge'),
+                      ),
+                    ),
+                  heading('FROM THE TOP OF THE DECK'),
+                  const Text(
+                    'For an ability that looks at the top cards and puts one '
+                    'face up as a gauge. Shuffle afterwards if it says to.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  ExpansionTile(
+                    key: const ValueKey('automod-deck-top'),
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(
+                      'Look at the top ${top.length}',
+                      style: const TextStyle(color: AppColors.text),
+                    ),
+                    children: [
+                      for (final card in top)
+                        row(
+                          card,
+                          'automod-from-deck-${card.instanceId}',
+                          TextButton(
+                            onPressed: () => game.toAutoMod(side, card),
+                            child: const Text('To gauge'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    ),
+  );
+}
+
 const _crestTypes = {'ride-deck-crest', 'crest'};
 
 /// The crests the card database knows, or none where it is not
@@ -3312,7 +3481,14 @@ class _CircleSlot extends StatelessWidget {
                         ),
                       ),
                     )
-                  : _UnitTile(unit: unit, circle: circle),
+                  : _UnitTile(
+                      unit: unit,
+                      circle: circle,
+                      circlePower: side.circlePower(
+                        circle,
+                        ownTurn: game.state.active == side,
+                      ),
+                    ),
               // The circle's markers, which stay whatever unit is on it.
               if (side.markersOn(circle).isNotEmpty)
                 Positioned(
@@ -3471,10 +3647,17 @@ void _showMarkerSheet(
 const _legionColour = Color(0xFFF5A35B);
 
 class _UnitTile extends StatelessWidget {
-  const _UnitTile({required this.unit, required this.circle});
+  const _UnitTile({
+    required this.unit,
+    required this.circle,
+    this.circlePower = 0,
+  });
 
   final FieldUnit unit;
   final Circle circle;
+
+  /// What the circle's markers give the unit: X-ceed NET's AutoMOD power.
+  final int circlePower;
 
   @override
   Widget build(BuildContext context) {
@@ -3584,11 +3767,11 @@ class _UnitTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  '${unit.power}',
+                  '${unit.power + circlePower}',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: unit.powerBonus > 0
+                    color: unit.powerBonus > 0 || circlePower > 0
                         ? AppColors.success
                         : Colors.white,
                   ),

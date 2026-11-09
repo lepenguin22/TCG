@@ -1092,6 +1092,58 @@ class PlaytestEngine {
     return card;
   }
 
+  /// Puts [card] face up as [side]'s AutoMOD gauge, from wherever it is:
+  /// the drop, most often, or the deck when an ability looks at the top of
+  /// it. False when the card is in none of the places a gauge is taken from.
+  bool toAutoMod(PlaytestSide side, GameCard card) {
+    final from = [
+      (side.drop, 'the drop zone'),
+      (side.deck, 'the deck'),
+      (side.hand, 'hand'),
+      (side.soul, 'the soul'),
+      (side.damage, 'the damage zone'),
+      (side.bind, 'the bind zone'),
+    ].where((zone) => zone.$1.contains(card)).firstOrNull;
+    if (from == null) return false;
+    from.$1.remove(card);
+    side.autoMod.add(card);
+    state.note(
+      '${side.name} puts ${card.name} from ${from.$2} face up as an AutoMOD '
+      'gauge (${side.autoMod.length}).',
+      by: side,
+    );
+    return true;
+  }
+
+  /// Takes a card out of [side]'s AutoMOD gauge, to [to].
+  void fromAutoMod(
+    PlaytestSide side,
+    GameCard card, {
+    OrderExit to = OrderExit.hand,
+  }) {
+    if (!side.autoMod.remove(card)) return;
+    switch (to) {
+      case OrderExit.drop:
+        side.drop.add(card);
+      case OrderExit.soul:
+        side.soul.add(card);
+      case OrderExit.hand:
+        side.hand.add(card);
+      case OrderExit.removed:
+        side.removed.add(card);
+    }
+    state.note(
+      '${side.name} takes ${card.name} out of the AutoMOD gauge '
+      '${switch (to) {
+        OrderExit.drop => 'to the drop zone',
+        OrderExit.soul => 'into the soul',
+        OrderExit.hand => 'into hand',
+        OrderExit.removed => 'and out of the game',
+      }}.',
+      by: side,
+    );
+  }
+
   /// Takes a marker off a circle. It stops existing, as a token does.
   void removeMarker(PlaytestSide side, Circle circle, GameCard marker) {
     final on = side.markers[circle];
@@ -1340,6 +1392,8 @@ class PlaytestEngine {
       target: target,
       targetCircle: to,
       booster: booster,
+      attackerSide: side,
+      targetSide: foe,
     );
     state.attack = pending;
     // A new battle, so the last one's checks come off the trigger zone.

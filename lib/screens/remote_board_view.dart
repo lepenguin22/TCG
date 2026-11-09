@@ -319,6 +319,7 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
                   onRemoveOrder: _removeOrder,
                   onSoulCard: _soulCard,
                   onBoundCard: _boundCard,
+                  onAutoModCard: _autoModCard,
                 ),
               ],
             ),
@@ -463,6 +464,20 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
       );
     }
 
+    // The AutoMOD gauge, for a deck whose cards fill one: on either
+    // player's turn, since a gauge is added when damage is taken too.
+    if (snapshot.winnerName == null &&
+        widget.deckEffects.any((e) => e.contains('AutoMOD gauge'))) {
+      children.insert(
+        0,
+        TextButton(
+          key: const ValueKey('remote-automod'),
+          onPressed: _autoModSheet,
+          child: const Text('Gauge'),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: const BoxDecoration(
@@ -558,6 +573,59 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
           label: exit.$2,
           onTap: () => ask(
             PlaytestIntent(IntentKind.unbindCard, card: id, exit: exit.$1),
+          ),
+        ),
+    ]);
+  }
+
+  /// Putting a card face up as an AutoMOD gauge: one out of the drop zone,
+  /// or the top card of the deck.
+  Future<void> _autoModSheet() async {
+    await _sheet([
+      Text(
+        'AutoMOD gauge (${snapshot.me.autoModIds.length})',
+        style: const TextStyle(
+          color: AppColors.text,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      _Action(
+        key: const ValueKey('remote-automod-deck'),
+        icon: Icons.layers_outlined,
+        label: 'The top card of the deck',
+        detail: 'Put face up as a gauge.',
+        onTap: () => ask(const PlaytestIntent(IntentKind.toAutoMod)),
+      ),
+      for (final id in snapshot.me.dropIds.reversed)
+        _Action(
+          key: ValueKey('remote-automod-drop-$id'),
+          icon: Icons.delete_outline,
+          label: board.cardOf(id)?.name ?? 'A card',
+          detail: 'From the drop zone.',
+          onTap: () => ask(PlaytestIntent(IntentKind.toAutoMod, card: id)),
+        ),
+    ]);
+  }
+
+  /// A card in your own AutoMOD gauge, and where it goes.
+  Future<void> _autoModCard(int id) async {
+    final face = board.cardOf(id);
+    if (face == null) return;
+    await _sheet([
+      _CardHeading(face: face),
+      for (final exit in const [
+        (OrderExit.hand, 'To hand', Icons.back_hand_outlined),
+        (OrderExit.drop, 'To the drop zone', Icons.delete_outline),
+        (OrderExit.soul, 'Into the soul', Icons.auto_awesome_outlined),
+        (OrderExit.removed, 'Out of the game', Icons.block_outlined),
+      ])
+        _Action(
+          key: ValueKey('remote-automod-exit-${exit.$1.name}'),
+          icon: exit.$3,
+          label: exit.$2,
+          onTap: () => ask(
+            PlaytestIntent(IntentKind.fromAutoMod, card: id, exit: exit.$1),
           ),
         ),
     ]);
@@ -1207,6 +1275,7 @@ class _SideStrip extends StatelessWidget {
     this.onRemoveOrder,
     this.onSoulCard,
     this.onBoundCard,
+    this.onAutoModCard,
   });
 
   final SideSnapshot side;
@@ -1222,6 +1291,9 @@ class _SideStrip extends StatelessWidget {
   /// What can be done with a card in this player's own soul, or bind zone.
   final void Function(int id)? onSoulCard;
   final void Function(int id)? onBoundCard;
+
+  /// Taking a card out of this player's own AutoMOD gauge.
+  final void Function(int id)? onAutoModCard;
 
   @override
   Widget build(BuildContext context) {
@@ -1272,6 +1344,7 @@ class _SideStrip extends StatelessWidget {
                 // Set orders are face up for both players, since both are
                 // playing under what they say.
                 if (side.orderZoneIds.isNotEmpty) ('Orders', side.orderZoneIds),
+                if (side.autoModIds.isNotEmpty) ('AutoMOD', side.autoModIds),
               ])
                 _PileChip(
                   label: pile.$1,
@@ -1288,10 +1361,11 @@ class _SideStrip extends StatelessWidget {
                           'Orders' => onRemoveOrder,
                           'Soul' => onSoulCard,
                           'Bind' => onBoundCard,
+                          'AutoMOD' => onAutoModCard,
                           _ => null,
                         },
                   playLabel: switch (pile.$1) {
-                    'Orders' || 'Bind' => 'Move',
+                    'Orders' || 'Bind' || 'AutoMOD' => 'Move',
                     'Soul' => 'Bind',
                     _ => 'Play',
                   },
@@ -1299,6 +1373,7 @@ class _SideStrip extends StatelessWidget {
                     'Orders' => 'move-order',
                     'Soul' => 'soul-card',
                     'Bind' => 'move-bound',
+                    'AutoMOD' => 'move-automod',
                     _ => 'play-from-drop',
                   },
                 ),
@@ -1652,7 +1727,10 @@ class _UnitCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final power = face == null
         ? null
-        : face!.power + (unit?.powerBonus ?? 0) + (unit?.battleBonus ?? 0);
+        : face!.power +
+              (unit?.powerBonus ?? 0) +
+              (unit?.battleBonus ?? 0) +
+              (unit?.circleBonus ?? 0);
     return GestureDetector(
       onTap: onTap,
       child: Container(

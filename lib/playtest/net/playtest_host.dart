@@ -222,6 +222,29 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.toAutoMod:
+        if (intent.card == null) {
+          if (side.deck.isEmpty) return _refuse(side, 'the deck is empty');
+          engine.toAutoMod(side, side.deck.last);
+        } else {
+          // Only out of the asker's own public zones and hand: never the
+          // deck by id, whose order is nobody's to know.
+          final card = [
+            ...side.drop,
+            ...side.soul,
+            ...side.bind,
+            ...side.damage,
+            ...side.hand,
+          ].where((c) => c.instanceId == intent.card).firstOrNull;
+          if (card == null) return _refuse(side, 'no such card to gauge');
+          engine.toAutoMod(side, card);
+        }
+      case IntentKind.fromAutoMod:
+        final card = side.autoMod
+            .where((c) => c.instanceId == intent.card)
+            .firstOrNull;
+        if (card == null) return _refuse(side, 'no such AutoMOD gauge');
+        engine.fromAutoMod(side, card, to: intent.exit ?? OrderExit.hand);
       case IntentKind.placeMarker:
         final circle = intent.circle;
         if (circle == null || !circle.isRearGuard) {

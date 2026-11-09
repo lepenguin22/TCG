@@ -64,6 +64,15 @@ enum IntentKind {
   /// Takes marker [PlaytestIntent.card] off the asker's circle
   /// [PlaytestIntent.circle].
   removeMarker,
+
+  /// Puts [PlaytestIntent.card] -- out of the asker's drop, soul, bind zone,
+  /// damage or hand -- face up as their AutoMOD gauge; with no card, the
+  /// top card of their deck.
+  toAutoMod,
+
+  /// Takes [PlaytestIntent.card] out of the asker's AutoMOD gauge, to
+  /// [PlaytestIntent.exit].
+  fromAutoMod,
 }
 
 /// One request, named and with its arguments.

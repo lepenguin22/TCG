@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tcg_decks/games/card_catalog.dart';
+import 'package:tcg_decks/models/card_definition.dart';
 import 'package:tcg_decks/playtest/net/playtest_intent.dart';
 import 'package:tcg_decks/playtest/order_tokens.dart';
 import 'package:tcg_decks/playtest/playtest_state.dart';
@@ -240,5 +241,150 @@ void main() {
       expect(active.markersOn(Circle.backCenter), isEmpty);
       expect(mine.snapshot!.me.markers, isEmpty);
     });
+  });
+
+  group('the AutoMOD gauge', () {
+    GameCard named(int id, String name, Map<String, String> attributes) =>
+        GameCard(
+          id,
+          CardDefinition(
+            id: 'gauge-$id',
+            gameId: 'vanguard',
+            name: name,
+            attributes: attributes,
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        );
+
+    test(
+      'cards go in from the drop or deck and out where they are sent',
+      () async {
+        final (store, deck) = await buildDeck();
+        final engine = engineFor(store, deck);
+        engine.beginPlay();
+        final you = engine.state.active;
+        final fromDrop = you.hand.removeLast();
+        you.drop.add(fromDrop);
+        final fromDeck = you.deck.last;
+
+        expect(engine.toAutoMod(you, fromDrop), isTrue);
+        expect(engine.toAutoMod(you, fromDeck), isTrue);
+        expect(you.autoMod, [fromDrop, fromDeck]);
+        expect(you.drop, isNot(contains(fromDrop)));
+        expect(you.deck, isNot(contains(fromDeck)));
+
+        engine.fromAutoMod(you, fromDrop, to: OrderExit.hand);
+        expect(you.hand, contains(fromDrop));
+        expect(you.autoMod, [fromDeck]);
+      },
+    );
+
+    test('X-ceed NET gives its power on its own, by the gauge', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.active;
+      final foe = engine.state.inactive;
+      final net = catalog.firstWhere((c) => c.name == 'X-ceed NET');
+      engine.placeMarker(
+        you,
+        Circle.frontLeft,
+        markerFromCatalog(net, 'vanguard'),
+      );
+      final unit = FieldUnit(
+        named(9901, 'X-CeeDaNCe, Mery Cracia', {
+          'grade': '2',
+          'cardType': 'normal',
+          'power': '10000',
+        }),
+      );
+      you.field[Circle.frontLeft] = unit;
+      final impauldio = FieldUnit(
+        named(9902, 'Destined One of Exceedance, Impauldio', {
+          'grade': '3',
+          'cardType': 'normal',
+          'power': '13000',
+        }),
+      );
+      you.field[Circle.vanguard] = impauldio;
+      you.autoMod.addAll([
+        for (var i = 0; i < 5; i += 1)
+          named(9910 + i, 'Gauge $i', {'grade': '1', 'cardType': 'normal'}),
+      ]);
+
+      // Five gauges is two lots of two: +10000, on your turn only.
+      expect(you.circlePower(Circle.frontLeft, ownTurn: true), 10000);
+      expect(you.circlePower(Circle.frontLeft, ownTurn: false), 0);
+
+      // It counts when the unit attacks.
+      foe.field[Circle.vanguard] = FieldUnit(
+        named(9903, 'Theirs', {
+          'grade': '3',
+          'cardType': 'normal',
+          'power': '13000',
+        }),
+      );
+      final attack = PendingAttack(
+        attacker: unit,
+        attackerCircle: Circle.frontLeft,
+        target: foe.field[Circle.vanguard]!,
+        targetCircle: Circle.vanguard,
+        attackerSide: you,
+        targetSide: foe,
+      );
+      expect(attack.attackPower, 20000);
+
+      // Without an Impauldio vanguard it gives nothing.
+      you.field[Circle.vanguard] = FieldUnit(
+        named(9904, 'Someone Else', {'grade': '3', 'cardType': 'normal'}),
+      );
+      expect(you.circlePower(Circle.frontLeft, ownTurn: true), 0);
+    });
+
+    test(
+      'across two devices the gauge and its power are on both boards',
+      () async {
+        final game = await seatedGame();
+        final active = game.host.state.active;
+        final mine = active == game.sideOne ? game.one : game.two;
+        final theirs = active == game.sideOne ? game.two : game.one;
+        final dropped = active.hand.removeLast();
+        active.drop.add(dropped);
+
+        mine.ask(
+          PlaytestIntent(IntentKind.toAutoMod, card: dropped.instanceId),
+        );
+        mine.ask(const PlaytestIntent(IntentKind.toAutoMod));
+        await pumpEventQueue();
+        expect(active.autoMod, hasLength(2));
+        expect(active.autoMod.first, dropped);
+        expect(theirs.snapshot!.them.autoModIds, [
+          for (final c in active.autoMod) c.instanceId,
+        ]);
+        expect(theirs.snapshot!.knows(dropped.instanceId), isTrue);
+
+        // A card in the deck cannot be named: its order is nobody's to know.
+        mine.ask(
+          PlaytestIntent(
+            IntentKind.toAutoMod,
+            card: active.deck.first.instanceId,
+          ),
+        );
+        await pumpEventQueue();
+        expect(active.autoMod, hasLength(2));
+
+        mine.ask(
+          PlaytestIntent(
+            IntentKind.fromAutoMod,
+            card: dropped.instanceId,
+            exit: OrderExit.hand,
+          ),
+        );
+        await pumpEventQueue();
+        expect(active.hand, contains(dropped));
+        expect(mine.snapshot!.me.autoModIds, hasLength(1));
+      },
+    );
   });
 }
