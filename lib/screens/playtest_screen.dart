@@ -3527,13 +3527,15 @@ class _CircleSlot extends StatelessWidget {
     final unit = side.field[circle];
     if (unit != null) {
       _showUnitSheet(context, game, side, circle, unit);
-    } else if (game.controls(side) &&
-        circle.isRearGuard &&
-        (side.markersOn(circle).isNotEmpty ||
-            markerNamesIn(_effectsOf(side)).isNotEmpty)) {
-      // An empty circle can still be given a marker: the ability chooses a
-      // circle, not a unit.
-      _showMarkerSheet(context, game, side, circle);
+    } else if (game.controls(side) && circle.isRearGuard) {
+      // An empty circle is where a token is called to, and can still be
+      // given a marker: the ability chooses a circle, not a unit.
+      if (unitTokenNamesIn(_effectsOf(side)).isNotEmpty) {
+        _showCallTokenSheet(context, game, side, circle);
+      } else if (side.markersOn(circle).isNotEmpty ||
+          markerNamesIn(_effectsOf(side)).isNotEmpty) {
+        _showMarkerSheet(context, game, side, circle);
+      }
     }
   }
 }
@@ -3637,6 +3639,88 @@ void _showMarkerSheet(
               ),
             ],
           ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Calling a token unit -- a Plant -- to one of [side]'s rear-guard circles,
+/// or to every one of them that is empty, as "call up to four Plant tokens
+/// to (RC)" says.
+void _showCallTokenSheet(
+  BuildContext context,
+  PlaytestController game,
+  PlaytestSide side,
+  Circle circle,
+) {
+  final definition = gameById(game.gameId);
+  final asset = definition.catalogAsset;
+  final catalog = context.read<CardCatalog?>();
+  final options = asset == null || catalog == null
+      ? Future.value(const <CatalogCard>[])
+      : catalog
+            .load(asset)
+            .then((cards) => cards.where(isUnitTokenCard).toList());
+  final makesMarkers =
+      side.markersOn(circle).isNotEmpty ||
+      markerNamesIn(_effectsOf(side)).isNotEmpty;
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (_, scrollController) => ListView(
+          key: const ValueKey('token-sheet'),
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            SectionHeader(
+              title: circle.label,
+              caption: side.field[circle] == null
+                  ? 'Empty.'
+                  : 'Calling a token here puts '
+                        '${side.field[circle]!.card.name} into the drop zone.',
+            ),
+            OrderTokenPicker.units(
+              options: options,
+              effects: _effectsOf(side),
+              gameId: definition.id,
+              onPick: (token) {
+                game.callToken(side, circle, token);
+                Navigator.of(sheetContext).pop();
+              },
+              onPickAll: (token) {
+                for (final each in Circle.values) {
+                  if (each.isRearGuard && side.field[each] == null) {
+                    game.callToken(side, each, token);
+                  }
+                }
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+            if (makesMarkers)
+              ListTile(
+                key: const ValueKey('token-sheet-markers'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.push_pin_outlined,
+                  color: AppColors.accent,
+                ),
+                title: const Text(
+                  'Markers on this circle',
+                  style: TextStyle(color: AppColors.text),
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showMarkerSheet(context, game, side, circle);
+                },
+              ),
+          ],
         ),
       ),
     ),
@@ -5071,6 +5155,34 @@ void _showUnitSheet(
               // Exchanging two rear-guards anywhere on the board, which is
               // what the cards that move units about actually say -- the
               // column move above is the one the rules give for free.
+              // A token can be called over a unit, which then goes to the
+              // drop zone -- only for a deck that calls tokens.
+              if (game.controls(side) &&
+                  circle.isRearGuard &&
+                  unitTokenNamesIn(_effectsOf(side)).isNotEmpty)
+                ListTile(
+                  key: ValueKey('token-over-${circle.name}'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.local_florist_outlined,
+                    color: AppColors.accent,
+                  ),
+                  title: const Text(
+                    'Call a token here',
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Such as a Plant. This unit goes to the drop zone.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _showCallTokenSheet(context, game, side, circle);
+                  },
+                ),
               // Only for a deck that makes a marker, or a circle that has
               // one: most decks never put a marker anywhere.
               if (game.controls(side) &&
@@ -5539,7 +5651,8 @@ class OrderTokenPicker extends StatelessWidget {
     required this.gameId,
     required this.onPick,
     this.keyPrefix = 'order-token',
-  }) : title = 'PUT A TOKEN HERE',
+  }) : onPickAll = null,
+       title = 'PUT A TOKEN HERE',
        caption =
            'A token an ability makes, such as SYSTEM CODE: X-ceed. It is '
            'in no deck, and taking it out of the order zone removes it '
@@ -5547,9 +5660,10 @@ class OrderTokenPicker extends StatelessWidget {
        namesIn = orderTokenNamesIn,
        choicesFor = orderTokenChoices,
        fromCatalog = tokenFromCatalog,
-       byName = namedToken,
+       byName = namedTokenFor,
        hint = 'Forge',
-       otherLabel = 'Another token, by name';
+       otherLabel = 'Another token, by name',
+       actionLabel = 'Put here';
 
   /// The same, for a marker on a circle.
   const OrderTokenPicker.markers({
@@ -5559,7 +5673,8 @@ class OrderTokenPicker extends StatelessWidget {
     required this.gameId,
     required this.onPick,
     this.keyPrefix = 'marker',
-  }) : title = 'PUT A MARKER HERE',
+  }) : onPickAll = null,
+       title = 'PUT A MARKER HERE',
        caption =
            'A marker an ability puts on a circle, such as X-ceed NET. It '
            'is the circle\u2019s, not the unit\u2019s: it stays when the '
@@ -5567,14 +5682,41 @@ class OrderTokenPicker extends StatelessWidget {
        namesIn = markerNamesIn,
        choicesFor = markerChoices,
        fromCatalog = markerFromCatalog,
-       byName = namedMarker,
+       byName = namedMarkerFor,
        hint = 'Dragontree',
-       otherLabel = 'Another marker, by name';
+       otherLabel = 'Another marker, by name',
+       actionLabel = 'Put here';
+
+  /// The same, for a token unit called to a circle.
+  const OrderTokenPicker.units({
+    super.key,
+    required this.options,
+    required this.effects,
+    required this.gameId,
+    required this.onPick,
+    this.keyPrefix = 'unit-token',
+    this.onPickAll,
+  }) : title = 'CALL A TOKEN HERE',
+       caption =
+           'A token unit an ability calls, such as a Plant. It is in no '
+           'deck: when it leaves the field it stops existing. The ones your '
+           'deck calls come first.',
+       namesIn = unitTokenNamesIn,
+       choicesFor = unitTokenChoices,
+       fromCatalog = unitTokenFromCatalog,
+       byName = namedUnitToken,
+       hint = 'Plant',
+       otherLabel = 'Another token, by name',
+       actionLabel = 'Call';
 
   final Future<List<CatalogCard>> options;
   final List<String> effects;
   final String gameId;
   final void Function(CardDefinition made) onPick;
+
+  /// The same choice made on every empty circle at once, where offered:
+  /// "call up to four Plant tokens".
+  final void Function(CardDefinition made)? onPickAll;
   final String keyPrefix;
   final String title;
   final String caption;
@@ -5585,9 +5727,15 @@ class OrderTokenPicker extends StatelessWidget {
   )
   choicesFor;
   final CardDefinition Function(CatalogCard card, String gameId) fromCatalog;
-  final CardDefinition Function(String name, String gameId) byName;
+  final CardDefinition Function(
+    String name,
+    String gameId,
+    Iterable<String> effects,
+  )
+  byName;
   final String hint;
   final String otherLabel;
+  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -5635,7 +5783,10 @@ class OrderTokenPicker extends StatelessWidget {
                 key: '$keyPrefix-name-$name',
                 title: name,
                 subtitle: 'Named by your deck',
-                onTap: () => onPick(byName(name, gameId)),
+                onTap: () => onPick(byName(name, gameId, effects)),
+                onTapAll: onPickAll == null
+                    ? null
+                    : () => onPickAll!(byName(name, gameId, effects)),
               ),
             for (final token in choices)
               _row(
@@ -5645,17 +5796,23 @@ class OrderTokenPicker extends StatelessWidget {
                 subtitle: [
                   if (suggested.contains(token.name.toLowerCase()))
                     'Named by your deck',
+                  if ((token.attributes['power'] ?? '').isNotEmpty)
+                    'Grade ${token.attributes['grade'] ?? '0'} · '
+                        '${token.attributes['power']} power',
                   ?token.attributes['cardNo'],
                 ].join(' · '),
                 image: token.attributes['imageUrl'],
                 onTap: () => onPick(fromCatalog(token, gameId)),
+                onTapAll: onPickAll == null
+                    ? null
+                    : () => onPickAll!(fromCatalog(token, gameId)),
               ),
             TextButton.icon(
               key: ValueKey('$keyPrefix-other'),
               onPressed: () async {
                 final name = await _askName(context, hint);
                 if (name != null && name.trim().isNotEmpty) {
-                  onPick(byName(name, gameId));
+                  onPick(byName(name, gameId, effects));
                 }
               },
               icon: const Icon(Icons.edit_outlined, size: 18),
@@ -5674,6 +5831,7 @@ class OrderTokenPicker extends StatelessWidget {
     required String subtitle,
     String? image,
     required VoidCallback onTap,
+    VoidCallback? onTapAll,
   }) => ListTile(
     key: ValueKey(key),
     contentPadding: EdgeInsets.zero,
@@ -5688,7 +5846,19 @@ class OrderTokenPicker extends StatelessWidget {
             subtitle,
             style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
-    trailing: TextButton(onPressed: onTap, child: const Text('Put here')),
+    trailing: onTapAll == null
+        ? TextButton(onPressed: onTap, child: Text(actionLabel))
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(onPressed: onTap, child: Text(actionLabel)),
+              TextButton(
+                key: ValueKey('$key-all'),
+                onPressed: onTapAll,
+                child: const Text('Fill empty'),
+              ),
+            ],
+          ),
   );
 
   static Future<String?> _askName(BuildContext context, String hint) {
@@ -5712,7 +5882,7 @@ class OrderTokenPicker extends StatelessWidget {
           FilledButton(
             key: const ValueKey('order-token-name-ok'),
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('Put here'),
+            child: const Text('OK'),
           ),
         ],
       ),

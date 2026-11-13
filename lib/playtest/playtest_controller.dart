@@ -155,6 +155,7 @@ class PlaytestController extends ChangeNotifier {
   bool boostSelected = false;
 
   void _sync() {
+    engine.clearLeftTokens();
     if (state.isOver) stage = PlaytestStage.over;
     notifyListeners();
   }
@@ -572,6 +573,11 @@ class PlaytestController extends ChangeNotifier {
 
   void fromAutoMod(PlaytestSide side, GameCard card, {OrderExit? to}) {
     engine.fromAutoMod(side, card, to: to ?? OrderExit.hand);
+    _sync();
+  }
+
+  void callToken(PlaytestSide side, Circle circle, CardDefinition token) {
+    engine.callToken(side, circle, token);
     _sync();
   }
 

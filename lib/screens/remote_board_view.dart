@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../games/card_catalog.dart';
 import '../games/games.dart';
+import '../models/card_definition.dart';
 
 import '../playtest/net/playtest_intent.dart';
 import '../playtest/net/playtest_wire.dart';
@@ -334,11 +335,13 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
   void _tapMyCircle(Circle circle) {
     final unit = snapshot.me.units[circle];
     if (unit == null) {
-      // An empty circle can still be given a marker: the ability chooses a
-      // circle, not a unit.
-      if (circle.isRearGuard &&
-          ((snapshot.me.markers[circle] ?? const []).isNotEmpty ||
-              markerNamesIn(widget.deckEffects).isNotEmpty)) {
+      // An empty circle is where a token is called to, and can still be
+      // given a marker: the ability chooses a circle, not a unit.
+      if (!circle.isRearGuard) return;
+      if (unitTokenNamesIn(widget.deckEffects).isNotEmpty) {
+        _callTokenSheet(circle);
+      } else if ((snapshot.me.markers[circle] ?? const []).isNotEmpty ||
+          markerNamesIn(widget.deckEffects).isNotEmpty) {
         _markerSheet(circle);
       }
       return;
@@ -628,6 +631,49 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
             PlaytestIntent(IntentKind.fromAutoMod, card: id, exit: exit.$1),
           ),
         ),
+    ]);
+  }
+
+  /// Calling a token unit -- a Plant -- to one of your rear-guard circles, or
+  /// to every empty one. The host makes it, from its own card database.
+  Future<void> _callTokenSheet(Circle circle) async {
+    final asset = gameById(board.gameId).catalogAsset;
+    final catalog = context.read<CardCatalog?>();
+    final options = asset == null || catalog == null
+        ? Future.value(const <CatalogCard>[])
+        : catalog
+              .load(asset)
+              .then((cards) => cards.where(isUnitTokenCard).toList());
+    void call(CardDefinition token, {required bool all}) {
+      Navigator.of(context).pop();
+      ask(
+        PlaytestIntent(
+          IntentKind.callToken,
+          circle: circle,
+          name: token.name,
+          cardNo: token.attributes['cardNo'],
+          amount: all ? 1 : 0,
+        ),
+      );
+    }
+
+    await _sheet([
+      Text(
+        circle.label,
+        style: const TextStyle(
+          color: AppColors.text,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      OrderTokenPicker.units(
+        options: options,
+        effects: widget.deckEffects,
+        gameId: board.gameId,
+        keyPrefix: 'remote-unit-token',
+        onPick: (token) => call(token, all: false),
+        onPickAll: (token) => call(token, all: true),
+      ),
     ]);
   }
 
@@ -1094,6 +1140,14 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
               'Return four cards from the drop to the deck and search for '
               'it.',
           onTap: () => _dLegionSheet(mateName),
+        ),
+      if (circle.isRearGuard && unitTokenNamesIn(widget.deckEffects).isNotEmpty)
+        _Action(
+          key: const ValueKey('remote-token-over'),
+          icon: Icons.local_florist_outlined,
+          label: 'Call a token here',
+          detail: 'Such as a Plant. This unit goes to the drop zone.',
+          onTap: () => _callTokenSheet(circle),
         ),
       if (circle.isRearGuard &&
           ((snapshot.me.markers[circle] ?? const []).isNotEmpty ||

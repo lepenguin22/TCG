@@ -387,4 +387,124 @@ void main() {
       },
     );
   });
+
+  group('token units', () {
+    const lianornText = [
+      '[AUTO]:When this unit is placed by riding from "For One\'s Precious '
+          'Thing, Rorowa", call up to two Plant tokens to (RC), and they get '
+          '"[AUTO]:When this unit is retired from (RC), draw a card."',
+      '・ Call a Plant token to (RC).',
+    ];
+
+    test('a card names the token it calls, and the database has a Plant', () {
+      expect(unitTokenNamesIn(lianornText), ['Plant']);
+      final plant = unitTokenChoices(catalog, lianornText).first;
+      expect(plant.name, 'Plant');
+      expect(plant.attributes['grade'], '0');
+      expect(plant.attributes['power'], '5000', reason: 'the plain one');
+    });
+
+    test('a token called by name takes what the reminder says', () {
+      final made = namedUnitToken('Plant', 'vanguard', [
+        'call up to four Plant tokens to (RC). (Plant tokens are grade '
+            '0/[Power] 5000/[Critical] 1 and have boost)',
+      ]);
+      expect(made.attributes['grade'], '0');
+      expect(made.attributes['power'], '5000');
+      final army = namedUnitToken('Shadow Army', 'vanguard', [
+        'call a Shadow Army token to your (RC). (Shadow Army has [Power] '
+            '15000 and Boost)',
+      ]);
+      expect(army.attributes['power'], '15000');
+    });
+
+    test(
+      'a Plant is called, boosts, and stops existing when it leaves',
+      () async {
+        final (store, deck) = await buildDeck();
+        final engine = engineFor(store, deck);
+        engine.beginPlay();
+        final you = engine.state.active;
+        final plant = unitTokenFromCatalog(
+          unitTokenChoices(catalog, lianornText).first,
+          'vanguard',
+        );
+        you.field.remove(Circle.backLeft);
+
+        final token = engine.callToken(you, Circle.backLeft, plant)!;
+        final unit = you.field[Circle.backLeft]!;
+        expect(unit.card, token);
+        expect(token.power, 5000);
+        expect(token.grade, 0);
+        expect(unit.canBoost, isTrue);
+        expect(engine.callToken(you, Circle.vanguard, plant), isNull);
+
+        engine.retire(you, Circle.backLeft);
+        engine.clearLeftTokens();
+        expect(you.drop, isNot(contains(token)));
+        expect(you.field[Circle.backLeft], isNull);
+      },
+    );
+
+    test('calling over a unit sends the unit to the drop', () async {
+      final (store, deck) = await buildDeck();
+      final engine = engineFor(store, deck);
+      engine.beginPlay();
+      final you = engine.state.active;
+      final unit = you.hand.firstWhere((c) => c.isUnit);
+      you.hand.remove(unit);
+      you.field[Circle.frontLeft] = FieldUnit(unit);
+      engine.callToken(
+        you,
+        Circle.frontLeft,
+        namedUnitToken('Plant', 'vanguard', const []),
+      );
+      expect(you.drop, contains(unit));
+      expect(you.field[Circle.frontLeft]!.card.name, 'Plant');
+    });
+
+    test(
+      'across two devices a Plant is called to every empty circle',
+      () async {
+        final game = await seatedGame();
+        final active = game.host.state.active;
+        final mine = active == game.sideOne ? game.one : game.two;
+        final theirs = active == game.sideOne ? game.two : game.one;
+        final plant = unitTokenChoices(catalog, lianornText).first;
+        game.host.madeCards = {
+          plant.attributes['cardNo']!: unitTokenFromCatalog(plant, 'vanguard'),
+        };
+        for (final circle in Circle.values) {
+          if (circle.isRearGuard) active.field.remove(circle);
+        }
+
+        mine.ask(
+          PlaytestIntent(
+            IntentKind.callToken,
+            circle: Circle.backLeft,
+            name: 'Plant',
+            cardNo: plant.attributes['cardNo'],
+            amount: 1,
+          ),
+        );
+        await pumpEventQueue();
+        final plants = [
+          for (final circle in Circle.values)
+            if (circle.isRearGuard) active.field[circle]?.card.name,
+        ];
+        expect(plants, List.filled(5, 'Plant'));
+        final id = active.field[Circle.backLeft]!.card.instanceId;
+        expect(theirs.snapshot!.knows(id), isTrue);
+        expect(theirs.snapshot!.faces[id]!.toGameCard('vanguard').power, 5000);
+
+        // Retired, it is gone rather than in the drop.
+        mine.ask(
+          const PlaytestIntent(IntentKind.retire, circle: Circle.backLeft),
+        );
+        await pumpEventQueue();
+        expect(active.drop.map((c) => c.instanceId), isNot(contains(id)));
+        expect(mine.snapshot!.me.dropIds, isNot(contains(id)));
+      },
+    );
+  });
 }

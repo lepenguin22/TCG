@@ -218,6 +218,29 @@ bool _isStrideCrest(Map<String, dynamic> raw) =>
 bool _isMarker(Map<String, dynamic> raw) => (raw['effect'] as String? ?? '')
     .contains('marker, and cannot be put in a deck');
 
+/// The kind of token an untyped row is, if it is one.
+///
+/// The card list files tokens under "Others" or no type at all, so they were
+/// all dropped -- a Plant token, which a deck calls four of at a time, among
+/// them. A token that works from the order zone is a set order there; one
+/// with power, or with abilities on a rear-guard circle, is a unit called to
+/// one. A Plant token says nothing at all: its power is what gives it away.
+String? _tokenType(Map<String, dynamic> raw) {
+  final type = raw['type'] as String? ?? '';
+  if (type != 'Others' && type != '-' && type.isNotEmpty) return null;
+  final effect = raw['effect'] as String? ?? '';
+  if (effect.contains('Order Zone') && effect.contains('token')) {
+    return 'order-set';
+  }
+  // Only what says it is a token, or says nothing at all and has power --
+  // the Plant printings that leave their reminder off. Promos the source
+  // files under "Others" are real cards with real text, and are not tokens.
+  final power = int.tryParse('${raw['power'] ?? ''}'.trim()) ?? 0;
+  if (effect.toLowerCase().contains('token')) return 'token';
+  if (effect.trim().isEmpty && power >= 1000) return 'token';
+  return null;
+}
+
 /// Sets read from the official card list, which the mirror does not have.
 /// Stats the official card list gets wrong, keyed by the number of the
 /// printing they are wrong on.
@@ -430,7 +453,7 @@ void main() async {
               ? 'crest'
               : _isMarker(raw)
               ? 'marker'
-              : null);
+              : _tokenType(raw));
       // Tokens and untyped rows are not deck cards. A stride crest or a
       // marker is not one either -- it cannot be put in a deck -- but it is
       // played, so it is kept.
@@ -484,7 +507,9 @@ void main() async {
       // silently stood in for the other everywhere it appeared.
       final statsKey = [
         name.toLowerCase(),
-        grade ?? '',
+        // A token with no grade printed is grade 0, as its reminder says; a
+        // blank one must not split a Plant from the Plants that print it.
+        grade ?? (cardType == 'token' ? 0 : ''),
         power ?? '',
         shield ?? '',
         type,

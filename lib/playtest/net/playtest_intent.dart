@@ -73,6 +73,12 @@ enum IntentKind {
   /// Takes [PlaytestIntent.card] out of the asker's AutoMOD gauge, to
   /// [PlaytestIntent.exit].
   fromAutoMod,
+
+  /// Calls a token unit to the asker's rear-guard circle
+  /// [PlaytestIntent.circle] -- the card database's numbered
+  /// [PlaytestIntent.cardNo], or one called [PlaytestIntent.name]. With
+  /// [PlaytestIntent.amount] 1, to every empty rear-guard circle instead.
+  callToken,
 }
 
 /// One request, named and with its arguments.
