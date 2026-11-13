@@ -1061,6 +1061,58 @@ class PlaytestEngine {
     state.note('${side.name} sets ${card.name} in the order zone.', by: side);
   }
 
+  /// Calls a token unit to one of [side]'s rear-guard circles, as the
+  /// ability that makes one says: "call up to four Plant tokens to (RC)".
+  /// Whatever stood there goes to the drop zone, as with any call -- and a
+  /// token that was there simply stops existing. Null for the vanguard
+  /// circle, or a locked card's.
+  GameCard? callToken(PlaytestSide side, Circle circle, CardDefinition token) {
+    if (!circle.isRearGuard) return null;
+    final existing = side.field[circle];
+    if (existing != null && existing.locked) return null;
+    final card = GameCard(_nextInstanceId++, token);
+    if (existing != null) {
+      side.field.remove(circle);
+      if (!existing.card.isUnitToken) side.drop.add(existing.card);
+      state.note(
+        '${side.name} moves ${existing.card.name} '
+        '${existing.card.isUnitToken ? 'off the field' : 'to the drop zone'}.',
+        by: side,
+      );
+    }
+    side.field[circle] = FieldUnit(card);
+    state.note(
+      '${side.name} calls a ${card.name} token to ${circle.label}.',
+      by: side,
+    );
+    return card;
+  }
+
+  /// Takes away every token unit that has left the field.
+  ///
+  /// A token is only ever a unit on a circle: retired, put into the soul,
+  /// returned to hand or under the deck, it stops existing rather than going
+  /// there. Rather than teach each of the many ways a unit leaves about
+  /// tokens, the board is swept after every change.
+  void clearLeftTokens() {
+    for (final side in [state.you, state.opponent]) {
+      for (final zone in [
+        side.drop,
+        side.soul,
+        side.hand,
+        side.deck,
+        side.damage,
+        side.bind,
+        side.removed,
+        side.autoMod,
+        side.gZone,
+        side.orderZone,
+      ]) {
+        zone.removeWhere((card) => card.isUnitToken);
+      }
+    }
+  }
+
   /// Puts a token into the order zone, as the ability that makes one says:
   /// "put a SYSTEM CODE: X-ceed token into your order zone". It is in no
   /// deck, so it comes from outside the game.

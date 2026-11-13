@@ -408,6 +408,56 @@ void main() {
       expect(find.text('AutoMOD gauge (1)'), findsOneWidget);
     });
 
+    testWidgets('a deck that calls Plant tokens fills the empty circles', (
+      tester,
+    ) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      side.hand.add(
+        GameCard(
+          9861,
+          CardDefinition(
+            id: 'layout-lianorn',
+            gameId: 'vanguard',
+            name: 'Lianorn',
+            attributes: const {
+              'grade': '3',
+              'cardType': 'normal',
+              'effect':
+                  '[AUTO]:When this unit is placed on (VC), call up to four '
+                  'Plant tokens to (RC). (Plant tokens are grade 0/[Power] '
+                  '5000/[Critical] 1 and have boost)',
+            },
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ),
+      );
+      for (final circle in Circle.values) {
+        if (circle.isRearGuard) side.field.remove(circle);
+      }
+      game.notifyListeners();
+      await tester.pumpAndSettle();
+
+      final circle = find.byKey(ValueKey('circle-${side.name}-backLeft'));
+      await tester.ensureVisible(circle);
+      await tester.tap(circle);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('token-sheet')), findsOneWidget);
+      final all = find.byKey(const ValueKey('unit-token-name-Plant-all'));
+      await tester.ensureVisible(all);
+      await tester.tap(all);
+      await tester.pumpAndSettle();
+
+      final plants = [
+        for (final each in Circle.values)
+          if (each.isRearGuard) side.field[each],
+      ];
+      expect(plants.every((u) => u?.card.name == 'Plant'), isTrue);
+      expect(plants.first!.card.power, 5000);
+      expect(plants.first!.card.isUnitToken, isTrue);
+    });
+
     testWidgets('a vanguard D-Legions from its sheet', (tester) async {
       final game = await pump(tester, opening);
       final side = game.state.active;

@@ -85,6 +85,9 @@ class _TwoPlayerScreenState extends State<TwoPlayerScreen> {
       for (final card in cards.where(isMarkerCard))
         if (card.attributes['cardNo'] != null)
           card.attributes['cardNo']!: markerFromCatalog(card, gameId),
+      for (final card in cards.where(isUnitTokenCard))
+        if (card.attributes['cardNo'] != null)
+          card.attributes['cardNo']!: unitTokenFromCatalog(card, gameId),
     };
   }
 

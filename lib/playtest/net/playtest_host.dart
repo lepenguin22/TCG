@@ -169,6 +169,10 @@ class PlaytestHost {
       // on your own, and only out of your own zones.
       IntentKind.bindCard,
       IntentKind.unbindCard,
+      // A gauge is filled when damage is taken -- on the attacker's turn --
+      // as readily as on one's own.
+      IntentKind.toAutoMod,
+      IntentKind.fromAutoMod,
     };
     final needsTurn = !offTurn.contains(intent.kind);
     final mulliganing = state.phase == PlaytestPhase.mulligan;
@@ -222,6 +226,48 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.callToken:
+        final circle = intent.circle;
+        final everyEmpty = intent.amount == 1;
+        if (!everyEmpty && (circle == null || !circle.isRearGuard)) {
+          return _refuse(side, 'a token is called to a rear-guard circle');
+        }
+        final made = madeCards[intent.cardNo ?? ''];
+        final name = intent.name?.trim() ?? '';
+        final isUnit =
+            made != null &&
+            (made.attributes['cardType'] == 'token' ||
+                made.attributes['cardType'] == 'normal');
+        final token = isUnit
+            ? made
+            : (name.isEmpty || name.length > 80)
+            ? null
+            : namedUnitToken(
+                name,
+                side.deck.firstOrNull?.card.gameId ?? 'vanguard',
+                // What the asker's own cards say the token is.
+                [
+                  for (final card in [
+                    ...side.deck,
+                    ...side.hand,
+                    ...side.soul,
+                    ...side.drop,
+                    ...side.rideDeck,
+                    for (final unit in side.field.values) unit.card,
+                  ])
+                    card.card.attributes['effect'] ?? '',
+                ],
+              );
+        if (token == null) return _refuse(side, 'no such token');
+        if (everyEmpty) {
+          for (final each in Circle.values) {
+            if (each.isRearGuard && side.field[each] == null) {
+              engine.callToken(side, each, token);
+            }
+          }
+        } else {
+          engine.callToken(side, circle!, token);
+        }
       case IntentKind.toAutoMod:
         if (intent.card == null) {
           if (side.deck.isEmpty) return _refuse(side, 'the deck is empty');
@@ -472,6 +518,7 @@ class PlaytestHost {
         if (circle == null) return _refuse(side, 'which circle?');
         engine.addDrive(side, circle, intent.amount ?? 0);
     }
+    engine.clearLeftTokens();
     broadcast();
   }
 

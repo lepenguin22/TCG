@@ -64,7 +64,20 @@ class GameCard {
   String get cardType => card.attributes['cardType'] ?? '';
 
   bool get isUnit =>
-      cardType == 'normal' || cardType == 'trigger' || cardType == 'g-unit';
+      cardType == 'normal' ||
+      cardType == 'trigger' ||
+      cardType == 'g-unit' ||
+      cardType == 'token';
+
+  /// A token unit -- a Plant, a Shadow Army -- which an ability calls out of
+  /// nothing and which stops existing the moment it leaves the field.
+  bool get isUnitToken =>
+      cardType == 'token' ||
+      (isUnit && card.attributes['token'] == 'true') ||
+      (isUnit &&
+          (card.attributes['effect'] ?? '').contains(
+            'token, and cannot be put in a deck',
+          ));
 
   /// Whether this is an order of any kind -- normal, blitz or set.
   bool get isOrder => cardType.startsWith('order');
