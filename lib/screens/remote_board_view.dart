@@ -467,6 +467,19 @@ class _RemoteBoardViewState extends State<RemoteBoardView> {
       );
     }
 
+    // Taking back your own last move, for a misclick. The device running
+    // the game says whether the last move was yours.
+    if (snapshot.canUndo) {
+      children.insert(
+        0,
+        IconButton(
+          key: const ValueKey('remote-undo'),
+          tooltip: 'Undo your last move',
+          icon: const Icon(Icons.undo),
+          onPressed: () => ask(const PlaytestIntent(IntentKind.undo)),
+        ),
+      );
+    }
     // The AutoMOD gauge, for a deck whose cards fill one: on either
     // player's turn, since a gauge is added when damage is taken too.
     if (snapshot.winnerName == null &&

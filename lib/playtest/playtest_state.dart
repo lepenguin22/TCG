@@ -118,6 +118,18 @@ class GameCard {
 class FieldUnit {
   FieldUnit(this.card);
 
+  /// The same unit, as a separate object: for a copy of the game.
+  FieldUnit copy() => FieldUnit(card)
+    ..rested = rested
+    ..locked = locked
+    ..hollowed = hollowed
+    ..grantedBoost = grantedBoost
+    ..powerBonus = powerBonus
+    ..criticalBonus = criticalBonus
+    ..driveBonus = driveBonus
+    ..battleBonus = battleBonus
+    ..legionMate = legionMate;
+
   final GameCard card;
 
   /// A rested unit has attacked or boosted and cannot do either again until
@@ -427,6 +439,15 @@ enum CheckKind {
 class CheckedCard {
   CheckedCard(this.card, this.kind, this.sideName);
 
+  /// The same check, as a separate object: for a copy of the game.
+  CheckedCard copy() => CheckedCard(card, kind, sideName)
+    ..powerTo = powerTo
+    ..powerGiven = powerGiven
+    ..criticalTo = criticalTo
+    ..criticalGiven = criticalGiven
+    ..healed = healed
+    ..healedWasSpent = healedWasSpent;
+
   final GameCard card;
   final CheckKind kind;
 
@@ -661,4 +682,185 @@ int markerPowerOf(
     if (!has) return 0;
   }
   return int.parse(per.group(1)!) * (side.autoMod.length ~/ 2);
+}
+
+// ---------------------------------------------------------------------- undo
+
+/// A copy of a game, for taking back a misclick.
+///
+/// The board's objects are held onto everywhere -- the screen holds the
+/// sides, an attack holds the units fighting it -- so a copy cannot simply
+/// replace them. Instead the whole game is copied into a shadow of its own
+/// and, to undo, copied back into the same objects. Cards themselves never
+/// change, so they are shared; everything that does change is copied.
+class GameMemento {
+  GameMemento._(this._shadow, this.fingerprint);
+
+  /// A copy of [state] as it stands.
+  factory GameMemento.of(PlaytestState state) {
+    final shadow = PlaytestState(
+      you: PlaytestSide(name: state.you.name),
+      opponent: PlaytestSide(name: state.opponent.name),
+    );
+    copyGame(state, shadow);
+    return GameMemento._(shadow, fingerprintOf(state));
+  }
+
+  final PlaytestState _shadow;
+
+  /// What the game looked like, cheaply: two snapshots with the same
+  /// fingerprint are the same game, so an action that changed nothing does
+  /// not leave a step behind to undo.
+  final String fingerprint;
+
+  /// Puts [state] back as it was when this was taken. The snapshot is left
+  /// as it was, so it can be gone back to again.
+  void restoreInto(PlaytestState state) => copyGame(_shadow, state);
+
+  /// The log's last line when this was taken.
+  String? get lastNote => _shadow.log.isEmpty ? null : _shadow.log.last.text;
+}
+
+/// Copies the whole of [from] into [to], which keeps its own objects.
+void copyGame(PlaytestState from, PlaytestState to) {
+  final units = <FieldUnit, FieldUnit>{};
+  FieldUnit unit(FieldUnit original) =>
+      units.putIfAbsent(original, () => original.copy());
+
+  for (final (a, b) in [(from.you, to.you), (from.opponent, to.opponent)]) {
+    void list(List<GameCard> source, List<GameCard> target) {
+      target
+        ..clear()
+        ..addAll(source);
+    }
+
+    list(a.deck, b.deck);
+    list(a.hand, b.hand);
+    list(a.rideDeck, b.rideDeck);
+    list(a.gZone, b.gZone);
+    list(a.removed, b.removed);
+    list(a.bind, b.bind);
+    list(a.orderZone, b.orderZone);
+    list(a.drop, b.drop);
+    list(a.soul, b.soul);
+    list(a.damage, b.damage);
+    list(a.crestZone, b.crestZone);
+    list(a.autoMod, b.autoMod);
+    b.restedOrders
+      ..clear()
+      ..addAll(a.restedOrders);
+    b.faceUpG
+      ..clear()
+      ..addAll(a.faceUpG);
+    b.spentDamage
+      ..clear()
+      ..addAll(a.spentDamage);
+    b.heart = a.heart == null ? null : unit(a.heart!);
+    b.energy = a.energy;
+    b.energyCap = a.energyCap;
+    b.rideCrest = a.rideCrest;
+    b.goesFirst = a.goesFirst;
+    b.field
+      ..clear()
+      ..addAll({
+        for (final entry in a.field.entries) entry.key: unit(entry.value),
+      });
+    b.markers
+      ..clear()
+      ..addAll({
+        for (final entry in a.markers.entries) entry.key: [...entry.value],
+      });
+  }
+
+  PlaytestSide? side(PlaytestSide? original) => original == null
+      ? null
+      : original == from.you
+      ? to.you
+      : to.opponent;
+
+  to.turn = from.turn;
+  to.yourTurn = from.yourTurn;
+  to.phase = from.phase;
+  to.ridden = from.ridden;
+  final attack = from.attack;
+  to.attack = attack == null
+      ? null
+      : (PendingAttack(
+            attacker: unit(attack.attacker),
+            attackerCircle: attack.attackerCircle,
+            target: unit(attack.target),
+            targetCircle: attack.targetCircle,
+            booster: attack.booster == null ? null : unit(attack.booster!),
+            attackerSide: side(attack.attackerSide),
+            targetSide: side(attack.targetSide),
+          )
+          ..guardians.addAll(attack.guardians)
+          ..shieldBonus = attack.shieldBonus
+          ..perfectGuarded = attack.perfectGuarded
+          ..driveChecked = attack.driveChecked
+          ..drivesTaken = attack.drivesTaken);
+  to.triggerZone
+    ..clear()
+    ..addAll([for (final check in from.triggerZone) check.copy()]);
+  to.log
+    ..clear()
+    ..addAll(from.log);
+}
+
+/// A cheap summary of [state]: every zone's cards, every unit's state and
+/// the numbers that move.
+String fingerprintOf(PlaytestState state) {
+  final out = StringBuffer()
+    ..write('${state.turn}|${state.yourTurn}|${state.phase.name}|')
+    ..write('${state.ridden}|${state.log.length}|');
+  String ids(Iterable<GameCard> cards) =>
+      cards.map((c) => c.instanceId).join(',');
+  String fieldUnit(FieldUnit u) =>
+      '${u.card.instanceId}:${u.rested}:${u.locked}:${u.hollowed}:'
+      '${u.grantedBoost}:${u.powerBonus}:${u.criticalBonus}:${u.driveBonus}:'
+      '${u.battleBonus}:${u.legionMate?.instanceId}';
+  for (final s in [state.you, state.opponent]) {
+    for (final zone in [
+      s.deck,
+      s.hand,
+      s.rideDeck,
+      s.gZone,
+      s.removed,
+      s.bind,
+      s.orderZone,
+      s.drop,
+      s.soul,
+      s.damage,
+      s.crestZone,
+      s.autoMod,
+    ]) {
+      out.write('${ids(zone)};');
+    }
+    out
+      ..write('${s.restedOrders.join(',')};${s.faceUpG.join(',')};')
+      ..write('${s.spentDamage.join(',')};${s.energy};${s.energyCap};')
+      ..write('${s.rideCrest?.instanceId};${s.heart?.card.instanceId};');
+    for (final entry in s.field.entries) {
+      out.write('${entry.key.name}=${fieldUnit(entry.value)};');
+    }
+    for (final entry in s.markers.entries) {
+      out.write('${entry.key.name}#${ids(entry.value)};');
+    }
+  }
+  final attack = state.attack;
+  if (attack != null) {
+    out.write(
+      'A${attack.attackerCircle.name}>${attack.targetCircle.name}:'
+      '${ids(attack.guardians)}:${attack.shieldBonus}:'
+      '${attack.perfectGuarded}:${attack.drivesTaken}:${attack.driveChecked}',
+    );
+  }
+  for (final check in state.triggerZone) {
+    out.write(
+      'T${check.card.instanceId}:${check.powerTo?.name}:${check.powerGiven}:'
+      '${check.criticalTo?.name}:${check.criticalGiven}:'
+      '${check.healed?.instanceId}',
+    );
+  }
+  return out.toString();
 }

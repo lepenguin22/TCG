@@ -157,6 +157,53 @@ class PlaytestController extends ChangeNotifier {
   void _sync() {
     engine.clearLeftTokens();
     if (state.isOver) stage = PlaytestStage.over;
+    _record();
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------- undo
+
+  /// The game after each change, oldest first, for taking a misclick back.
+  /// The last is the game as it stands.
+  final List<({GameMemento memento, PlaytestStage stage})> _history = [];
+
+  /// How many steps back undo can go.
+  static const undoLimit = 200;
+
+  void _record() {
+    // The openings are settled before the game is: there is nothing to take
+    // back to before them.
+    if (stage == PlaytestStage.mulligan) return;
+    final memento = GameMemento.of(state);
+    final last = _history.lastOrNull;
+    if (last != null &&
+        last.stage == stage &&
+        last.memento.fingerprint == memento.fingerprint) {
+      return;
+    }
+    _history.add((memento: memento, stage: stage));
+    if (_history.length > undoLimit + 1) _history.removeAt(0);
+  }
+
+  /// Whether there is a step to take back.
+  bool get canUndo => _history.length > 1;
+
+  /// How many steps undo can still take back.
+  int get undoSteps => _history.isEmpty ? 0 : _history.length - 1;
+
+  /// Takes back the last change to the board, whatever it was: a call, a
+  /// ride, a drive check, a heal, a misplaced token. Anything picked up or
+  /// chosen on the way is put down too. The shuffle a search ended with is
+  /// put back as it was, so the deck is in the order it was before.
+  void undo() {
+    if (!canUndo) return;
+    _history.removeLast();
+    final back = _history.last;
+    back.memento.restoreInto(state);
+    stage = back.stage;
+    holding = null;
+    selectedAttacker = null;
+    boostSelected = false;
     notifyListeners();
   }
 
@@ -337,7 +384,7 @@ class PlaytestController extends ChangeNotifier {
   /// changes what the second is worth reading against.
   void driveCheck() {
     engine.driveCheckOne();
-    notifyListeners();
+    _sync();
   }
 
   /// How many checks the attack still owes.
