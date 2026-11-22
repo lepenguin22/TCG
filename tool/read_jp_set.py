@@ -14,12 +14,18 @@ The Japanese card list's pages fill themselves in from a JSON feed under
     python3 tool/read_jp_set.py --list expansion=123  # the cards a query finds
     python3 tool/read_jp_set.py --cards expansion=123 # those cards in full
     python3 tool/read_jp_set.py --get detail?cardno=DZ-SS19/001  # any address
+    python3 tool/read_jp_set.py --decklog 1TRSFE --only DZ-BT17   # a deck's cards
+
+The last reads a deck off the Japanese Deck Log and prints, for each card
+whose number starts with --only, the card in full: the cards a deck needs
+translated, and nothing else.
 """
 
 import argparse
 import json
 import sys
 import urllib.parse
+import urllib.request
 
 import scrape_cardlist as site
 
@@ -85,14 +91,71 @@ def list_cards(query: str) -> list[dict]:
     return cards
 
 
+def decklog(code: str) -> dict:
+    """A deck off the Japanese Deck Log, as its own page asks for it."""
+    url = f"https://decklog.bushiroad.com/system/app/api/view/{code}"
+    request = urllib.request.Request(
+        url,
+        data=b"",
+        method="POST",
+        headers={
+            "User-Agent": site.HEADERS.get("User-Agent", "Mozilla/5.0"),
+            "Accept": "application/json, text/plain, */*",
+            "Referer": f"https://decklog.bushiroad.com/view/{code}",
+            "Origin": "https://decklog.bushiroad.com",
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=45) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def deck_cards(deck: dict) -> list[tuple[str, str, int, str]]:
+    """(section, number, quantity, name) for every card in every section."""
+    rows = []
+    for key, value in deck.items():
+        if not isinstance(value, list):
+            continue
+        for card in value:
+            if isinstance(card, dict) and card.get("card_number"):
+                rows.append(
+                    (key, card["card_number"], int(card.get("num") or 0), card.get("name", ""))
+                )
+    return rows
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--products", default=None)
     parser.add_argument("--list", default="")
     parser.add_argument("--cards", default="")
     parser.add_argument("--get", default="")
+    parser.add_argument("--decklog", default="")
+    parser.add_argument("--only", default="")
     args = parser.parse_args()
     use_japanese_site()
+
+    if args.decklog:
+        deck = decklog(args.decklog)
+        print(f"deck: {deck.get('title') or deck.get('deck_name') or ''}")
+        rows = deck_cards(deck)
+        for section, number, quantity, name in rows:
+            print(f"  [{section}] {quantity}x {number}  {name}")
+        wanted = sorted({n for _, n, _, _ in rows if n.startswith(args.only)})
+        for number in wanted:
+            detail = get(f"detail?cardno={urllib.parse.quote(number)}")
+            card = detail.get("card", detail) if isinstance(detail, dict) else detail
+            if isinstance(card, dict):
+                card = {
+                    key: value
+                    for key, value in card.items()
+                    if key not in ("text_html", "update_time", "disp_flg", "priority", "id")
+                }
+            print(f"=== {number}")
+            print(show(lean(card), 6000))
+            print(flush=True)
+        return 0
 
     if args.get:
         print(show(get(args.get), 20000))

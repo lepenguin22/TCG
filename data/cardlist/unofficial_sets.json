@@ -282,5 +282,106 @@
     "effect": "Regalis Piece(You may only have one Regalis Piece in your deck, and use it a total of one time in a fight)\n\nPlay this with [COST][Soul-Blast 1]!\nChoose one of your units, and it gets [Power] +25000 until end of that battle. Choose one of your vanguards, and it gets \"[CONT](VC):All of your opponent's [Power] 100 Million or greater units get [Critical] -1.\" until end of turn."
    }
   ]
+ },
+ "jp-dzbt17-varga": {
+  "productName": "[DZ-BT17] Booster \"Destined Star Battle\" -- Varga cards (Japanese, unofficial translation)",
+  "cards": [
+   {
+    "name": "Unparalleled Drekasleif, Varga Dragres \"Tensei\"",
+    "number": "DZ-BT17/001",
+    "type": "Normal Unit",
+    "clan": "Dragon Empire",
+    "nation": "Dragon Empire",
+    "race": "Wind Dragon",
+    "grade": "3",
+    "power": "13000",
+    "shield": "",
+    "critical": "1",
+    "trigger": "",
+    "format": "Standard",
+    "image_url": "https://cf-vanguard.com/wordpress/wp-content/images/cardlist/DZ-BT17/dzbt17_001.png",
+    "effect": "[CONT]:This card is a persona ride when it is normal ridden from a grade 3 with \"Varga\" in its different card name, and when it is normal ridden upon.\n[ACT](VC)[1/Turn]:[COST][bind a card with \"Varga\" in its card name from your hand or soul], choose up to two cards without \"[CONT]:Sentinel\" with different grades from your drop whose total grade is less than or equal to the number of cards in your damage zone, and call them to (RC).\n[AUTO](VC)[1/Turn]:When this unit attacks a vanguard, [COST][Counter-Blast 1], retire all of your front row rear-guards, and this unit gets [Power]+10000 until end of turn. At the end of that battle, [Stand] this unit, it gets [Power]+5000/drive -2 until end of turn, and if your opponent's vanguard is grade 3 or greater, all of your front row rear-guards get [Power]+5000 until end of turn.\n[Divine Skill] - [AUTO](VC):At the end of the battle this unit attacked a grade 3 or greater unit, if this unit has attacked two or more times this turn, and your or your opponent's damage zone has four or more cards or you persona rode this turn, [COST][Counter-Blast 1], [Stand] this unit, and its drive becomes 2 until end of turn.\n[Unofficial translation of the Japanese card. The English DZ-BT17 is not out yet.]"
+   },
+   {
+    "name": "Dragritter of Ember Blossoms, Shuura",
+    "number": "DZ-BT17/002",
+    "type": "Normal Unit",
+    "clan": "Dragon Empire",
+    "nation": "Dragon Empire",
+    "race": "Human",
+    "grade": "2",
+    "power": "10000",
+    "shield": "5000",
+    "critical": "1",
+    "trigger": "",
+    "format": "Standard",
+    "image_url": "https://cf-vanguard.com/wordpress/wp-content/images/cardlist/DZ-BT17/dzbt17_002.png",
+    "effect": "[AUTO]:When this card is discarded from hand during your turn, you may choose a grade 3 card with \"Varga\" in its card name from your ride deck, and reveal it. If you revealed a card, or you have a grade 3 or greater vanguard with \"Varga\" in its card name, [COST][Soul-Blast 1 or Energy-Blast 3], and draw a card.\n[CONT](RC):If you have a grade 3 or greater vanguard with \"Varga\" in its card name, this unit gets [Power]+5000. (Active on opponent's turn too)\n[AUTO]:When this unit is retired from (RC) by the ability of your grade 3 or greater vanguard with \"Varga\" in its card name, if your opponent's vanguard is grade 3 or greater, and all of your rear-guards have card names different from this card, [COST][Counter-Blast 1 or Energy-Blast 3], call this card to (RC), and it gets [Power]+10000 until end of turn.\n[Unofficial translation of the Japanese card. The English DZ-BT17 is not out yet.]"
+   },
+   {
+    "name": "Dragritter, Nabiila",
+    "number": "DZ-BT17/049",
+    "type": "Normal Unit",
+    "clan": "Dragon Empire",
+    "nation": "Dragon Empire",
+    "race": "Dragoroid",
+    "grade": "2",
+    "power": "10000",
+    "shield": "5000",
+    "critical": "1",
+    "trigger": "",
+    "format": "Standard",
+    "image_url": "https://cf-vanguard.com/wordpress/wp-content/images/cardlist/DZ-BT17/dzbt17_049.png",
+    "effect": "[AUTO]:When this card is discarded from hand during your turn, you may put this card into soul.\n[AUTO](Drop):When your grade 3 or greater vanguard with \"Varga\" in its card name is attacked, [COST][bind this card], and that unit gets [Power]+10000 until end of that battle. For that turn, you cannot bind cards with the same name as this card from your drop.\n[Unofficial translation of the Japanese card. The English DZ-BT17 is not out yet.]"
+   },
+   {
+    "name": "Boulderaxe Dragon \"Fugen\"",
+    "number": "DZ-BT17/074",
+    "type": "Normal Unit",
+    "clan": "Dragon Empire",
+    "nation": "Dragon Empire",
+    "race": "Earth Dragon",
+    "grade": "2",
+    "power": "10000",
+    "shield": "5000",
+    "critical": "1",
+    "trigger": "",
+    "format": "Standard",
+    "image_url": "https://cf-vanguard.com/wordpress/wp-content/images/cardlist/DZ-BT17/dzbt17_074.png",
+    "effect": "[AUTO]:When this unit is rode upon by a grade 3 card with \"Varga\" in its card name, call this card to (RC), choose one of the [AUTO] abilities your vanguard originally has, and the next [Counter-Blast] you pay for its cost this turn is reduced by 1.\n[AUTO](RC):When this unit attacks a vanguard, if you have a grade 3 or greater vanguard with \"Varga\" in its card name, this unit gets [Power]+5000 until end of that battle, and at the end of that battle, retire this unit, and draw a card. (This effect is mandatory)\n[Unofficial translation of the Japanese card. The English DZ-BT17 is not out yet.]"
+   },
+   {
+    "name": "Blazezanber Dragon \"Touen\"",
+    "number": "DZ-BT17/079",
+    "type": "Normal Unit",
+    "clan": "Dragon Empire",
+    "nation": "Dragon Empire",
+    "race": "Flame Dragon",
+    "grade": "1",
+    "power": "8000",
+    "shield": "5000",
+    "critical": "1",
+    "trigger": "",
+    "format": "Standard",
+    "image_url": "https://cf-vanguard.com/wordpress/wp-content/images/cardlist/DZ-BT17/dzbt17_079.png",
+    "effect": "[AUTO]:When this unit is rode upon by \"Boulderaxe Dragon \"Fugen\"\", call this card to (RC), and [Soul-Charge 1].\n[CONT](RC):During your turn, if you have a grade 3 or greater vanguard with \"Varga\" in its card name, this unit gets [Power]+2000.\n[AUTO]:When this unit is retired from (RC) by the ability of your vanguard with \"Varga\" in its card name, [COST][Soul-Blast 1], and put this card into your hand.\n[Unofficial translation of the Japanese card. The English DZ-BT17 is not out yet.]"
+   },
+   {
+    "name": "Festival Cannon Dragon, Dinofest",
+    "number": "D-PR/1386JP",
+    "type": "Normal Unit",
+    "clan": "Dragon Empire",
+    "nation": "Dragon Empire",
+    "race": "Dino Dragon",
+    "grade": "1",
+    "power": "8000",
+    "shield": "5000",
+    "critical": "1",
+    "trigger": "",
+    "format": "Standard",
+    "image_url": "https://cf-vanguard.com/wordpress/wp-content/images/cardlist/D-PR/dpr_1386.png",
+    "effect": "[AUTO](RC):When this unit boosts, if your vanguard is grade 3 or greater, and there are none of your opponent's rear-guards in the same column as this unit, this unit gets [Power]+5000 until end of that battle.\n[AUTO](RC):At the end of the battle this unit boosted, if you have more rear-guards than your opponent, or your opponent's rear-guard was retired this turn, [COST][bind this unit], look at the top five cards of your deck, choose up to one grade 2 or greater unit card, or <Dino Dragon> normal unit without \"[CONT]:Sentinel\" with a card name different from this card, from among them, reveal it and put it into your hand, and shuffle your deck.\n[Unofficial translation of the Japanese promo D-PR/1386, which has no English printing yet.]"
+   }
+  ]
  }
 }
