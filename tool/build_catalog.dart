@@ -272,6 +272,19 @@ Future<Map<String, Map<String, Object?>>> _readErrata() async {
 /// the new cards translated by hand and marked as such on each card. It is a
 /// file of its own so that a refresh, which rewrites extra_sets.json, never
 /// touches it; a set comes out of it by hand once the English list has it.
+/// Japanese card numbers and the English printing each one is, from
+/// data/cardlist/japanese_numbers.json.
+Future<Map<String, String>> _readJapaneseNumbers() async {
+  final file = File('data/cardlist/japanese_numbers.json');
+  if (!file.existsSync()) return const {};
+  final decoded = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+  return {
+    for (final entry
+        in (decoded['numbers'] as Map<String, dynamic>? ?? const {}).entries)
+      entry.key: '${entry.value}',
+  };
+}
+
 Future<List<({String name, List<dynamic> cards})>> _readExtraSets() async {
   return [
     for (final path in const [
@@ -754,6 +767,42 @@ void main() async {
     if (alternates.isEmpty) continue;
     entry.value['i2'] = alternates;
     withAlternateImages += 1;
+  }
+
+  // Japanese numbers that name a different card in English. A start deck's
+  // reprints are renumbered between the two releases -- Japanese DZ-SS15/010
+  // is Dragon Monk, Gojo; English DZ-SS15/010 is a Magnides -- so a Japanese
+  // Deck Log list matched by number came in with the wrong cards. Each card
+  // carries the Japanese numbers it is printed under, and only a Japanese
+  // deck reads them.
+  final japanese = await _readJapaneseNumbers();
+  var withJapanese = 0;
+  for (final entry in byName.values) {
+    final own = {
+      if (entry['no'] case final String no) no,
+      ...?(entry['no2'] as List?)?.cast<String>(),
+    };
+    final jp = [
+      for (final pair in japanese.entries)
+        if (own.contains(pair.value)) pair.key,
+    ]..sort();
+    if (jp.isEmpty) continue;
+    entry['jp'] = jp.join(',');
+    withJapanese += 1;
+  }
+  stdout.writeln('$withJapanese cards carry Japanese numbers of their own');
+  final unmapped = japanese.entries.where(
+    (pair) => !byName.values.any(
+      (e) =>
+          e['no'] == pair.value ||
+          ((e['no2'] as List?)?.contains(pair.value) ?? false),
+    ),
+  );
+  if (unmapped.isNotEmpty) {
+    throw StateError(
+      'Japanese numbers naming no card: '
+      '${[for (final p in unmapped) '${p.key} -> ${p.value}'].join(', ')}',
+    );
   }
 
   final catalog = byName.values.toList()

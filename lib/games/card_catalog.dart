@@ -39,6 +39,14 @@ class CatalogCard {
   final List<String> otherNumbers;
 
   /// Every number this card has been printed under, the shown one first.
+  /// The Japanese numbers this card is printed under where they name a
+  /// different card in English: Japanese DZ-SS15/010 is Dragon Monk, Gojo,
+  /// English DZ-SS15/010 a Magnides. Read only for a Japanese deck.
+  List<String> get japaneseNumbers => [
+    for (final number in (attributes['jp'] ?? '').split(','))
+      if (number.trim().isNotEmpty) number.trim(),
+  ];
+
   Iterable<String> get allNumbers => [
     if (cardNo != null && cardNo!.isNotEmpty) cardNo!,
     ...otherNumbers,

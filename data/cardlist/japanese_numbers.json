@@ -1,0 +1,10 @@
+{
+ "_about": "Japanese card numbers that name a different card in English, and the English printing each one is. A start deck's reprints are renumbered between the two releases, so a Japanese Deck Log list read by number alone came in with the wrong cards. Only a Japanese deck reads these.",
+ "numbers": {
+  "DZ-SS15/010": "DZ-SS14/010EN",
+  "DZ-SS15/012": "DZ-SS14/012EN",
+  "DZ-SS01/Re06": "DZ-SS01/Re05EN",
+  "DZ-SS07/004": "DZ-BT02/074EN",
+  "D-PR/1386": "D-PR/1386JP"
+ }
+}

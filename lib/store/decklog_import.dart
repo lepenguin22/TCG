@@ -221,8 +221,13 @@ Future<DecklogImportResult> importDecklogDeck(
       if (number.isEmpty) continue;
       byNumber.putIfAbsent(decklogNumberKey(number), () => entry);
       final loose = decklogLooseNumberKey(number);
-      looseCounts[loose] = (looseCounts[loose] ?? 0) + 1;
-      byLooseNumber.putIfAbsent(loose, () => entry);
+      // Counted by card, not by printing: DZ-SS14/005EN and its -R are one
+      // Energy Generator, and two of its own printings sharing a key is no
+      // reason to give up on it.
+      final held = byLooseNumber.putIfAbsent(loose, () => entry);
+      if (!identical(held, entry) || !looseCounts.containsKey(loose)) {
+        looseCounts[loose] = (looseCounts[loose] ?? 0) + 1;
+      }
     }
     final image = entry.attributes['imageUrl'];
     if (image != null && image.isNotEmpty) {
@@ -233,6 +238,18 @@ Future<DecklogImportResult> importDecklogDeck(
     byName.putIfAbsent(entry.lowerName, () => entry);
   }
   byLooseNumber.removeWhere((key, _) => (looseCounts[key] ?? 0) > 1);
+
+  // A Japanese deck is read by its Japanese numbers first, where the two
+  // releases number a card differently. Its names are in Japanese, which is
+  // what gives it away: a bare code could come from either site.
+  final japaneseText = RegExp(r'[\u3040-\u30ff\u4e00-\u9fff]');
+  final japanese = source.cards.any((c) => japaneseText.hasMatch(c.name));
+  final byJapaneseNumber = <String, CatalogCard>{
+    if (japanese)
+      for (final entry in entries)
+        for (final number in entry.japaneseNumbers)
+          decklogNumberKey(number): entry,
+  };
   byImage.removeWhere((key, _) => (imageCounts[key] ?? 0) > 1);
 
   /// Number first and name second. For a Japanese deck the number is the only
@@ -240,6 +257,12 @@ Future<DecklogImportResult> importDecklogDeck(
   CatalogCard? lookUp(DecklogCard card) {
     final number = card.cardNumber?.trim();
     if (number != null && number.isNotEmpty) {
+      final jp =
+          byJapaneseNumber[decklogNumberKey(number)] ??
+          byJapaneseNumber[decklogNumberKey(
+            number.replaceFirst(RegExp(r'(?<=\d)[A-Za-z]+$'), ''),
+          )];
+      if (jp != null) return jp;
       final match =
           byNumber[decklogNumberKey(number)] ??
           byLooseNumber[decklogLooseNumberKey(number)];
@@ -292,11 +315,25 @@ Future<DecklogImportResult> importDecklogDeck(
         : null;
     // The printing the deck names, not the one the database happens to show
     // for this card -- its number and its artwork both follow from it.
+    // A card found by its Japanese number is recorded under its English one:
+    // the Japanese number names a different card in English.
+    final viaJapanese =
+        match != null &&
+        match.japaneseNumbers.any(
+          (n) =>
+              decklogLooseNumberKey(n) ==
+              decklogLooseNumberKey(card.cardNumber ?? ''),
+        );
     final printedNo = match == null
         ? card.cardNumber?.trim()
+        : viaJapanese
+        ? match.attributes['cardNo']
         : printedNumberFor(match, card.cardNumber);
     final attributes = <String, String>{
-      ...?match?.attributes,
+      // The Japanese numbers are the database's, for finding the card, not
+      // something a saved card needs to carry.
+      for (final entry in (match?.attributes ?? const {}).entries)
+        if (entry.key != 'jp') entry.key: entry.value,
       'cardNo': ?printedNo,
       if (match != null) 'imageUrl': ?match.imageFor(printedNo),
       // A card the database has never seen still has a number, and the number

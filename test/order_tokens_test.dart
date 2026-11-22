@@ -49,7 +49,11 @@ void main() {
     test('the database has SYSTEM CODE: X-ceed, first for the deck', () {
       final choices = orderTokenChoices(catalog, [_xceedText]);
       expect(choices.first.name, 'SYSTEM CODE: X-ceed');
-      expect(choices.first.attributes['cardNo'], 'DZ-BT04/T02EN');
+      // Printed in DZ-BT04 and again in DZ-BT14; either is the token.
+      expect(
+        choices.first.attributes['cardNo'],
+        anyOf('DZ-BT04/T02EN', 'DZ-BT14/T02EN'),
+      );
       expect(choices.every(isOrderZoneToken), isTrue);
     });
   });
