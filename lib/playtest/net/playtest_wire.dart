@@ -415,7 +415,11 @@ class PlaytestSnapshot {
     required this.triggerZone,
     required this.log,
     required this.winnerName,
+    this.canUndo = false,
   });
+
+  /// Whether the viewer may take back the last move: it was theirs.
+  final bool canUndo;
 
   final SideSnapshot me;
   final SideSnapshot them;
@@ -450,6 +454,7 @@ class PlaytestSnapshot {
     'checks': [for (final check in triggerZone) check.toJson()],
     'log': log,
     'winner': winnerName,
+    if (canUndo) 'canUndo': true,
   };
 
   static PlaytestSnapshot fromJson(Map<String, Object?> json) {
@@ -482,6 +487,7 @@ class PlaytestSnapshot {
       ],
       log: [for (final line in (json['log'] as List? ?? const [])) '$line'],
       winnerName: json['winner'] as String?,
+      canUndo: json['canUndo'] == true,
     );
   }
 }
@@ -497,7 +503,11 @@ const logTail = 60;
 /// the G zone, the bind zone, the crest zone and the trigger zone is public and goes to
 /// both. A hand goes to its owner. A ride deck goes to its owner. A deck goes
 /// to nobody, because its order is not even its owner's to know.
-PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
+PlaytestSnapshot snapshotFor(
+  PlaytestState state,
+  PlaytestSide viewer, {
+  bool canUndo = false,
+}) {
   final foe = viewer == state.you ? state.opponent : state.you;
   final faces = <int, CardFace>{};
 
@@ -570,6 +580,7 @@ PlaytestSnapshot snapshotFor(PlaytestState state, PlaytestSide viewer) {
         entry.text,
     ],
     winnerName: state.winner?.name,
+    canUndo: canUndo,
   );
 }
 

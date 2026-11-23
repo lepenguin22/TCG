@@ -458,6 +458,22 @@ void main() {
       expect(plants.first!.card.isUnitToken, isTrue);
     });
 
+    testWidgets('the undo button takes the last change back', (tester) async {
+      final game = await pump(tester, opening);
+      final side = game.state.active;
+      final undo = find.byKey(const ValueKey('undo'));
+      expect(tester.widget<IconButton>(undo).onPressed, isNull);
+
+      game.addPower(side, Circle.vanguard, 5000);
+      await tester.pumpAndSettle();
+      expect(side.vanguard!.powerBonus, 5000);
+      expect(tester.widget<IconButton>(undo).onPressed, isNotNull);
+
+      await tester.tap(undo);
+      await tester.pumpAndSettle();
+      expect(side.vanguard!.powerBonus, 0);
+    });
+
     testWidgets('a vanguard D-Legions from its sheet', (tester) async {
       final game = await pump(tester, opening);
       final side = game.state.active;

@@ -121,35 +121,58 @@ class _PlaytestScreenState extends State<PlaytestScreen> {
               final leave = await _confirmLeaving(context);
               if (leave && context.mounted) Navigator.of(context).pop();
             },
-            child: Scaffold(
-              appBar: AppBar(
-                title: Text(
-                  game.stage == PlaytestStage.mulligan
-                      ? '${game.mulliganSide.name}\u2019s opening hand'
-                      : 'Turn ${game.state.turn} · ${game.state.active.name}',
+            // Ctrl+Z on a desktop, as anywhere else.
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
+                    game.undo,
+                const SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
+                    game.undo,
+              },
+              child: Focus(
+                autofocus: true,
+                child: Scaffold(
+                  appBar: AppBar(
+                    title: Text(
+                      game.stage == PlaytestStage.mulligan
+                          ? '${game.mulliganSide.name}\u2019s opening hand'
+                          : 'Turn ${game.state.turn} · ${game.state.active.name}',
+                    ),
+                    // The turn as a bar of phases, always on screen rather than
+                    // scrolling away with the board.
+                    bottom: game.stage == PlaytestStage.mulligan
+                        ? null
+                        : _PhaseBar(game: game),
+                    actions: [
+                      // Every change to the board can be taken back, one at a
+                      // time, for the misclick that called the wrong card.
+                      if (game.stage != PlaytestStage.mulligan)
+                        IconButton(
+                          key: const ValueKey('undo'),
+                          tooltip: game.canUndo
+                              ? 'Undo (${game.undoSteps})'
+                              : 'Nothing to undo',
+                          icon: const Icon(Icons.undo),
+                          onPressed: game.canUndo ? game.undo : null,
+                        ),
+                      IconButton(
+                        tooltip: 'Game log',
+                        icon: const Icon(Icons.receipt_long_outlined),
+                        onPressed: () => _showLog(context, game),
+                      ),
+                      IconButton(
+                        tooltip: 'Restart',
+                        icon: const Icon(Icons.refresh),
+                        onPressed: () => _restart(context),
+                      ),
+                    ],
+                  ),
+                  body: SafeArea(
+                    child: game.stage == PlaytestStage.mulligan
+                        ? _Mulligan(game: game)
+                        : _Board(game: game),
+                  ),
                 ),
-                // The turn as a bar of phases, always on screen rather than
-                // scrolling away with the board.
-                bottom: game.stage == PlaytestStage.mulligan
-                    ? null
-                    : _PhaseBar(game: game),
-                actions: [
-                  IconButton(
-                    tooltip: 'Game log',
-                    icon: const Icon(Icons.receipt_long_outlined),
-                    onPressed: () => _showLog(context, game),
-                  ),
-                  IconButton(
-                    tooltip: 'Restart',
-                    icon: const Icon(Icons.refresh),
-                    onPressed: () => _restart(context),
-                  ),
-                ],
-              ),
-              body: SafeArea(
-                child: game.stage == PlaytestStage.mulligan
-                    ? _Mulligan(game: game)
-                    : _Board(game: game),
               ),
             ),
           );

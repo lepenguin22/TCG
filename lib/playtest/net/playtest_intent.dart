@@ -79,6 +79,9 @@ enum IntentKind {
   /// [PlaytestIntent.cardNo], or one called [PlaytestIntent.name]. With
   /// [PlaytestIntent.amount] 1, to every empty rear-guard circle instead.
   callToken,
+
+  /// Takes back the asker's last move, if the last move was theirs.
+  undo,
 }
 
 /// One request, named and with its arguments.

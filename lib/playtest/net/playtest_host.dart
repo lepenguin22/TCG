@@ -117,6 +117,30 @@ class PlaytestHost {
     _seats.clear();
   }
 
+  // ---------------------------------------------------------------------- undo
+
+  /// The game after each move, oldest first, with who made the move. The
+  /// last is the game as it stands.
+  final List<({GameMemento memento, String? by})> _history = [];
+
+  /// Whether [side] may take back the last move: only their own, so one
+  /// player's misclick is never the other player's to undo for them -- nor
+  /// a move of theirs to undo from under them.
+  bool canUndo(PlaytestSide side) =>
+      _history.length > 1 && _history.last.by == side.name;
+
+  void _record(PlaytestSide side) {
+    if (state.phase == PlaytestPhase.mulligan) return;
+    final memento = GameMemento.of(state);
+    final last = _history.lastOrNull;
+    if (last != null && last.memento.fingerprint == memento.fingerprint) {
+      return;
+    }
+    // The first board after the openings belongs to nobody.
+    _history.add((memento: memento, by: last == null ? null : side.name));
+    if (_history.length > 201) _history.removeAt(0);
+  }
+
   /// Sends every seated player the board as they may see it.
   void broadcast() {
     for (final side in [state.you, state.opponent]) {
@@ -129,7 +153,7 @@ class PlaytestHost {
     if (transport == null || !transport.isOpen) return;
     transport.send({
       'type': 'snapshot',
-      'snapshot': snapshotFor(state, side).toJson(),
+      'snapshot': snapshotFor(state, side, canUndo: canUndo(side)).toJson(),
     });
   }
 
@@ -173,6 +197,8 @@ class PlaytestHost {
       // as readily as on one's own.
       IntentKind.toAutoMod,
       IntentKind.fromAutoMod,
+      // Taking back a misclick made while guarding, on the other turn.
+      IntentKind.undo,
     };
     final needsTurn = !offTurn.contains(intent.kind);
     final mulliganing = state.phase == PlaytestPhase.mulligan;
@@ -226,6 +252,15 @@ class PlaytestHost {
           return _refuse(side, 'no such card in the order zone');
         }
         engine.removeOrder(side, card, to: intent.exit ?? OrderExit.drop);
+      case IntentKind.undo:
+        if (!canUndo(side)) {
+          return _refuse(side, 'the last move was not ${side.name}\'s');
+        }
+        _history.removeLast();
+        _history.last.memento.restoreInto(state);
+        engine.clearLeftTokens();
+        broadcast();
+        return;
       case IntentKind.callToken:
         final circle = intent.circle;
         final everyEmpty = intent.amount == 1;
@@ -519,6 +554,7 @@ class PlaytestHost {
         engine.addDrive(side, circle, intent.amount ?? 0);
     }
     engine.clearLeftTokens();
+    _record(side);
     broadcast();
   }
 
