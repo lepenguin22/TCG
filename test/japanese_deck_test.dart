@@ -135,4 +135,39 @@ void main() {
       'Magnetism Monster, Magnides',
     );
   });
+
+  test(
+    'a Japanese promo with no English printing comes in translated',
+    () async {
+      const game = VanguardGame();
+      final path = game.catalogAsset!;
+      final catalog = CardCatalog()
+        ..seed(path, parseCatalog(File(path).readAsStringSync()));
+      final store = DeckStore();
+      await store.load();
+      final result = await importDecklogDeck(
+        store,
+        catalog,
+        DecklogDeck(
+          code: 'JP',
+          gameTitleId: decklogVanguardTitleId,
+          cards: [
+            for (final number in ['D-PR/1862', 'D-PR/1863'])
+              DecklogCard(
+                name: '星輝兵 バァドスパイラル・ドラゴン',
+                quantity: 2,
+                cardNumber: number,
+                section: 'list',
+              ),
+          ],
+        ),
+      );
+      expect(result.unmatched, isEmpty);
+      final items = store.viewOf(result.deck).items;
+      expect(items.map((i) => i.card.name).toSet(), {
+        'Star-vader, Bad Spiral Dragon',
+      });
+      expect(items.first.card.attributes['effect'], contains('Unofficial'));
+    },
+  );
 }

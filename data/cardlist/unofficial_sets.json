@@ -383,5 +383,26 @@
     "effect": "[AUTO](RC):When this unit boosts, if your vanguard is grade 3 or greater, and there are none of your opponent's rear-guards in the same column as this unit, this unit gets [Power]+5000 until end of that battle.\n[AUTO](RC):At the end of the battle this unit boosted, if you have more rear-guards than your opponent, or your opponent's rear-guard was retired this turn, [COST][bind this unit], look at the top five cards of your deck, choose up to one grade 2 or greater unit card, or <Dino Dragon> normal unit without \"[CONT]:Sentinel\" with a card name different from this card, from among them, reveal it and put it into your hand, and shuffle your deck.\n[Unofficial translation of the Japanese promo D-PR/1386, which has no English printing yet.]"
    }
   ]
+ },
+ "jp-pr-bad-spiral": {
+  "productName": "[D-PR] Promo \"Star-vader, Bad Spiral Dragon\" (Japanese, unofficial translation)",
+  "cards": [
+   {
+    "name": "Star-vader, Bad Spiral Dragon",
+    "number": "D-PR/1862JP",
+    "type": "Normal Unit",
+    "clan": "Brandt Gate",
+    "nation": "Brandt Gate",
+    "race": "Cyber Dragon",
+    "grade": "1",
+    "power": "8000",
+    "shield": "5000",
+    "critical": "1",
+    "trigger": "",
+    "format": "Standard",
+    "image_url": "https://cf-vanguard.com/wordpress/wp-content/images/cardlist/D-PR/dpr_1862.png",
+    "effect": "[AUTO]:When this card is discarded from hand during your turn, if your vanguard has \"Star-vader\" in its card name, look at the top seven cards of your deck, choose up to one card with \"Star-vader\" in its card name from among them, reveal it and put it into your hand, and shuffle your deck.\n[ACT](Drop):If your vanguard is grade 3 or greater with \"Star-vader\" in its card name, and your opponent has one or less locked cards, [COST][bind this card], choose up to one unit card from your opponent's drop, and your opponent calls it to (RC). The [AUTO] abilities of your opponent's card do not activate from this call.\n[Unofficial translation of the Japanese promo D-PR/1862, which has no English printing yet.]"
+   }
+  ]
  }
 }
