@@ -197,6 +197,11 @@ class CardCatalog {
     };
     if (needle.isEmpty && active.isEmpty) return const [];
 
+    // The words typed, for a search that missed by a letter or two --
+    // "Zypsophilia" for Zypsophila -- or has its words in another order.
+    final words = _words(needle);
+    final fuzzy = words.isNotEmpty && words.any((w) => w.length >= 4);
+
     final ranked = <_Ranked>[];
     for (final card in cards) {
       var keep = true;
@@ -223,6 +228,9 @@ class CardCatalog {
         rank = 2;
       } else if (card.searchText.contains(needle)) {
         rank = 3;
+      } else if (fuzzy && _nearly(words, _words(name))) {
+        // After every exact match: a near one is only a suggestion.
+        rank = 4;
       }
       if (rank != null) ranked.add(_Ranked(rank, card));
     }
@@ -242,4 +250,54 @@ class _Ranked {
 
   final int rank;
   final CatalogCard card;
+}
+
+final _wordSplit = RegExp(r"[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]+");
+
+List<String> _words(String text) => [
+  for (final word in text.split(_wordSplit))
+    if (word.isNotEmpty) word,
+];
+
+/// Whether every word typed is in [name], allowing for a typo: a word of
+/// four letters or more may be one letter out, one of eight or more two.
+bool _nearly(List<String> typed, List<String> name) {
+  for (final word in typed) {
+    final allowed = word.length >= 8
+        ? 2
+        : word.length >= 4
+        ? 1
+        : 0;
+    final found = name.any(
+      (each) =>
+          each.contains(word) ||
+          (allowed > 0 && _withinEdits(word, each, allowed)),
+    );
+    if (!found) return false;
+  }
+  return true;
+}
+
+/// Whether [a] can be made into [b] with at most [limit] single-letter
+/// insertions, deletions or changes.
+bool _withinEdits(String a, String b, int limit) {
+  if ((a.length - b.length).abs() > limit) return false;
+  var previous = List<int>.generate(b.length + 1, (i) => i);
+  for (var i = 1; i <= a.length; i += 1) {
+    final current = List<int>.filled(b.length + 1, 0)..[0] = i;
+    var best = current[0];
+    for (var j = 1; j <= b.length; j += 1) {
+      final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
+      final value = [
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + cost,
+      ].reduce((x, y) => x < y ? x : y);
+      current[j] = value;
+      if (value < best) best = value;
+    }
+    if (best > limit) return false;
+    previous = current;
+  }
+  return previous[b.length] <= limit;
 }
