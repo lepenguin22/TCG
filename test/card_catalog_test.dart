@@ -110,6 +110,32 @@ void main() {
       ]);
     });
 
+    test('a typo or a different word order still finds the card', () {
+      final cards = [
+        card('Zypsophila Fairy, Asher', {}),
+        card('Gypsophila Musketeer, Raisa', {}),
+        card('Dragonic Overlord', {}),
+      ];
+      expect(
+        CardCatalog.search(cards, 'Zypsophilia Fairy, Asher').first.name,
+        'Zypsophila Fairy, Asher',
+      );
+      expect(
+        CardCatalog.search(cards, 'asher zypsophila').single.name,
+        'Zypsophila Fairy, Asher',
+      );
+      expect(
+        CardCatalog.search(cards, 'Dragonic Overlrod').single.name,
+        'Dragonic Overlord',
+      );
+      // Exact matches still come first, and short words are never guessed at.
+      expect(
+        CardCatalog.search(cards, 'raisa').single.name,
+        'Gypsophila Musketeer, Raisa',
+      );
+      expect(CardCatalog.search(cards, 'xyz'), isEmpty);
+    });
+
     test('search is case insensitive', () {
       expect(
         CardCatalog.search(cards, 'DRAGONIC').single.name,
